@@ -1,0 +1,145 @@
+/**
+ * Text.
+ *
+ * ```zuri
+ * import zug { Text, TextStyle, TextAlign, FontWeight }
+ *
+ * var title = Text('Settings', { style: TextStyle({ size: 17, weight: FontWeight.SEMIBOLD }) })
+ * var note = Text('A long explanation that wraps.', { max_lines: 2, overflow: TextOverflow.ELLIPSIS })
+ * ```
+ */
+
+import ..foundation { check_options }
+import ..painting { TextStyle }
+import .host { HostWidget, host_options, common_props }
+import .style { Style }
+
+/**
+ * How lines of text are aligned.
+ */
+class TextAlign {
+  static var START = 'start'
+  static var CENTER = 'center'
+  static var END = 'end'
+  static var JUSTIFY = 'justify'
+}
+
+/**
+ * What happens to text that does not fit.
+ */
+class TextOverflow {
+
+  /**
+   * Cut at the edge.
+   */
+  static var CLIP = 'clip'
+
+  /**
+   * Cut short with an ellipsis.
+   */
+  static var ELLIPSIS = 'ellipsis'
+}
+
+var _ALIGNS = ['start', 'center', 'end', 'justify']
+var _OVERFLOWS = ['clip', 'ellipsis']
+
+var _TEXT_OPTIONS = host_options({
+  style: TextStyle,
+  align: 'string',
+  max_lines: 'number',
+  overflow: 'string',
+  selectable: 'bool',
+})
+
+/**
+ * A run of text in one style, wrapping at the width it is given.
+ */
+class Text < HostWidget {
+
+  /**
+   * @type string
+   */
+  var text = ''
+
+  /**
+   * @type ?TextStyle
+   */
+  var style
+
+  /**
+   * See `TextAlign`.
+   *
+   * @type string
+   */
+  var align = 'start'
+
+  /**
+   * The most lines to show, or 0 for no limit.
+   *
+   * @type number
+   */
+  var max_lines = 0
+
+  /**
+   * See `TextOverflow`.
+   *
+   * @type string
+   */
+  var overflow = 'clip'
+
+  /**
+   * Whether the user can select and copy the text.
+   *
+   * @type bool
+   */
+  var selectable = false
+
+  /**
+   * @param string text
+   * @param ?dict options: `style`, `align`, `max_lines`, `overflow`,
+   *    `selectable` and the options every host widget takes.
+   * @constructor
+   */
+  @new(text: string, options: ?dict) {
+    var o = check_options(options, 'Text', _TEXT_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.text = text
+    self.style = o.get('style')
+    self.align = o.get('align', 'start')
+    self.max_lines = o.get('max_lines', 0)
+    self.overflow = o.get('overflow', 'clip')
+    self.selectable = o.get('selectable', false)
+
+    if !_ALIGNS.contains(self.align) {
+      raise ValueError("align of Text must be one of TextAlign's values (${', '.join(_ALIGNS)}), got '${self.align}'")
+    }
+
+    if !_OVERFLOWS.contains(self.overflow) {
+      raise ValueError("overflow of Text must be one of TextOverflow's values (${', '.join(_OVERFLOWS)}), got '${self.overflow}'")
+    }
+
+    if !is_int(self.max_lines) or self.max_lines < 0 {
+      raise ValueError('max_lines of Text must be a whole number, 0 for no limit, got ${self.max_lines}')
+    }
+  }
+
+  kind() {
+    return 'text'
+  }
+
+  props(context) {
+    return {
+      text: self.text,
+      style: Style.of(context).text.merge(self.style).to_data(),
+      align: self.align,
+      max_lines: self.max_lines,
+      overflow: self.overflow,
+      selectable: self.selectable,
+    }
+  }
+
+  @to_string() {
+    return 'Text(${self.text})'
+  }
+}

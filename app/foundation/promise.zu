@@ -1,0 +1,330 @@
+/**
+ * Results that arrive later: a dialog's answer, the result of work done
+ * in the background.
+ *
+ * A `Promise` is resolved once with a value, or rejected once with an
+ * error. Functions given to `then()` run after it settles, never during
+ * the call that settled it, so the code that resolves a promise finishes
+ * before anything waiting on it starts. A `Deferred` makes a promise and
+ * settles it.
+ *
+ * ```zuri
+ * import zug { Deferred }
+ *
+ * var answer = Deferred()
+ * answer.promise.then(@(value) { echo 'got ${value}' })
+ * answer.resolve(42)
+ * ```
+ *
+ * A rejection that nothing handles is passed to `report_error()`.
+ */
+
+import .errors { report_error, ZugError }
+import .microtasks { schedule_microtask }
+
+var _PENDING = 'pending'
+var _RESOLVED = 'resolved'
+var _REJECTED = 'rejected'
+
+/**
+ * A value, or an error, that arrives later.
+ *
+ * @printable
+ */
+class Promise {
+  var _state = 'pending'
+  var _value
+  var _error
+  var _waiting = []
+  var _handled = false
+
+  /**
+   * A promise already resolved with `value`.
+   *
+   * @param any value
+   * @returns Promise
+   */
+  static resolved(value) {
+    var deferred = Deferred()
+    deferred.resolve(value)
+    return deferred.promise
+  }
+
+  /**
+   * A promise already rejected with `error`.
+   *
+   * @param Error error
+   * @returns Promise
+   */
+  static rejected(error) {
+    var deferred = Deferred()
+    deferred.reject(error)
+    return deferred.promise
+  }
+
+  /**
+   * A promise of the values of every promise in `promises`, in order,
+   * rejected as soon as any of them is.
+   *
+   * @param list promises
+   * @returns Promise
+   */
+  static all(promises: list) {
+    var deferred = Deferred()
+    var values = []
+    var remaining = promises.length()
+
+    if remaining == 0 {
+      deferred.resolve([])
+      return deferred.promise
+    }
+
+    iter var i = 0; i < promises.length(); i++ {
+      values.append(nil)
+    }
+
+    iter var i = 0; i < promises.length(); i++ {
+      var index = i
+      promises[i].then(@(value) {
+        values[index] = value
+        remaining--
+
+        if remaining == 0 {
+          deferred.resolve(values)
+        }
+      }, @(error) {
+        deferred.reject(error)
+      })
+    }
+
+    return deferred.promise
+  }
+
+  /**
+   * Calls `on_value` with the value once resolved, or `on_error` with the
+   * error once rejected. Returns a promise of what the function called
+   * returns, or of the promise it returns; a function that raises rejects
+   * it. Without `on_error`, a rejection passes to the returned promise.
+   *
+   * @param ?function on_value
+   * @param ?function on_error
+   * @returns Promise
+   */
+  then(on_value: ?function, on_error: ?function) {
+    var next = Deferred()
+
+    if on_error != nil {
+      self._handled = true
+    }
+
+    self._waiting.append([on_value, on_error, next])
+
+    if self._state != _PENDING {
+      self._flush()
+    }
+
+    return next.promise
+  }
+
+  /**
+   * Calls `on_error` with the error once rejected; a value passes
+   * through.
+   *
+   * @param function on_error
+   * @returns Promise
+   */
+  catch_error(on_error: function) {
+    return self.then(nil, on_error)
+  }
+
+  /**
+   * Calls `callback` with no arguments once settled either way, then
+   * passes the value or error on.
+   *
+   * @param function callback
+   * @returns Promise
+   */
+  always(callback: function) {
+    return self.then(@(value) {
+      callback()
+      return value
+    }, @(error) {
+      callback()
+      raise error
+    })
+  }
+
+  /**
+   * Whether neither resolved nor rejected yet.
+   *
+   * @returns bool
+   */
+  is_pending() {
+    return self._state == _PENDING
+  }
+
+  /**
+   * @returns bool
+   */
+  is_resolved() {
+    return self._state == _RESOLVED
+  }
+
+  /**
+   * @returns bool
+   */
+  is_rejected() {
+    return self._state == _REJECTED
+  }
+
+  /**
+   * The value once resolved, otherwise `nil`.
+   *
+   * @returns any
+   */
+  value() {
+    return self._value
+  }
+
+  /**
+   * The error once rejected, otherwise `nil`.
+   *
+   * @returns ?Error
+   */
+  error() {
+    return self._error
+  }
+
+  /**
+   * Settles the promise. Called by `Deferred`.
+   *
+   * @internal
+   * @param bool ok
+   * @param any outcome
+   */
+  settle(ok: bool, outcome) {
+    if self._state != _PENDING {
+      raise ZugError('a promise can only be settled once')
+    }
+
+    if ok {
+      self._state = _RESOLVED
+      self._value = outcome
+    } else {
+      self._state = _REJECTED
+      self._error = outcome
+      schedule_microtask(@{
+        if !self._handled {
+          report_error(outcome, 'a promise rejection nothing handled')
+        }
+      })
+    }
+
+    self._flush()
+  }
+
+  _flush() {
+    if self._waiting.is_empty() {
+      return
+    }
+
+    var waiting = self._waiting
+    self._waiting = []
+    var resolved = self._state == _RESOLVED
+    var value = self._value
+    var error = self._error
+
+    if !resolved {
+      self._handled = true
+    }
+
+    schedule_microtask(@{
+      for entry in waiting {
+        _run(entry[0], entry[1], entry[2], resolved, value, error)
+      }
+    })
+  }
+
+  @to_string() {
+    return 'Promise(${self._state})'
+  }
+}
+
+def _run(on_value, on_error, next, resolved: bool, value, error) {
+  var handler = resolved ? on_value : on_error
+
+  if handler == nil {
+    if resolved {
+      next.resolve(value)
+    } else {
+      next.reject(error)
+    }
+
+    return
+  }
+
+  var result = nil
+
+  catch {
+    result = handler(resolved ? value : error)
+  } as failure {
+    next.reject(failure)
+    return
+  }
+
+  if instance_of(result, Promise) {
+    result.then(@(inner) {
+      next.resolve(inner)
+    }, @(inner) {
+      next.reject(inner)
+    })
+  } else {
+    next.resolve(result)
+  }
+}
+
+/**
+ * Makes a promise and settles it.
+ */
+class Deferred {
+
+  /**
+   * The promise this settles.
+   *
+   * @type Promise
+   */
+  var promise
+
+  @new() {
+    self.promise = Promise()
+  }
+
+  /**
+   * Resolves the promise with `value`.
+   *
+   * @param any value
+   * @throws ZugError When the promise was already settled
+   */
+  resolve(value) {
+    self.promise.settle(true, value)
+  }
+
+  /**
+   * Rejects the promise with `error`.
+   *
+   * @param Error error
+   * @throws ZugError When the promise was already settled
+   */
+  reject(error) {
+    self.promise.settle(false, error)
+  }
+
+  /**
+   * Whether the promise has been settled.
+   *
+   * @returns bool
+   */
+  is_settled() {
+    return !self.promise.is_pending()
+  }
+}

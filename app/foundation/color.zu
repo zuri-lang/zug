@@ -1,0 +1,361 @@
+/**
+ * Colours.
+ *
+ * A colour is either a fixed red, green, blue and alpha, or a system
+ * colour: a name such as `label` or `window_background` that the backend
+ * resolves to the platform's own colour for that role, which follows the
+ * light or dark appearance by itself.
+ *
+ * ```zuri
+ * import zug { Color }
+ *
+ * var accent = Color.hex('#0a84ff')
+ * var faded = accent.with_alpha(0.5)
+ * var text = Color.system('label')
+ * ```
+ */
+
+/**
+ * The system colour names every backend resolves.
+ *
+ * @type list
+ */
+var SYSTEM_COLORS = [
+  'label',
+  'secondary_label',
+  'tertiary_label',
+  'quaternary_label',
+  'text',
+  'placeholder_text',
+  'selected_text',
+  'text_background',
+  'selected_text_background',
+  'window_background',
+  'under_page_background',
+  'control_background',
+  'control',
+  'control_text',
+  'disabled_control_text',
+  'selected_control',
+  'selected_control_text',
+  'alternate_selected_control_text',
+  'selected_content_background',
+  'unemphasized_selected_content_background',
+  'separator',
+  'grid',
+  'header_text',
+  'link',
+  'accent',
+  'find_highlight',
+  'red',
+  'orange',
+  'yellow',
+  'green',
+  'mint',
+  'teal',
+  'cyan',
+  'blue',
+  'indigo',
+  'purple',
+  'pink',
+  'brown',
+  'gray',
+]
+
+/**
+ * A colour.
+ *
+ * @printable
+ */
+class Color {
+
+  /**
+   * The red component, from 0 to 255. `nil` for a system colour.
+   *
+   * @type ?number
+   */
+  var red = 0
+
+  /**
+   * The green component, from 0 to 255. `nil` for a system colour.
+   *
+   * @type ?number
+   */
+  var green = 0
+
+  /**
+   * The blue component, from 0 to 255. `nil` for a system colour.
+   *
+   * @type ?number
+   */
+  var blue = 0
+
+  /**
+   * The opacity, from 0 for transparent to 1 for opaque.
+   *
+   * @type number
+   */
+  var alpha = 1
+
+  /**
+   * The system colour's name, or `nil` for a fixed colour.
+   *
+   * @type ?string
+   */
+  var system
+
+  /**
+   * A fixed colour from its components.
+   *
+   * @param number red: 0 to 255
+   * @param number green: 0 to 255
+   * @param number blue: 0 to 255
+   * @param ?number alpha: 0 to 1, opaque when left out
+   * @throws RangeError When a component is out of range
+   * @constructor
+   */
+  @new(red: number, green: number, blue: number, alpha: ?number) {
+    if alpha == nil {
+      alpha = 1
+    }
+
+    for value in [red, green, blue] {
+      if !(value >= 0 and value <= 255) {
+        raise RangeError('colour components must be from 0 to 255, got ${value}')
+      }
+    }
+
+    if !(alpha >= 0 and alpha <= 1) {
+      raise RangeError('colour alpha must be from 0 to 1, got ${alpha}')
+    }
+
+    self.red = red
+    self.green = green
+    self.blue = blue
+    self.alpha = alpha
+  }
+
+  static var TRANSPARENT = nil
+  static var BLACK = nil
+  static var WHITE = nil
+  static var RED = nil
+  static var GREEN = nil
+  static var BLUE = nil
+  static var YELLOW = nil
+  static var ORANGE = nil
+  static var GRAY = nil
+
+  /**
+   * An opaque colour from red, green and blue, each 0 to 255.
+   *
+   * @param number red
+   * @param number green
+   * @param number blue
+   * @returns Color
+   */
+  static rgb(red: number, green: number, blue: number) {
+    return Color(red, green, blue, 1)
+  }
+
+  /**
+   * A colour from red, green and blue, each 0 to 255, and alpha from 0 to
+   * 1.
+   *
+   * @param number red
+   * @param number green
+   * @param number blue
+   * @param number alpha
+   * @returns Color
+   */
+  static rgba(red: number, green: number, blue: number, alpha: number) {
+    return Color(red, green, blue, alpha)
+  }
+
+  /**
+   * A grey, from 0 for black to 1 for white.
+   *
+   * @param number level
+   * @param ?number alpha
+   * @returns Color
+   */
+  static gray(level: number, alpha: ?number) {
+    var value = (level * 255).round()
+    return Color(value, value, value, alpha == nil ? 1 : alpha)
+  }
+
+  /**
+   * A colour from hexadecimal text: `#rgb`, `#rgba`, `#rrggbb` or
+   * `#rrggbbaa`, with or without the `#`.
+   *
+   * @param string text
+   * @returns Color
+   * @throws ValueError When the text is not a hexadecimal colour
+   */
+  static hex(text: string) {
+    var digits = text.starts_with('#') ? text[1, text.length()] : text
+
+    if !digits.match('/^[0-9a-fA-F]+$/') {
+      raise ValueError("'${text}' is not a hexadecimal colour")
+    }
+
+    if digits.length() == 3 or digits.length() == 4 {
+      var expanded = ''
+
+      for ch in digits {
+        expanded += ch + ch
+      }
+
+      digits = expanded
+    }
+
+    if digits.length() != 6 and digits.length() != 8 {
+      raise ValueError("'${text}' is not a hexadecimal colour; use #rgb, #rgba, #rrggbb or #rrggbbaa")
+    }
+
+    var red = _parse_hex(digits[0, 2])
+    var green = _parse_hex(digits[2, 4])
+    var blue = _parse_hex(digits[4, 6])
+    var alpha = digits.length() == 8 ? _parse_hex(digits[6, 8]) / 255 : 1
+
+    return Color(red, green, blue, alpha)
+  }
+
+  /**
+   * The platform's colour for a role, which adapts to the light or dark
+   * appearance. `SYSTEM_COLORS` lists the names.
+   *
+   * @param string name
+   * @returns Color
+   * @throws ValueError When the name is not a system colour
+   */
+  static system(name: string) {
+    if !SYSTEM_COLORS.contains(name) {
+      raise ValueError("'${name}' is not a system colour; the names are ${', '.join(SYSTEM_COLORS)}")
+    }
+
+    var color = Color(0, 0, 0, 1)
+    color.red = nil
+    color.green = nil
+    color.blue = nil
+    color.system = name
+    return color
+  }
+
+  /**
+   * The colour between `a` and `b` at `t`, where 0 is `a` and 1 is `b`.
+   * System colours have no components to mix, so they switch at the
+   * midpoint.
+   *
+   * @param Color a
+   * @param Color b
+   * @param number t
+   * @returns Color
+   */
+  static lerp(a: Color, b: Color, t: number) {
+    if a.system != nil or b.system != nil {
+      return t < 0.5 ? a : b
+    }
+
+    var u = t.max(0).min(1)
+    return Color(
+      a.red + (b.red - a.red) * u,
+      a.green + (b.green - a.green) * u,
+      a.blue + (b.blue - a.blue) * u,
+      a.alpha + (b.alpha - a.alpha) * u,
+    )
+  }
+
+  /**
+   * Whether this is a system colour.
+   *
+   * @returns bool
+   */
+  is_system() {
+    return self.system != nil
+  }
+
+  /**
+   * This colour with its opacity replaced.
+   *
+   * @param number alpha: 0 to 1
+   * @returns Color
+   */
+  with_alpha(alpha: number) {
+    if !(alpha >= 0 and alpha <= 1) {
+      raise RangeError('colour alpha must be from 0 to 1, got ${alpha}')
+    }
+
+    var color = Color(0, 0, 0, alpha)
+    color.red = self.red
+    color.green = self.green
+    color.blue = self.blue
+    color.system = self.system
+    return color
+  }
+
+  /**
+   * The colour as `#rrggbb`, or `#rrggbbaa` when it is not opaque.
+   *
+   * @returns string
+   * @throws ValueError For a system colour, which has no fixed value
+   */
+  to_hex() {
+    if self.system != nil {
+      raise ValueError("the system colour '${self.system}' has no fixed value")
+    }
+
+    var text = '#' + _hex2(self.red) + _hex2(self.green) + _hex2(self.blue)
+
+    if self.alpha < 1 {
+      text += _hex2(self.alpha * 255)
+    }
+
+    return text
+  }
+
+  @eq(other) {
+    return instance_of(other, Color)
+      and self.system == other.system
+      and self.red == other.red
+      and self.green == other.green
+      and self.blue == other.blue
+      and self.alpha == other.alpha
+  }
+
+  @to_string() {
+    if self.system != nil {
+      if self.alpha < 1 {
+        return 'Color.system(${self.system}, alpha ${self.alpha})'
+      }
+
+      return 'Color.system(${self.system})'
+    }
+
+    return 'Color(${self.red}, ${self.green}, ${self.blue}, ${self.alpha})'
+  }
+}
+
+def _parse_hex(digits: string) {
+  var value = 0
+
+  for ch in digits.lower() {
+    value = value * 16 + '0123456789abcdef'.index_of(ch)
+  }
+
+  return value
+}
+
+def _hex2(value) {
+  var text = value.round().hex()
+  return text.length() < 2 ? '0' + text : text
+}
+
+Color.TRANSPARENT = Color(0, 0, 0, 0)
+Color.BLACK = Color(0, 0, 0, 1)
+Color.WHITE = Color(255, 255, 255, 1)
+Color.RED = Color(255, 59, 48, 1)
+Color.GREEN = Color(52, 199, 89, 1)
+Color.BLUE = Color(0, 122, 255, 1)
+Color.YELLOW = Color(255, 204, 0, 1)
+Color.ORANGE = Color(255, 149, 0, 1)
+Color.GRAY = Color(142, 142, 147, 1)

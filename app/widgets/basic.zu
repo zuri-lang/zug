@@ -1,0 +1,1214 @@
+/**
+ * Widgets that arrange other widgets. None of them has a native view of
+ * its own, except a `Box` with a colour, border, shadow or opacity.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * var form = Padding(EdgeInsets.all(16), Column([
+ *   Row([Text('Name'), Expanded(TextField({ placeholder: 'Ada' }))], { spacing: 8 }),
+ *   Row([Spacer(), Button('Save', { on_pressed: @{ echo 'saved' } })]),
+ * ], { spacing: 12, align_items: AlignItems.STRETCH }))
+ * ```
+ */
+
+import ..foundation {
+  Key, EdgeInsets, Alignment, Constraints, Color, INFINITY, check_options,
+}
+import ..painting { Border, Shadow }
+import ..rendering {
+  RenderPadding, RenderAlign, RenderConstrained, RenderLimited,
+  RenderFractional, RenderAspectRatio, RenderFitContent, RenderVisibility,
+  RenderResponsive, RenderFlex, RenderGap, FlexParentData, RenderStack,
+  StackParentData, RenderWrap, RenderGrid, GridParentData, RenderHostProxy,
+  Axis, check_justify, check_align_items, check_axis, check_stack_fit,
+}
+import .framework {
+  Widget, StatelessWidget, SingleChildRenderObjectWidget,
+  MultiChildRenderObjectWidget, LeafRenderObjectWidget, ParentDataWidget,
+  SingleChildRenderObjectElement,
+}
+import .host { SingleChildHostWidget, host_options, common_props }
+
+/**
+ * Insets its child by `padding`.
+ */
+class Padding < SingleChildRenderObjectWidget {
+
+  /**
+   * @type EdgeInsets
+   */
+  var padding
+
+  /**
+   * @param EdgeInsets padding
+   * @param ?Widget child
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(padding: EdgeInsets, child: ?Widget, options: ?dict) {
+    var o = check_options(options, 'Padding', { key: Key })
+    self.key = o.get('key')
+    self.padding = padding
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderPadding(self.padding)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_padding(self.padding)
+  }
+}
+
+/**
+ * Places its child within itself by an alignment. It fills the space it
+ * is given, unless a factor makes it a multiple of the child's size.
+ */
+class Align < SingleChildRenderObjectWidget {
+
+  /**
+   * @type Alignment
+   */
+  var alignment
+
+  /**
+   * @type ?number
+   */
+  var width_factor
+
+  /**
+   * @type ?number
+   */
+  var height_factor
+
+  /**
+   * @param ?Widget child
+   * @param ?dict options: `alignment` (centre when left out),
+   *    `width_factor`, `height_factor` and `key`.
+   * @constructor
+   */
+  @new(child: ?Widget, options: ?dict) {
+    var o = check_options(
+      options, 'Align',
+      {
+        key: Key,
+        alignment: Alignment,
+        width_factor: 'number',
+        height_factor: 'number',
+      },
+    )
+    self.key = o.get('key')
+    self.child = child
+    self.alignment = o.get('alignment', Alignment.CENTER)
+    self.width_factor = o.get('width_factor')
+    self.height_factor = o.get('height_factor')
+  }
+
+  create_render_object(context) {
+    return RenderAlign(self.alignment, self.width_factor, self.height_factor)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(
+      self.alignment, self.width_factor, self.height_factor,
+    )
+  }
+}
+
+/**
+ * Centres its child within itself.
+ */
+class Center < Align {
+
+  /**
+   * @param ?Widget child
+   * @param ?dict options: `width_factor`, `height_factor` and `key`.
+   * @constructor
+   */
+  @new(child: ?Widget, options: ?dict) {
+    var o = check_options(
+      options, 'Center',
+      { key: Key, width_factor: 'number', height_factor: 'number' },
+    )
+    self.key = o.get('key')
+    self.child = child
+    self.alignment = Alignment.CENTER
+    self.width_factor = o.get('width_factor')
+    self.height_factor = o.get('height_factor')
+  }
+}
+
+/**
+ * Adds constraints to its child's.
+ *
+ * @internal
+ */
+class ConstrainedBox < SingleChildRenderObjectWidget {
+  var extra
+
+  @new(extra: Constraints, child: ?Widget) {
+    self.extra = extra
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderConstrained(self.extra)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_extra(self.extra)
+  }
+}
+
+/**
+ * Caps unbounded axes, so an empty box that fills its space takes nothing
+ * from an infinite one.
+ *
+ * @internal
+ */
+class LimitedBox < SingleChildRenderObjectWidget {
+
+  @new(child: ?Widget) {
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderLimited(0, 0)
+  }
+}
+
+/**
+ * Sizes its child to a fraction of the space it is given.
+ *
+ * @internal
+ */
+class FractionalBox < SingleChildRenderObjectWidget {
+  var width_factor
+  var height_factor
+
+  @new(width_factor: ?number, height_factor: ?number, child: ?Widget) {
+    self.width_factor = width_factor
+    self.height_factor = height_factor
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderFractional(self.width_factor, self.height_factor)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(self.width_factor, self.height_factor)
+  }
+}
+
+/**
+ * The native view behind a decorated `Box`.
+ *
+ * @internal
+ */
+class DecoratedBox < SingleChildHostWidget {
+  var decoration = {}
+
+  @new(decoration: dict, common: dict, child: ?Widget) {
+    self.decoration = decoration
+    self.common = common
+    self.child = child
+  }
+
+  kind() {
+    return 'box'
+  }
+
+  props(context) {
+    return self.decoration.clone()
+  }
+}
+
+var _BOX_OPTIONS = host_options({
+  child: Widget,
+  width: 'number',
+  height: 'number',
+  min_width: 'number',
+  max_width: 'number',
+  min_height: 'number',
+  max_height: 'number',
+  width_factor: 'number',
+  height_factor: 'number',
+  padding: EdgeInsets,
+  margin: EdgeInsets,
+  alignment: Alignment,
+  color: Color,
+  border: Border,
+  radius: 'number',
+  shadow: Shadow,
+  clip: 'bool',
+  opacity: 'number',
+})
+
+/**
+ * A box: size, spacing, alignment and decoration around a child.
+ *
+ * Sizes are in points. `width` and `height` fix a dimension, the
+ * `min_` and `max_` options bound it, and `width_factor` and
+ * `height_factor` make it a fraction of the space the box is given.
+ * `padding` is inside the decoration and `margin` outside it. With no
+ * child and no fixed size, a box fills the space it is given.
+ *
+ * Decoration, which is `color`, `border`, `radius`, `shadow`, `clip` and
+ * `opacity`, is drawn by a native view, so a box without any is free.
+ *
+ * ```zuri
+ * import zug { Box, Text, EdgeInsets, Color, Border }
+ *
+ * var card = Box({
+ *   padding: EdgeInsets.all(12),
+ *   color: Color.system('control_background'),
+ *   border: Border.all(1, Color.system('separator')),
+ *   radius: 8,
+ *   child: Text('Hello'),
+ * })
+ * ```
+ */
+class Box < StatelessWidget {
+
+  /**
+   * @type ?Widget
+   */
+  var child
+
+  /**
+   * The checked options.
+   *
+   * @type dict
+   */
+  var options = {}
+
+  /**
+   * @param ?dict options: any of `child`, `width`, `height`, `min_width`,
+   *    `max_width`, `min_height`, `max_height`, `width_factor`,
+   *    `height_factor`, `padding`, `margin`, `alignment`, `color`,
+   *    `border`, `radius`, `shadow`, `clip`, `opacity`, and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(options, 'Box', _BOX_OPTIONS)
+    self.key = o.get('key')
+    self.child = o.get('child')
+    self.options = o
+
+    var opacity = o.get('opacity', 1)
+
+    if !(opacity >= 0 and opacity <= 1) {
+      raise ValueError('the opacity of a Box must be from 0 to 1, got ${opacity}')
+    }
+
+    for name in [
+      'width', 'height', 'min_width', 'max_width', 'min_height', 'max_height',
+      'radius',
+    ] {
+      var value = o.get(name)
+
+      if value != nil and value < 0 {
+        raise ValueError('${name} of a Box must not be negative, got ${value}')
+      }
+    }
+  }
+
+  # The constraints the size options add, or nil when they add none.
+  _extra() {
+    var o = self.options
+    var width = o.get('width')
+    var height = o.get('height')
+    var min_width = o.get('min_width')
+    var max_width = o.get('max_width')
+    var min_height = o.get('min_height')
+    var max_height = o.get('max_height')
+
+    if width == nil
+      and height == nil
+      and min_width == nil
+      and max_width == nil
+      and min_height == nil
+      and max_height == nil {
+      return nil
+    }
+
+    var extra = Constraints(
+      min_width == nil ? 0 : min_width,
+      max_width == nil ? INFINITY : max_width,
+      min_height == nil ? 0 : min_height,
+      max_height == nil ? INFINITY : max_height,
+    )
+
+    if width != nil or height != nil {
+      extra = extra.tighten({ width, height })
+    }
+
+    return extra
+  }
+
+  build(context) {
+    var o = self.options
+    var current = self.child
+    var extra = self._extra()
+
+    if current == nil and (extra == nil or !extra.is_tight()) {
+      current = LimitedBox(ConstrainedBox(Constraints.expand(), nil))
+    }
+
+    if o.get('alignment') != nil {
+      current = Align(current, { alignment: o.get('alignment') })
+    }
+
+    if o.get('padding') != nil {
+      current = Padding(o.get('padding'), current)
+    }
+
+    var common = common_props(o)
+    var decorated = o.get('color') != nil
+      or o.get('border') != nil
+      or o.get('radius', 0) > 0
+      or o.get('shadow') != nil
+      or o.get('clip', false)
+      or o.get('opacity', 1) < 1
+
+    if decorated
+      or common.tooltip != nil
+      or common.accessibility_label != nil
+      or common.accessibility_identifier != nil {
+      current = DecoratedBox({
+        color: o.get('color'),
+        border: o.get('border'),
+        radius: o.get('radius', 0),
+        shadow: o.get('shadow'),
+        clip: o.get('clip', false),
+        opacity: o.get('opacity', 1),
+      }, common, current)
+    }
+
+    if extra != nil {
+      current = ConstrainedBox(extra, current)
+    }
+
+    if o.get('width_factor') != nil or o.get('height_factor') != nil {
+      current = FractionalBox(
+        o.get('width_factor'), o.get('height_factor'), current,
+      )
+    }
+
+    if o.get('margin') != nil {
+      current = Padding(o.get('margin'), current)
+    }
+
+    return current
+  }
+}
+
+/**
+ * A fixed space: across a row, down a column, or square elsewhere.
+ */
+class Gap < LeafRenderObjectWidget {
+
+  /**
+   * @type number
+   */
+  var extent = 0
+
+  /**
+   * @param number extent: in points.
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(extent: number, options: ?dict) {
+    var o = check_options(options, 'Gap', { key: Key })
+
+    if extent < 0 {
+      raise ValueError('a Gap must not be negative, got ${extent}')
+    }
+
+    self.key = o.get('key')
+    self.extent = extent
+  }
+
+  create_render_object(context) {
+    return RenderGap(self.extent)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_extent(self.extent)
+  }
+}
+
+var _FLEX_OPTIONS = {
+  key: Key,
+  justify: 'string',
+  align_items: 'string',
+  shrink_wrap: 'bool',
+  spacing: 'number',
+}
+
+/**
+ * Children laid out one after another along an axis. `Row` and `Column`
+ * are the two directions of it.
+ */
+class Flex < MultiChildRenderObjectWidget {
+
+  /**
+   * @type string
+   */
+  var axis = 'horizontal'
+
+  /**
+   * How children are spread along the axis. See `Justify`.
+   *
+   * @type string
+   */
+  var justify = 'start'
+
+  /**
+   * Where children sit across the axis. See `AlignItems`.
+   *
+   * @type string
+   */
+  var align_items = 'center'
+
+  /**
+   * Whether to take only the space the children need along the axis.
+   *
+   * @type bool
+   */
+  var shrink_wrap = false
+
+  /**
+   * The gap between neighbouring children.
+   *
+   * @type number
+   */
+  var spacing = 0
+
+  /**
+   * @param list children
+   * @param ?dict options: `axis`, `justify`, `align_items`, `shrink_wrap`,
+   *    `spacing` and `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var spec = _FLEX_OPTIONS.clone()
+    spec['axis'] = 'string'
+    var o = check_options(options, 'Flex', spec)
+    self.setup(children, o.get('axis', Axis.HORIZONTAL), o, 'Flex')
+  }
+
+  /**
+   * Checks and stores the children and options.
+   *
+   * @internal
+   * @param list children
+   * @param string axis
+   * @param dict o
+   * @param string owner
+   */
+  setup(children: list, axis: string, o: dict, owner: string) {
+    _check_children(children, owner)
+    check_axis(axis, owner)
+    self.key = o.get('key')
+    self.children = children
+    self.axis = axis
+    self.justify = o.get('justify', 'start')
+    self.align_items = o.get('align_items', 'center')
+    self.shrink_wrap = o.get('shrink_wrap', false)
+    self.spacing = o.get('spacing', 0)
+    check_justify(self.justify, owner)
+    check_align_items(self.align_items, owner)
+
+    if self.spacing < 0 {
+      raise ValueError('spacing of ${owner} must not be negative, got ${self.spacing}')
+    }
+  }
+
+  create_render_object(context) {
+    var flex = RenderFlex(self.axis)
+    flex.configure(
+      self.axis, self.justify, self.align_items, self.shrink_wrap, self.spacing,
+    )
+    return flex
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(
+      self.axis, self.justify, self.align_items, self.shrink_wrap, self.spacing,
+    )
+  }
+}
+
+/**
+ * Children laid out left to right.
+ */
+class Row < Flex {
+
+  /**
+   * @param list children
+   * @param ?dict options: `justify`, `align_items`, `shrink_wrap`,
+   *    `spacing` and `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(options, 'Row', _FLEX_OPTIONS)
+    self.setup(children, Axis.HORIZONTAL, o, 'Row')
+  }
+}
+
+/**
+ * Children laid out top to bottom.
+ */
+class Column < Flex {
+
+  /**
+   * @param list children
+   * @param ?dict options: `justify`, `align_items`, `shrink_wrap`,
+   *    `spacing` and `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(options, 'Column', _FLEX_OPTIONS)
+    self.setup(children, Axis.VERTICAL, o, 'Column')
+  }
+}
+
+def _check_children(children: list, owner: string) {
+  iter var i = 0; i < children.length(); i++ {
+    if !instance_of(children[i], Widget) {
+      raise TypeError('child ${i} of ${owner} must be a widget, got ${typeof(children[i])}')
+    }
+  }
+}
+
+/**
+ * Makes a child of a row or column take a share of the spare space, and
+ * fill it.
+ */
+class Expanded < ParentDataWidget {
+
+  /**
+   * @type number
+   */
+  var flex = 1
+
+  /**
+   * @param Widget child
+   * @param ?dict options: `flex`, the child's share (1 when left out),
+   *    and `key`.
+   * @constructor
+   */
+  @new(child: Widget, options: ?dict) {
+    var o = check_options(options, typeof(self), { key: Key, flex: 'number' })
+    self.key = o.get('key')
+    self.child = child
+    self.flex = o.get('flex', 1)
+
+    if !(self.flex > 0) {
+      raise ValueError('flex of ${typeof(self)} must be above zero, got ${self.flex}')
+    }
+  }
+
+  /**
+   * @returns string
+   */
+  fit() {
+    return 'tight'
+  }
+
+  apply_parent_data(render_object) {
+    var data = render_object.parent_data
+
+    if !instance_of(data, FlexParentData) {
+      raise TypeError('${typeof(self)} must be a direct child of a Row, Column or Flex')
+    }
+
+    if data.flex != self.flex or data.fit != self.fit() {
+      data.flex = self.flex
+      data.fit = self.fit()
+
+      if render_object.render_parent != nil {
+        render_object.render_parent.mark_needs_layout()
+      }
+    }
+  }
+}
+
+/**
+ * Makes a child of a row or column take up to a share of the spare space.
+ */
+class Flexible < Expanded {
+
+  fit() {
+    return 'loose'
+  }
+}
+
+/**
+ * Empty space that takes a share of the spare space in a row or column.
+ */
+class Spacer < StatelessWidget {
+
+  /**
+   * @type number
+   */
+  var flex = 1
+
+  /**
+   * @param ?dict options: `flex` (1 when left out) and `key`.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(options, 'Spacer', { key: Key, flex: 'number' })
+    self.key = o.get('key')
+    self.flex = o.get('flex', 1)
+  }
+
+  build(context) {
+    return Expanded(Gap(0), { flex: self.flex })
+  }
+}
+
+/**
+ * Children laid over one another, the first at the back.
+ */
+class Stack < MultiChildRenderObjectWidget {
+
+  /**
+   * @type Alignment
+   */
+  var alignment
+
+  /**
+   * @type string
+   */
+  var fit = 'loose'
+
+  /**
+   * @param list children
+   * @param ?dict options: `alignment` for children that are not
+   *    positioned (top left when left out), `fit` (see `StackFit`) and
+   *    `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(
+      options, 'Stack', { key: Key, alignment: Alignment, fit: 'string' },
+    )
+    _check_children(children, 'Stack')
+    self.key = o.get('key')
+    self.children = children
+    self.alignment = o.get('alignment', Alignment.TOP_LEFT)
+    self.fit = o.get('fit', 'loose')
+    check_stack_fit(self.fit, 'Stack')
+  }
+
+  create_render_object(context) {
+    return RenderStack(self.alignment, self.fit)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(self.alignment, self.fit)
+  }
+}
+
+/**
+ * Fixes a child of a `Stack` to its edges, or gives it a size.
+ */
+class Positioned < ParentDataWidget {
+  var left
+  var top
+  var right
+  var bottom
+  var width
+  var height
+
+  /**
+   * @param Widget child
+   * @param dict options: any of `left`, `top`, `right`, `bottom`, `width`
+   *    and `height`, and `key`. Setting both `left` and `right` fixes the
+   *    width, so `width` may not be set too; the same holds vertically.
+   * @constructor
+   */
+  @new(child: Widget, options: dict) {
+    var o = check_options(
+      options, 'Positioned',
+      {
+        key: Key,
+        left: 'number',
+        top: 'number',
+        right: 'number',
+        bottom: 'number',
+        width: 'number',
+        height: 'number',
+      },
+    )
+    self.key = o.get('key')
+    self.child = child
+    self.left = o.get('left')
+    self.top = o.get('top')
+    self.right = o.get('right')
+    self.bottom = o.get('bottom')
+    self.width = o.get('width')
+    self.height = o.get('height')
+
+    if self.left != nil and self.right != nil and self.width != nil {
+      raise ValueError('Positioned may set at most two of left, right and width')
+    }
+
+    if self.top != nil and self.bottom != nil and self.height != nil {
+      raise ValueError('Positioned may set at most two of top, bottom and height')
+    }
+  }
+
+  /**
+   * A child fixed to all four edges of the stack.
+   *
+   * @param Widget child
+   * @returns Positioned
+   */
+  static fill(child: Widget) {
+    return Positioned(child, { left: 0, top: 0, right: 0, bottom: 0 })
+  }
+
+  apply_parent_data(render_object) {
+    var data = render_object.parent_data
+
+    if !instance_of(data, StackParentData) {
+      raise TypeError('Positioned must be a direct child of a Stack')
+    }
+
+    var changed = data.left != self.left
+      or data.top != self.top
+      or data.right != self.right
+      or data.bottom != self.bottom
+      or data.width != self.width
+      or data.height != self.height
+
+    if changed {
+      data.left = self.left
+      data.top = self.top
+      data.right = self.right
+      data.bottom = self.bottom
+      data.width = self.width
+      data.height = self.height
+
+      if render_object.render_parent != nil {
+        render_object.render_parent.mark_needs_layout()
+      }
+    }
+  }
+}
+
+/**
+ * Children laid out in runs that start a new line when full.
+ */
+class Wrap < MultiChildRenderObjectWidget {
+  var axis = 'horizontal'
+  var spacing = 0
+  var run_spacing = 0
+  var justify = 'start'
+  var run_justify = 'start'
+  var align_items = 'start'
+
+  /**
+   * @param list children
+   * @param ?dict options: `axis` (horizontal when left out), `spacing`
+   *    between children, `run_spacing` between runs, `justify` within a
+   *    run, `run_justify` for the runs (both `Justify` values),
+   *    `align_items` across a run (`START`, `END` or `CENTER`) and `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(
+      options, 'Wrap',
+      {
+        key: Key,
+        axis: 'string',
+        spacing: 'number',
+        run_spacing: 'number',
+        justify: 'string',
+        run_justify: 'string',
+        align_items: 'string',
+      },
+    )
+    _check_children(children, 'Wrap')
+    self.key = o.get('key')
+    self.children = children
+    self.axis = o.get('axis', Axis.HORIZONTAL)
+    self.spacing = o.get('spacing', 0)
+    self.run_spacing = o.get('run_spacing', 0)
+    self.justify = o.get('justify', 'start')
+    self.run_justify = o.get('run_justify', 'start')
+    self.align_items = o.get('align_items', 'start')
+    check_axis(self.axis, 'Wrap')
+    check_justify(self.justify, 'Wrap')
+    check_justify(self.run_justify, 'Wrap')
+
+    if !['start', 'end', 'center'].contains(self.align_items) {
+      raise ValueError("align_items of Wrap must be AlignItems.START, END or CENTER, got '${self.align_items}'")
+    }
+  }
+
+  create_render_object(context) {
+    var wrap = RenderWrap(self.axis)
+    self.update_render_object(context, wrap)
+    return wrap
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(
+      self.axis, self.spacing, self.run_spacing, self.justify, self.run_justify,
+      self.align_items,
+    )
+  }
+}
+
+/**
+ * Children in rows of equal-width columns, flowing left to right and top
+ * to bottom. Wrap a child in `GridCell` to make it span several columns
+ * or rows.
+ *
+ * ```zuri
+ * import zug { Grid, GridCell, Button }
+ *
+ * var keys = Grid([
+ *   Button('7'), Button('8'), Button('9'),
+ *   GridCell(Button('0'), { column_span: 2 }), Button('.'),
+ * ], { columns: 3, spacing: 6, row_height: 40 })
+ * ```
+ */
+class Grid < MultiChildRenderObjectWidget {
+  var columns = 1
+  var column_spacing = 0
+  var row_spacing = 0
+  var row_height
+  var aspect_ratio
+
+  /**
+   * @param list children
+   * @param dict options: `columns` (required), `spacing` for both
+   *    directions, or `column_spacing` and `row_spacing`; `row_height`
+   *    or `aspect_ratio` (cell width over height) to fix row heights,
+   *    which otherwise fit their tallest child; and `key`.
+   * @constructor
+   */
+  @new(children: list, options: dict) {
+    var o = check_options(
+      options, 'Grid',
+      {
+        key: Key,
+        columns: 'number',
+        spacing: 'number',
+        column_spacing: 'number',
+        row_spacing: 'number',
+        row_height: 'number',
+        aspect_ratio: 'number',
+      },
+    )
+    _check_children(children, 'Grid')
+    var columns = o.get('columns')
+
+    if columns == nil or !is_int(columns) or columns < 1 {
+      raise ValueError('a Grid needs a whole number of columns, at least 1, got ${columns}')
+    }
+
+    var spacing = o.get('spacing', 0)
+    self.key = o.get('key')
+    self.children = children
+    self.columns = columns
+    self.column_spacing = o.get('column_spacing', spacing)
+    self.row_spacing = o.get('row_spacing', spacing)
+    self.row_height = o.get('row_height')
+    self.aspect_ratio = o.get('aspect_ratio')
+
+    if self.aspect_ratio != nil and !(self.aspect_ratio > 0) {
+      raise ValueError('aspect_ratio of a Grid must be above zero, got ${self.aspect_ratio}')
+    }
+  }
+
+  create_render_object(context) {
+    var grid = RenderGrid(self.columns)
+    self.update_render_object(context, grid)
+    return grid
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(
+      self.columns, self.column_spacing, self.row_spacing, self.row_height,
+      self.aspect_ratio,
+    )
+  }
+}
+
+/**
+ * Makes a child of a `Grid` span several columns or rows.
+ */
+class GridCell < ParentDataWidget {
+  var column_span = 1
+  var row_span = 1
+
+  /**
+   * @param Widget child
+   * @param dict options: `column_span` and `row_span` (each 1 when left
+   *    out) and `key`.
+   * @constructor
+   */
+  @new(child: Widget, options: dict) {
+    var o = check_options(
+      options, 'GridCell',
+      { key: Key, column_span: 'number', row_span: 'number' },
+    )
+    self.key = o.get('key')
+    self.child = child
+    self.column_span = o.get('column_span', 1)
+    self.row_span = o.get('row_span', 1)
+
+    for span in [self.column_span, self.row_span] {
+      if !is_int(span) or span < 1 {
+        raise ValueError('a GridCell span must be a whole number, at least 1, got ${span}')
+      }
+    }
+  }
+
+  apply_parent_data(render_object) {
+    var data = render_object.parent_data
+
+    if !instance_of(data, GridParentData) {
+      raise TypeError('GridCell must be a direct child of a Grid')
+    }
+
+    if data.column_span != self.column_span or data.row_span != self.row_span {
+      data.column_span = self.column_span
+      data.row_span = self.row_span
+
+      if render_object.render_parent != nil {
+        render_object.render_parent.mark_needs_layout()
+      }
+    }
+  }
+}
+
+/**
+ * Sizes its child to an aspect ratio, width divided by height.
+ */
+class AspectRatio < SingleChildRenderObjectWidget {
+
+  /**
+   * @type number
+   */
+  var ratio = 1
+
+  /**
+   * @param number ratio
+   * @param ?Widget child
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(ratio: number, child: ?Widget, options: ?dict) {
+    var o = check_options(options, 'AspectRatio', { key: Key })
+    self.key = o.get('key')
+    self.ratio = ratio
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderAspectRatio(self.ratio)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_ratio(self.ratio)
+  }
+}
+
+/**
+ * Sizes its child to its content on one axis: horizontally, as narrow as
+ * its widest content; vertically, as short as its content allows. Useful
+ * to give a column of buttons the width of the widest.
+ */
+class FitContent < SingleChildRenderObjectWidget {
+
+  /**
+   * @type string
+   */
+  var axis = 'horizontal'
+
+  /**
+   * @param Widget child
+   * @param ?dict options: `axis` (horizontal when left out) and `key`.
+   * @constructor
+   */
+  @new(child: Widget, options: ?dict) {
+    var o = check_options(options, 'FitContent', { key: Key, axis: 'string' })
+    self.key = o.get('key')
+    self.child = child
+    self.axis = o.get('axis', Axis.HORIZONTAL)
+    check_axis(self.axis, 'FitContent')
+  }
+
+  create_render_object(context) {
+    return RenderFitContent(self.axis)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_axis(self.axis)
+  }
+}
+
+/**
+ * Keeps its child alive while hidden.
+ *
+ * @internal
+ */
+class HiddenKeeper < SingleChildRenderObjectWidget {
+  var visible = true
+
+  @new(visible: bool, child: Widget) {
+    self.visible = visible
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderVisibility(self.visible)
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_visible(self.visible)
+  }
+}
+
+/**
+ * Shows or hides its child. A hidden child is removed from the tree, so
+ * its state is lost, unless `keep_state` is set: then it stays in the tree
+ * with its state and native views, taking no space and not shown.
+ */
+class Visibility < StatelessWidget {
+
+  /**
+   * @type Widget
+   */
+  var child
+
+  /**
+   * @type bool
+   */
+  var visible = true
+
+  /**
+   * @type bool
+   */
+  var keep_state = false
+
+  /**
+   * @param Widget child
+   * @param dict options: `visible`, `keep_state` and `key`.
+   * @constructor
+   */
+  @new(child: Widget, options: dict) {
+    var o = check_options(
+      options, 'Visibility', { key: Key, visible: 'bool', keep_state: 'bool' },
+    )
+    self.key = o.get('key')
+    self.child = child
+    self.visible = o.get('visible', true)
+    self.keep_state = o.get('keep_state', false)
+  }
+
+  build(context) {
+    if self.keep_state {
+      return HiddenKeeper(self.visible, self.child)
+    }
+
+    return self.visible ? self.child : Gap(0)
+  }
+}
+
+/**
+ * Builds its child from the constraints it is given, so a layout can
+ * change with the space available.
+ *
+ * ```zuri
+ * import zug { Responsive, Row, Column, Text }
+ *
+ * var layout = Responsive(@(context, constraints) {
+ *   if constraints.max_width > 600 {
+ *     return Row([Text('wide')])
+ *   }
+ *
+ *   return Column([Text('narrow')])
+ * })
+ * ```
+ */
+class Responsive < SingleChildRenderObjectWidget {
+
+  /**
+   * Called with the context and the `Constraints`; returns the child.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @param function builder
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(builder: function, options: ?dict) {
+    var o = check_options(options, 'Responsive', { key: Key })
+    self.key = o.get('key')
+    self.builder = builder
+  }
+
+  create_element() {
+    return ResponsiveElement(self)
+  }
+
+  create_render_object(context) {
+    return RenderResponsive()
+  }
+}
+
+/**
+ * The element of `Responsive`, which builds its child during layout.
+ *
+ * @internal
+ */
+class ResponsiveElement < SingleChildRenderObjectElement {
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+    self.render_object.on_build = @(constraints) => self.build_for(constraints)
+  }
+
+  update(next: Widget) {
+    self.widget = next
+    self.render_object.mark_needs_build()
+    self.dirty = false
+  }
+
+  perform_rebuild() {
+    self.render_object.mark_needs_build()
+    self.dirty = false
+  }
+
+  /**
+   * Builds the child for `constraints`.
+   *
+   * @internal
+   * @param Constraints constraints
+   */
+  build_for(constraints) {
+    var built = self.widget.builder(self, constraints)
+    self.child = self.update_child(self.child, built, nil)
+  }
+
+  unmount() {
+    self.render_object.on_build = nil
+    parent.unmount()
+  }
+}

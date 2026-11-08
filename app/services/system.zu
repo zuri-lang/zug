@@ -1,0 +1,241 @@
+/**
+ * The system's clipboard, dialogs and other services.
+ *
+ * Dialogs return promises. An alert, an open panel or a save panel is
+ * attached to the window of the `Context` given, and is a separate window
+ * when the context is `nil`.
+ *
+ * ```zuri,ignore
+ * show_alert(context, {
+ *   title: 'Clear the history?',
+ *   message: 'This cannot be undone.',
+ *   style: AlertStyle.WARNING,
+ *   buttons: ['Clear', 'Cancel'],
+ * }).then(@(answer) {
+ *   if answer.button == 0 {
+ *     clear_history()
+ *   }
+ * })
+ * ```
+ */
+
+import ..foundation { Deferred, LifecycleError, check_options }
+import ..rendering { RenderWindow }
+import ..widgets { current_runtime }
+
+def _runtime() {
+  var runtime = current_runtime()
+
+  if runtime == nil {
+    raise LifecycleError('this needs a running application')
+  }
+
+  return runtime
+}
+
+/**
+ * The system clipboard.
+ */
+class Clipboard {
+
+  /**
+   * The text on the clipboard, or `nil` when it holds none.
+   *
+   * @returns ?string
+   */
+  static read_text() {
+    return _runtime().backend.read_clipboard()
+  }
+
+  /**
+   * Puts `text` on the clipboard.
+   *
+   * @param string text
+   */
+  static write_text(text: string) {
+    _runtime().backend.write_clipboard(text)
+  }
+}
+
+/**
+ * The kind of alert, which sets its icon.
+ */
+class AlertStyle {
+  static var INFORMATIONAL = 'informational'
+  static var WARNING = 'warning'
+  static var CRITICAL = 'critical'
+}
+
+# The native window of the window `context` is in, or nil.
+def _window_host(context) {
+  if context == nil {
+    return nil
+  }
+
+  var node = context.find_render_object()
+
+  while node != nil and !instance_of(node, RenderWindow) {
+    node = node.render_parent
+  }
+
+  return node == nil ? nil : node.view
+}
+
+/**
+ * Shows an alert. The promise is resolved with `{ button, suppressed }`:
+ * the index of the button chosen, and whether the suppression checkbox was
+ * ticked.
+ *
+ * @param ?Context context
+ * @param dict options: `title` (required), `message`, `style` (see
+ *    `AlertStyle`), `buttons` (titles, the first the default; `OK` when
+ *    left out) and `suppression`, the title of a checkbox such as `Do not
+ *    ask again`.
+ * @returns Promise
+ */
+def show_alert(context, options: dict) {
+  var o = check_options(
+    options, 'show_alert',
+    {
+      title: 'string',
+      message: 'string',
+      style: 'string',
+      buttons: 'list',
+      suppression: 'string',
+    },
+  )
+
+  if o.get('title') == nil {
+    raise ValueError('show_alert needs a title')
+  }
+
+  var deferred = Deferred()
+  var spec = {
+    title: o.title,
+    message: o.get('message', ''),
+    style: o.get('style', 'informational'),
+    buttons: o.get('buttons', ['OK']),
+    suppression: o.get('suppression'),
+  }
+
+  _runtime().backend.show_alert(_window_host(context), spec, @(answer) {
+    deferred.resolve(answer)
+  })
+  return deferred.promise
+}
+
+/**
+ * Asks the user to choose files or directories. The promise is resolved
+ * with a list of paths, or `nil` when the user cancelled.
+ *
+ * @param ?Context context
+ * @param ?dict options: `title`, `types` (file extensions such as `csv`),
+ *    `multiple`, `directories` and `files` (what may be chosen; files only
+ *    when left out) and `directory` to start in.
+ * @returns Promise
+ */
+def pick_files(context, options: ?dict) {
+  var o = check_options(
+    options, 'pick_files',
+    {
+      title: 'string',
+      types: 'list',
+      multiple: 'bool',
+      directories: 'bool',
+      files: 'bool',
+      directory: 'string',
+    },
+  )
+  var deferred = Deferred()
+  var spec = {
+    title: o.get('title'),
+    types: o.get('types'),
+    multiple: o.get('multiple', false),
+    directories: o.get('directories', false),
+    files: o.get('files', true),
+    directory: o.get('directory'),
+  }
+
+  _runtime().backend.pick_files(_window_host(context), spec, @(paths) {
+    deferred.resolve(paths)
+  })
+  return deferred.promise
+}
+
+/**
+ * Asks the user where to save a file. The promise is resolved with the
+ * path, or `nil` when the user cancelled.
+ *
+ * @param ?Context context
+ * @param ?dict options: `title`, `name` (a suggested file name), `types`
+ *    and `directory`.
+ * @returns Promise
+ */
+def save_file(context, options: ?dict) {
+  var o = check_options(
+    options, 'save_file',
+    { title: 'string', name: 'string', types: 'list', directory: 'string' },
+  )
+  var deferred = Deferred()
+  var spec = {
+    title: o.get('title'),
+    name: o.get('name'),
+    types: o.get('types'),
+    directory: o.get('directory'),
+  }
+  _runtime().backend.save_file(_window_host(context), spec, @(path) {
+    deferred.resolve(path)
+  })
+  return deferred.promise
+}
+
+/**
+ * Takes keyboard focus away from the controls in the window of `context`,
+ * so keys go to the window's `Shortcuts` and `KeyListener`s.
+ *
+ * @param Context context
+ */
+def clear_focus(context) {
+  var window = _window_host(context)
+
+  if window != nil {
+    window.clear_focus()
+  }
+}
+
+/**
+ * Carries out a standard menu role, such as `copy`, `paste` or
+ * `select_all`, on whatever has keyboard focus. Returns whether anything
+ * carried it out, so a menu item can do something of its own when, say,
+ * no text field has focus to copy from.
+ *
+ * ```zuri,ignore
+ * MenuItem('Copy', { shortcut: 'cmd+c', on_selected: @{
+ *   if !perform_role('copy') {
+ *     copy_result()
+ *   }
+ * } })
+ * ```
+ *
+ * @param string role
+ * @returns bool
+ */
+def perform_role(role: string) {
+  return _runtime().backend.perform_role(role)
+}
+
+/**
+ * Opens `url` in the application the system chooses for it.
+ *
+ * @param string url
+ */
+def open_url(url: string) {
+  _runtime().backend.open_url(url)
+}
+
+/**
+ * Plays the system alert sound.
+ */
+def beep() {
+  _runtime().backend.beep()
+}

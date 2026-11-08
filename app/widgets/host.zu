@@ -1,0 +1,258 @@
+/**
+ * The base of widgets backed by native views.
+ *
+ * A host widget names its view kind and turns its fields into the kind's
+ * props and event handlers. The framework diffs the props between builds
+ * and routes the view's events to the current handlers, so a host widget
+ * only describes; it never talks to a backend.
+ *
+ * Every host widget takes the options in `HOST_OPTIONS`: `key`,
+ * `tooltip`, `accessibility_label` and `accessibility_identifier`. The
+ * identifier is also how tests find a view.
+ */
+
+import ..foundation { Key }
+import ..rendering { RenderHost, RenderHostProxy }
+import .framework {
+  LeafRenderObjectWidget, SingleChildRenderObjectWidget,
+  MultiChildRenderObjectWidget,
+}
+
+/**
+ * The options every host widget takes.
+ *
+ * @type dict
+ */
+var HOST_OPTIONS = {
+  key: Key,
+  tooltip: 'string',
+  accessibility_label: 'string',
+  accessibility_identifier: 'string',
+}
+
+/**
+ * `HOST_OPTIONS` together with a widget's own options, for
+ * `check_options()`.
+ *
+ * @param dict own
+ * @returns dict
+ */
+def host_options(own: dict) {
+  var all = HOST_OPTIONS.clone()
+
+  for name, type in own {
+    all[name] = type
+  }
+
+  return all
+}
+
+/**
+ * The props every view kind takes, read from checked options.
+ *
+ * @param dict o
+ * @returns dict
+ */
+def common_props(o: dict) {
+  return {
+    tooltip: o.get('tooltip'),
+    accessibility_label: o.get('accessibility_label'),
+    accessibility_identifier: o.get('accessibility_identifier'),
+  }
+}
+
+/**
+ * A host widget with no children.
+ */
+class HostWidget < LeafRenderObjectWidget {
+
+  /**
+   * The props shared by every kind, set by the subclass's constructor.
+   *
+   * @internal
+   * @type dict
+   */
+  var common = {}
+
+  /**
+   * The view kind.
+   *
+   * @returns string
+   */
+  kind() {
+    raise NotImplementedError('${typeof(self)} must define kind()')
+  }
+
+  /**
+   * The kind's props, as this widget declares them.
+   *
+   * @param Context context
+   * @returns dict
+   */
+  props(context) {
+    return {}
+  }
+
+  /**
+   * Event names to handlers, each called with the event's payload.
+   *
+   * @returns dict
+   */
+  handlers() {
+    return {}
+  }
+
+  _all_props(context) {
+    var all = self.props(context)
+
+    for name, value in self.common {
+      all[name] = value
+    }
+
+    return all
+  }
+
+  create_render_object(context) {
+    return RenderHost(self.kind(), self._all_props(context), self.handlers())
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_handlers(self.handlers())
+    render_object.set_props(self._all_props(context))
+  }
+}
+
+/**
+ * A host widget with at most one child, which takes the view's size.
+ */
+class SingleChildHostWidget < SingleChildRenderObjectWidget {
+
+  /**
+   * @internal
+   * @type dict
+   */
+  var common = {}
+
+  /**
+   * @returns string
+   */
+  kind() {
+    raise NotImplementedError('${typeof(self)} must define kind()')
+  }
+
+  /**
+   * @param Context context
+   * @returns dict
+   */
+  props(context) {
+    return {}
+  }
+
+  /**
+   * @returns dict
+   */
+  handlers() {
+    return {}
+  }
+
+  _all_props(context) {
+    var all = self.props(context)
+
+    for name, value in self.common {
+      all[name] = value
+    }
+
+    return all
+  }
+
+  /**
+   * Makes the render object; subclasses with their own layout override
+   * it.
+   *
+   * @param string kind
+   * @param dict props
+   * @param dict handlers
+   * @returns RenderHost
+   */
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    return RenderHostProxy(kind, props, handlers)
+  }
+
+  create_render_object(context) {
+    return self.make_render_host(
+      self.kind(), self._all_props(context), self.handlers(),
+    )
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_handlers(self.handlers())
+    render_object.set_props(self._all_props(context))
+  }
+}
+
+/**
+ * A host widget with a list of children, each in an area of the view.
+ */
+class MultiChildHostWidget < MultiChildRenderObjectWidget {
+
+  /**
+   * @internal
+   * @type dict
+   */
+  var common = {}
+
+  /**
+   * @returns string
+   */
+  kind() {
+    raise NotImplementedError('${typeof(self)} must define kind()')
+  }
+
+  /**
+   * @param Context context
+   * @returns dict
+   */
+  props(context) {
+    return {}
+  }
+
+  /**
+   * @returns dict
+   */
+  handlers() {
+    return {}
+  }
+
+  _all_props(context) {
+    var all = self.props(context)
+
+    for name, value in self.common {
+      all[name] = value
+    }
+
+    return all
+  }
+
+  /**
+   * Makes the render object.
+   *
+   * @param string kind
+   * @param dict props
+   * @param dict handlers
+   * @returns RenderHost
+   */
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    raise NotImplementedError('${typeof(self)} must define make_render_host()')
+  }
+
+  create_render_object(context) {
+    return self.make_render_host(
+      self.kind(), self._all_props(context), self.handlers(),
+    )
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_handlers(self.handlers())
+    render_object.set_props(self._all_props(context))
+  }
+}

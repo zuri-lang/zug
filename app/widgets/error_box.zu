@@ -1,0 +1,43 @@
+/**
+ * What is shown in place of a widget whose `build()` raised.
+ */
+
+import ..foundation { Color, EdgeInsets }
+import ..painting { TextStyle }
+import .framework { StatelessWidget, set_error_widget_builder }
+import .basic { Box }
+import .text { Text }
+
+/**
+ * A red box holding the message of the error a build raised. The error
+ * itself has already gone to `report_error()`.
+ */
+class ErrorBox < StatelessWidget {
+
+  /**
+   * @type string
+   */
+  var message = ''
+
+  /**
+   * @param any error
+   * @constructor
+   */
+  @new(error) {
+    self.message = instance_of(error, Error)
+      ? '${error.type}: ${error.message}'
+      : '${error}'
+  }
+
+  build(context) {
+    return Box({
+      color: Color(176, 0, 32, 1),
+      padding: EdgeInsets.all(8),
+      child: Text(
+        self.message, { style: TextStyle({ color: Color.WHITE, size: 12 }) },
+      ),
+    })
+  }
+}
+
+set_error_widget_builder(@(error) => ErrorBox(error))

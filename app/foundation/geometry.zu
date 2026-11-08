@@ -1,0 +1,1197 @@
+/**
+ * Points, sizes, rectangles, insets, alignments and layout constraints.
+ *
+ * Every value here is immutable: operations return a new value. All of
+ * them compare by value with `==`, so they can be diffed between builds.
+ * Coordinates are logical points with the origin at the top left and y
+ * growing downwards, on every backend.
+ */
+
+import math
+
+/**
+ * Positive infinity, the bound of an unconstrained axis.
+ *
+ * @type number
+ */
+var INFINITY = math.Infinity
+
+# Formats a number for display in a value's description, so whole
+# numbers print without a fraction and infinity prints as a word.
+def _num(value) {
+  if value == INFINITY {
+    return 'inf'
+  }
+
+  return '${value}'
+}
+
+/**
+ * A position, or a displacement, in logical points.
+ *
+ * @printable
+ */
+class Point {
+
+  /**
+   * @type number
+   */
+  var x = 0
+
+  /**
+   * @type number
+   */
+  var y = 0
+
+  /**
+   * The point origin by `x` across and `y` down.
+   *
+   * @param number x
+   * @param number y
+   * @constructor
+   */
+  @new(x: number, y: number) {
+    self.x = x
+    self.y = y
+  }
+
+  /**
+   * The point at the origin.
+   *
+   * @type Point
+   */
+  static var ZERO = nil
+
+  @add(other: Point) {
+    return Point(self.x + other.x, self.y + other.y)
+  }
+
+  @sub(other: Point) {
+    return Point(self.x - other.x, self.y - other.y)
+  }
+
+  @neg() {
+    return Point(-self.x, -self.y)
+  }
+
+  /**
+   * This point moved by `dx` and `dy`.
+   *
+   * @param number dx
+   * @param number dy
+   * @returns Point
+   */
+  translate(dx: number, dy: number) {
+    return Point(self.x + dx, self.y + dy)
+  }
+
+  /**
+   * This point with both coordinates multiplied by `factor`.
+   *
+   * @param number factor
+   * @returns Point
+   */
+  scale(factor: number) {
+    return Point(self.x * factor, self.y * factor)
+  }
+
+  /**
+   * The straight-line distance to `other`.
+   *
+   * @param Point other
+   * @returns number
+   */
+  distance_to(other: Point) {
+    var dx = self.x - other.x
+    var dy = self.y - other.y
+    return (dx * dx + dy * dy).sqrt()
+  }
+
+  @eq(other) {
+    return instance_of(other, Point) and self.x == other.x and self.y == other.y
+  }
+
+  @to_string() {
+    return 'Point(${_num(self.x)}, ${_num(self.y)})'
+  }
+}
+
+Point.ZERO = Point(0, 0)
+
+/**
+ * A width and a height in logical points. Either may be infinite.
+ *
+ * @printable
+ */
+class Size {
+
+  /**
+   * @type number
+   */
+  var width = 0
+
+  /**
+   * @type number
+   */
+  var height = 0
+
+  /**
+   * A size of `width` by `height`.
+   *
+   * @param number width
+   * @param number height
+   * @constructor
+   */
+  @new(width: number, height: number) {
+    self.width = width
+    self.height = height
+  }
+
+  /**
+   * The size with no area.
+   *
+   * @type Size
+   */
+  static var ZERO = nil
+
+  /**
+   * The size that is infinite in both directions.
+   *
+   * @type Size
+   */
+  static var INFINITE = nil
+
+  /**
+   * A size whose width and height are both `dimension`.
+   *
+   * @param number dimension
+   * @returns Size
+   */
+  static square(dimension: number) {
+    return Size(dimension, dimension)
+  }
+
+  /**
+   * Whether the size has no area.
+   *
+   * @returns bool
+   */
+  is_empty() {
+    return self.width <= 0 or self.height <= 0
+  }
+
+  /**
+   * Whether both dimensions are finite.
+   *
+   * @returns bool
+   */
+  is_finite() {
+    return self.width != INFINITY and self.height != INFINITY
+  }
+
+  /**
+   * Whether `point`, taken relative to the top left of this size, lies
+   * inside it. The right and bottom edges are outside.
+   *
+   * @param Point point
+   * @returns bool
+   */
+  contains(point: Point) {
+    return point.x >= 0
+      and point.y >= 0
+      and point.x < self.width
+      and point.y < self.height
+  }
+
+  /**
+   * The width divided by the height, or 0 for a size with no height.
+   *
+   * @returns number
+   */
+  aspect_ratio() {
+    if self.height == 0 {
+      return 0
+    }
+
+    return self.width / self.height
+  }
+
+  /**
+   * The point at the middle of this size.
+   *
+   * @returns Point
+   */
+  center() {
+    return Point(self.width / 2, self.height / 2)
+  }
+
+  @add(other: Size) {
+    return Size(self.width + other.width, self.height + other.height)
+  }
+
+  @sub(other: Size) {
+    return Size(self.width - other.width, self.height - other.height)
+  }
+
+  @eq(other) {
+    return instance_of(other, Size)
+      and self.width == other.width
+      and self.height == other.height
+  }
+
+  @to_string() {
+    return 'Size(${_num(self.width)}, ${_num(self.height)})'
+  }
+}
+
+Size.ZERO = Size(0, 0)
+Size.INFINITE = Size(INFINITY, INFINITY)
+
+/**
+ * An axis-aligned rectangle: an origin and a size.
+ *
+ * @printable
+ */
+class Rect {
+
+  /**
+   * @type number
+   */
+  var x = 0
+
+  /**
+   * @type number
+   */
+  var y = 0
+
+  /**
+   * @type number
+   */
+  var width = 0
+
+  /**
+   * @type number
+   */
+  var height = 0
+
+  /**
+   * The rectangle whose top left corner is at `x`, `y`.
+   *
+   * @param number x
+   * @param number y
+   * @param number width
+   * @param number height
+   * @constructor
+   */
+  @new(x: number, y: number, width: number, height: number) {
+    self.x = x
+    self.y = y
+    self.width = width
+    self.height = height
+  }
+
+  /**
+   * The empty rectangle at the origin.
+   *
+   * @type Rect
+   */
+  static var ZERO = nil
+
+  /**
+   * The rectangle from its four edges.
+   *
+   * @param number left
+   * @param number top
+   * @param number right
+   * @param number bottom
+   * @returns Rect
+   */
+  static from_ltrb(left: number, top: number, right: number, bottom: number) {
+    return Rect(left, top, right - left, bottom - top)
+  }
+
+  /**
+   * The rectangle at `origin` with `size`.
+   *
+   * @param Point origin
+   * @param Size size
+   * @returns Rect
+   */
+  static from_origin(origin: Point, size: Size) {
+    return Rect(origin.x, origin.y, size.width, size.height)
+  }
+
+  /**
+   * @returns number
+   */
+  left() {
+    return self.x
+  }
+
+  /**
+   * @returns number
+   */
+  top() {
+    return self.y
+  }
+
+  /**
+   * @returns number
+   */
+  right() {
+    return self.x + self.width
+  }
+
+  /**
+   * @returns number
+   */
+  bottom() {
+    return self.y + self.height
+  }
+
+  /**
+   * The top left corner.
+   *
+   * @returns Point
+   */
+  origin() {
+    return Point(self.x, self.y)
+  }
+
+  /**
+   * @returns Size
+   */
+  size() {
+    return Size(self.width, self.height)
+  }
+
+  /**
+   * @returns Point
+   */
+  center() {
+    return Point(self.x + self.width / 2, self.y + self.height / 2)
+  }
+
+  /**
+   * Whether the rectangle has no area.
+   *
+   * @returns bool
+   */
+  is_empty() {
+    return self.width <= 0 or self.height <= 0
+  }
+
+  /**
+   * Whether `point` lies inside. The right and bottom edges are outside.
+   *
+   * @param Point point
+   * @returns bool
+   */
+  contains(point: Point) {
+    return point.x >= self.x
+      and point.y >= self.y
+      and point.x < self.x + self.width
+      and point.y < self.y + self.height
+  }
+
+  /**
+   * Whether this rectangle and `other` share any area.
+   *
+   * @param Rect other
+   * @returns bool
+   */
+  overlaps(other: Rect) {
+    return self.x < other.right()
+      and other.x < self.right()
+      and self.y < other.bottom()
+      and other.y < self.bottom()
+  }
+
+  /**
+   * The area both rectangles cover, or an empty rectangle when they do
+   * not overlap.
+   *
+   * @param Rect other
+   * @returns Rect
+   */
+  intersect(other: Rect) {
+    var left = self.x.max(other.x)
+    var top = self.y.max(other.y)
+    var right = self.right().min(other.right())
+    var bottom = self.bottom().min(other.bottom())
+
+    if right <= left or bottom <= top {
+      return Rect(left, top, 0, 0)
+    }
+
+    return Rect.from_ltrb(left, top, right, bottom)
+  }
+
+  /**
+   * The smallest rectangle covering both.
+   *
+   * @param Rect other
+   * @returns Rect
+   */
+  union(other: Rect) {
+    return Rect.from_ltrb(
+      self.x.min(other.x),
+      self.y.min(other.y),
+      self.right().max(other.right()),
+      self.bottom().max(other.bottom()),
+    )
+  }
+
+  /**
+   * This rectangle moved by `dx` and `dy`.
+   *
+   * @param number dx
+   * @param number dy
+   * @returns Rect
+   */
+  translate(dx: number, dy: number) {
+    return Rect(self.x + dx, self.y + dy, self.width, self.height)
+  }
+
+  /**
+   * This rectangle grown by `delta` on every side.
+   *
+   * @param number delta
+   * @returns Rect
+   */
+  inflate(delta: number) {
+    return Rect(
+      self.x - delta, self.y - delta, self.width + delta * 2,
+      self.height + delta * 2,
+    )
+  }
+
+  /**
+   * This rectangle shrunk by `insets`.
+   *
+   * @param EdgeInsets insets
+   * @returns Rect
+   */
+  deflate(insets) {
+    return Rect(
+      self.x + insets.left,
+      self.y + insets.top,
+      (self.width - insets.horizontal()).max(0),
+      (self.height - insets.vertical()).max(0),
+    )
+  }
+
+  @eq(other) {
+    return instance_of(other, Rect)
+      and self.x == other.x
+      and self.y == other.y
+      and self.width == other.width
+      and self.height == other.height
+  }
+
+  @to_string() {
+    return 'Rect(${_num(self.x)}, ${_num(self.y)}, ${_num(self.width)}, ${_num(self.height)})'
+  }
+}
+
+Rect.ZERO = Rect(0, 0, 0, 0)
+
+/**
+ * Space on each of the four sides of a box, used for padding and
+ * margins.
+ *
+ * ```zuri
+ * import zug { EdgeInsets }
+ *
+ * var around = EdgeInsets.all(8)
+ * var sides = EdgeInsets.symmetric({ horizontal: 12, vertical: 4 })
+ * var top = EdgeInsets.only({ top: 6 })
+ * ```
+ *
+ * @printable
+ */
+class EdgeInsets {
+
+  /**
+   * @type number
+   */
+  var left = 0
+
+  /**
+   * @type number
+   */
+  var top = 0
+
+  /**
+   * @type number
+   */
+  var right = 0
+
+  /**
+   * @type number
+   */
+  var bottom = 0
+
+  /**
+   * Insets from each edge, given left, top, right and bottom.
+   *
+   * @param number left
+   * @param number top
+   * @param number right
+   * @param number bottom
+   * @throws ValueError When any value is negative or not finite
+   * @constructor
+   */
+  @new(left: number, top: number, right: number, bottom: number) {
+    for value in [left, top, right, bottom] {
+      if value < 0 or !value.is_finite() {
+        raise ValueError('EdgeInsets values must be finite and not negative, got ${value}')
+      }
+    }
+
+    self.left = left
+    self.top = top
+    self.right = right
+    self.bottom = bottom
+  }
+
+  /**
+   * No insets at all.
+   *
+   * @type EdgeInsets
+   */
+  static var ZERO = nil
+
+  /**
+   * The same inset on every side.
+   *
+   * @param number value
+   * @returns EdgeInsets
+   */
+  static all(value: number) {
+    return EdgeInsets(value, value, value, value)
+  }
+
+  /**
+   * One inset for the left and right, another for the top and bottom.
+   *
+   * @param dict values: `horizontal` and `vertical`, each 0 when left
+   *    out.
+   * @returns EdgeInsets
+   */
+  static symmetric(values: dict) {
+    _check_keys(values, ['horizontal', 'vertical'], 'EdgeInsets.symmetric')
+    var horizontal = values.get('horizontal', 0)
+    var vertical = values.get('vertical', 0)
+    return EdgeInsets(horizontal, vertical, horizontal, vertical)
+  }
+
+  /**
+   * Insets for only the sides named.
+   *
+   * @param dict values: any of `left`, `top`, `right` and `bottom`, each
+   *    0 when left out.
+   * @returns EdgeInsets
+   */
+  static only(values: dict) {
+    _check_keys(values, ['left', 'top', 'right', 'bottom'], 'EdgeInsets.only')
+    return EdgeInsets(
+      values.get('left', 0),
+      values.get('top', 0),
+      values.get('right', 0),
+      values.get('bottom', 0),
+    )
+  }
+
+  /**
+   * The left and right insets together.
+   *
+   * @returns number
+   */
+  horizontal() {
+    return self.left + self.right
+  }
+
+  /**
+   * The top and bottom insets together.
+   *
+   * @returns number
+   */
+  vertical() {
+    return self.top + self.bottom
+  }
+
+  /**
+   * Whether every side is zero.
+   *
+   * @returns bool
+   */
+  is_zero() {
+    return self.left == 0
+      and self.top == 0
+      and self.right == 0
+      and self.bottom == 0
+  }
+
+  /**
+   * The point at the top left of the inset area.
+   *
+   * @returns Point
+   */
+  top_left() {
+    return Point(self.left, self.top)
+  }
+
+  /**
+   * `size` grown by these insets.
+   *
+   * @param Size size
+   * @returns Size
+   */
+  inflate_size(size: Size) {
+    return Size(size.width + self.horizontal(), size.height + self.vertical())
+  }
+
+  /**
+   * `size` shrunk by these insets, never below zero.
+   *
+   * @param Size size
+   * @returns Size
+   */
+  deflate_size(size: Size) {
+    return Size(
+      (size.width - self.horizontal()).max(0),
+      (size.height - self.vertical()).max(0),
+    )
+  }
+
+  @add(other: EdgeInsets) {
+    return EdgeInsets(
+      self.left + other.left,
+      self.top + other.top,
+      self.right + other.right,
+      self.bottom + other.bottom,
+    )
+  }
+
+  @eq(other) {
+    return instance_of(other, EdgeInsets)
+      and self.left == other.left
+      and self.top == other.top
+      and self.right == other.right
+      and self.bottom == other.bottom
+  }
+
+  @to_string() {
+    return 'EdgeInsets(${self.left}, ${self.top}, ${self.right}, ${self.bottom})'
+  }
+}
+
+EdgeInsets.ZERO = EdgeInsets(0, 0, 0, 0)
+
+# Refuses keys a factory does not take, so a misspelled side is an error
+# rather than a silent zero.
+def _check_keys(values: dict, known: list, owner: string) {
+  for key in values.keys() {
+    if !known.contains(key) {
+      raise ValueError("${owner} takes ${', '.join(known)}, not '${key}'")
+    }
+  }
+}
+
+/**
+ * A point within a box, where -1 is the left or top edge, 0 the middle
+ * and 1 the right or bottom edge.
+ *
+ * ```zuri
+ * import zug { Alignment }
+ *
+ * echo Alignment.CENTER
+ * echo Alignment(1, -1) == Alignment.TOP_RIGHT
+ * ```
+ *
+ * @printable
+ */
+class Alignment {
+
+  /**
+   * The horizontal position, from -1 for the left edge to 1 for the
+   * right.
+   *
+   * @type number
+   */
+  var x = 0
+
+  /**
+   * The vertical position, from -1 for the top edge to 1 for the bottom.
+   *
+   * @type number
+   */
+  var y = 0
+
+  /**
+   * @param number x
+   * @param number y
+   * @constructor
+   */
+  @new(x: number, y: number) {
+    self.x = x
+    self.y = y
+  }
+
+  static var TOP_LEFT = nil
+  static var TOP_CENTER = nil
+  static var TOP_RIGHT = nil
+  static var CENTER_LEFT = nil
+  static var CENTER = nil
+  static var CENTER_RIGHT = nil
+  static var BOTTOM_LEFT = nil
+  static var BOTTOM_CENTER = nil
+  static var BOTTOM_RIGHT = nil
+
+  /**
+   * Where a child of `child` size goes inside a box of `container`
+   * size: the offset of its top left corner.
+   *
+   * @param Size child
+   * @param Size container
+   * @returns Point
+   */
+  offset_for(child: Size, container: Size) {
+    var spare_x = container.width - child.width
+    var spare_y = container.height - child.height
+    return Point(spare_x / 2 * (1 + self.x), spare_y / 2 * (1 + self.y))
+  }
+
+  /**
+   * The point this alignment names within a box of `size`.
+   *
+   * @param Size size
+   * @returns Point
+   */
+  along(size: Size) {
+    return Point(size.width / 2 * (1 + self.x), size.height / 2 * (1 + self.y))
+  }
+
+  @eq(other) {
+    return instance_of(other, Alignment)
+      and self.x == other.x
+      and self.y == other.y
+  }
+
+  @to_string() {
+    return 'Alignment(${self.x}, ${self.y})'
+  }
+}
+
+Alignment.TOP_LEFT = Alignment(-1, -1)
+Alignment.TOP_CENTER = Alignment(0, -1)
+Alignment.TOP_RIGHT = Alignment(1, -1)
+Alignment.CENTER_LEFT = Alignment(-1, 0)
+Alignment.CENTER = Alignment(0, 0)
+Alignment.CENTER_RIGHT = Alignment(1, 0)
+Alignment.BOTTOM_LEFT = Alignment(-1, 1)
+Alignment.BOTTOM_CENTER = Alignment(0, 1)
+Alignment.BOTTOM_RIGHT = Alignment(1, 1)
+
+/**
+ * The sizes a box may take during layout: a range for the width and a
+ * range for the height. A parent hands its child constraints, and the
+ * child picks a size within them.
+ *
+ * A maximum may be infinite, meaning that axis is unbounded. Minimums are
+ * always finite.
+ *
+ * ```zuri
+ * import zug { Constraints, Size }
+ *
+ * var fixed = Constraints.tight(Size(100, 40))
+ * echo fixed.is_tight()
+ * echo Constraints.loose(Size(300, 200)).constrain(Size(500, 50))
+ * ```
+ *
+ * @printable
+ */
+class Constraints {
+
+  /**
+   * @type number
+   */
+  var min_width = 0
+
+  /**
+   * @type number
+   */
+  var max_width = INFINITY
+
+  /**
+   * @type number
+   */
+  var min_height = 0
+
+  /**
+   * @type number
+   */
+  var max_height = INFINITY
+
+  /**
+   * Constraints from their four bounds.
+   *
+   * @param number min_width
+   * @param number max_width
+   * @param number min_height
+   * @param number max_height
+   * A minimum may be infinite only when its maximum is too, which is how
+   * `Constraints.expand()` asks for as much space as there is; such
+   * constraints are only ever enforced against others, never laid out with.
+   *
+   * @throws ValueError When a bound is negative or a minimum exceeds its
+   *    maximum
+   * @constructor
+   */
+  @new(
+    min_width: number, max_width: number, min_height: number,
+    max_height: number,
+  ) {
+    if !(min_width >= 0) or !(min_height >= 0) {
+      raise ValueError('constraint minimums must not be negative, got width ${_num(min_width)} and height ${_num(min_height)}')
+    }
+
+    if max_width < min_width
+      or max_height < min_height
+      or max_width.is_nan()
+      or max_height.is_nan() {
+      raise ValueError('constraint maximums must not be below their minimums: width ${_num(min_width)}..${_num(max_width)}, height ${_num(min_height)}..${_num(max_height)}')
+    }
+
+    self.min_width = min_width
+    self.max_width = max_width
+    self.min_height = min_height
+    self.max_height = max_height
+  }
+
+  /**
+   * Constraints that allow any size at all.
+   *
+   * @type Constraints
+   */
+  static var UNBOUNDED = nil
+
+  /**
+   * Constraints that allow exactly `size`.
+   *
+   * @param Size size
+   * @returns Constraints
+   */
+  static tight(size: Size) {
+    return Constraints(size.width, size.width, size.height, size.height)
+  }
+
+  /**
+   * Constraints that fix the dimensions given and leave the others
+   * unbounded.
+   *
+   * @param dict values: `width` and `height`, either of which may be left
+   *    out.
+   * @returns Constraints
+   */
+  static tight_for(values: dict) {
+    _check_keys(values, ['width', 'height'], 'Constraints.tight_for')
+    var width = values.get('width')
+    var height = values.get('height')
+    return Constraints(
+      width == nil ? 0 : width,
+      width == nil ? INFINITY : width,
+      height == nil ? 0 : height,
+      height == nil ? INFINITY : height,
+    )
+  }
+
+  /**
+   * Constraints that allow any size up to `size`.
+   *
+   * @param Size size
+   * @returns Constraints
+   */
+  static loose(size: Size) {
+    return Constraints(0, size.width, 0, size.height)
+  }
+
+  /**
+   * Constraints that require filling the space: infinite in each
+   * dimension not given.
+   *
+   * @param ?dict values: `width` and `height`, either of which may be
+   *    left out.
+   * @returns Constraints
+   */
+  static expand(values: ?dict) {
+    if values == nil {
+      values = {}
+    }
+
+    _check_keys(values, ['width', 'height'], 'Constraints.expand')
+    var width = values.get('width', INFINITY)
+    var height = values.get('height', INFINITY)
+    return Constraints(width, width, height, height)
+  }
+
+  /**
+   * Whether both minimums are finite, as constraints a box is laid out
+   * with must be.
+   *
+   * @returns bool
+   */
+  is_normalized() {
+    return self.min_width != INFINITY and self.min_height != INFINITY
+  }
+
+  /**
+   * Whether exactly one size is allowed.
+   *
+   * @returns bool
+   */
+  is_tight() {
+    return self.min_width >= self.max_width
+      and self.min_height >= self.max_height
+  }
+
+  /**
+   * Whether exactly one width is allowed.
+   *
+   * @returns bool
+   */
+  has_tight_width() {
+    return self.min_width >= self.max_width
+  }
+
+  /**
+   * Whether exactly one height is allowed.
+   *
+   * @returns bool
+   */
+  has_tight_height() {
+    return self.min_height >= self.max_height
+  }
+
+  /**
+   * Whether the maximum width is finite.
+   *
+   * @returns bool
+   */
+  has_bounded_width() {
+    return self.max_width != INFINITY
+  }
+
+  /**
+   * Whether the maximum height is finite.
+   *
+   * @returns bool
+   */
+  has_bounded_height() {
+    return self.max_height != INFINITY
+  }
+
+  /**
+   * The largest size allowed. Infinite where an axis is unbounded.
+   *
+   * @returns Size
+   */
+  biggest() {
+    return Size(self.max_width, self.max_height)
+  }
+
+  /**
+   * The smallest size allowed.
+   *
+   * @returns Size
+   */
+  smallest() {
+    return Size(self.min_width, self.min_height)
+  }
+
+  /**
+   * `width` brought within the allowed widths.
+   *
+   * @param number width
+   * @returns number
+   */
+  constrain_width(width: number) {
+    return width.max(self.min_width).min(self.max_width)
+  }
+
+  /**
+   * `height` brought within the allowed heights.
+   *
+   * @param number height
+   * @returns number
+   */
+  constrain_height(height: number) {
+    return height.max(self.min_height).min(self.max_height)
+  }
+
+  /**
+   * The allowed size nearest to `size`.
+   *
+   * @param Size size
+   * @returns Size
+   */
+  constrain(size: Size) {
+    return Size(
+      self.constrain_width(size.width), self.constrain_height(size.height),
+    )
+  }
+
+  /**
+   * The allowed size nearest to `size` that keeps its aspect ratio as far
+   * as the bounds allow.
+   *
+   * @param Size size
+   * @returns Size
+   */
+  constrain_keeping_aspect(size: Size) {
+    if self.is_tight() or size.is_empty() {
+      return self.constrain(size)
+    }
+
+    var ratio = size.width / size.height
+    var width = size.width
+    var height = size.height
+
+    if width > self.max_width {
+      width = self.max_width
+      height = width / ratio
+    }
+
+    if height > self.max_height {
+      height = self.max_height
+      width = height * ratio
+    }
+
+    if width < self.min_width {
+      width = self.min_width
+      height = width / ratio
+    }
+
+    if height < self.min_height {
+      height = self.min_height
+      width = height * ratio
+    }
+
+    return self.constrain(Size(width, height))
+  }
+
+  /**
+   * These constraints with `insets` taken off, as a parent with padding
+   * hands to its child.
+   *
+   * @param EdgeInsets insets
+   * @returns Constraints
+   */
+  deflate(insets: EdgeInsets) {
+    var horizontal = insets.horizontal()
+    var vertical = insets.vertical()
+    var min_width = (self.min_width - horizontal).max(0)
+    var min_height = (self.min_height - vertical).max(0)
+    return Constraints(
+      min_width,
+      (self.max_width - horizontal).max(min_width),
+      min_height,
+      (self.max_height - vertical).max(min_height),
+    )
+  }
+
+  /**
+   * These constraints with the minimums dropped to zero.
+   *
+   * @returns Constraints
+   */
+  loosen() {
+    return Constraints(0, self.max_width, 0, self.max_height)
+  }
+
+  /**
+   * These constraints made tight at `width` and `height` where given,
+   * each brought within the current bounds.
+   *
+   * @param dict values: `width` and `height`, either may be left out.
+   * @returns Constraints
+   */
+  tighten(values: dict) {
+    _check_keys(values, ['width', 'height'], 'Constraints.tighten')
+    var width = values.get('width')
+    var height = values.get('height')
+    var min_width = self.min_width
+    var max_width = self.max_width
+    var min_height = self.min_height
+    var max_height = self.max_height
+
+    if width != nil {
+      min_width = self.constrain_width(width)
+      max_width = min_width
+    }
+
+    if height != nil {
+      min_height = self.constrain_height(height)
+      max_height = min_height
+    }
+
+    return Constraints(min_width, max_width, min_height, max_height)
+  }
+
+  /**
+   * These constraints kept within `other`: each bound brought inside the
+   * other's range.
+   *
+   * @param Constraints other
+   * @returns Constraints
+   */
+  enforce(other: Constraints) {
+    var min_width = self.min_width.max(other.min_width).min(other.max_width)
+    var max_width = self.max_width.max(other.min_width).min(other.max_width)
+    var min_height = self.min_height.max(other.min_height).min(other.max_height)
+    var max_height = self.max_height.max(other.min_height).min(other.max_height)
+    return Constraints(
+      min_width, max_width.max(min_width), min_height,
+      max_height.max(min_height),
+    )
+  }
+
+  /**
+   * A copy with the bounds given replaced.
+   *
+   * @param dict values: any of `min_width`, `max_width`, `min_height` and
+   *    `max_height`.
+   * @returns Constraints
+   */
+  copy_with(values: dict) {
+    _check_keys(
+      values, ['min_width', 'max_width', 'min_height', 'max_height'],
+      'Constraints.copy_with',
+    )
+    return Constraints(
+      values.get('min_width', self.min_width),
+      values.get('max_width', self.max_width),
+      values.get('min_height', self.min_height),
+      values.get('max_height', self.max_height),
+    )
+  }
+
+  @eq(other) {
+    return instance_of(other, Constraints)
+      and self.min_width == other.min_width
+      and self.max_width == other.max_width
+      and self.min_height == other.min_height
+      and self.max_height == other.max_height
+  }
+
+  @to_string() {
+    if self.is_tight() {
+      return 'Constraints(tight ${_num(self.min_width)} x ${_num(self.min_height)})'
+    }
+
+    return 'Constraints(width ${_num(self.min_width)}..${_num(self.max_width)}, height ${_num(self.min_height)}..${_num(self.max_height)})'
+  }
+}
+
+Constraints.UNBOUNDED = Constraints(0, INFINITY, 0, INFINITY)

@@ -1,0 +1,137 @@
+/**
+ * Scrolling, tabs, split panes, a table of data, drawing and pointer
+ * input: a virtualized list of 5,000 rows in a translucent sidebar beside
+ * tabs holding a table and a chart.
+ *
+ *     zuri run examples/containers.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import math
+import ..app { * }
+
+var people = [
+  ['Ada Lovelace', 36, 'Mathematician'],
+  ['Alan Turing', 41, 'Computer scientist'],
+  ['Grace Hopper', 85, 'Rear admiral'],
+  ['Edsger Dijkstra', 72, 'Computer scientist'],
+  ['Barbara Liskov', 84, 'Computer scientist'],
+]
+
+class Demo < StatefulWidget {
+  create_state() {
+    return DemoState()
+  }
+}
+
+class DemoState < State {
+  var tab = 0
+  var selected = [1]
+  var taps = 0
+
+  chart() {
+    return Canvas(@(painter, size) {
+      painter.fill_rounded_rect(
+        Rect(0, 0, size.width, size.height), 8,
+        Color.system('control_background'),
+      )
+      var path = Path()
+      iter var i = 0; i <= 40; i++ {
+        var x = i / 40 * size.width
+        var y = size.height / 2 -
+          (i / 40 * math.PI * 2).sin() * (size.height / 2 - 12)
+        if i == 0 {
+          path.move_to(x, y)
+        } else {
+          path.line_to(x, y)
+        }
+      }
+      painter.stroke_path(
+        path,
+        Paint({
+          color: Color.system('accent'),
+          width: 3,
+          cap: LineCap.ROUND,
+          join: LineJoin.ROUND,
+        }),
+      )
+      painter.fill_oval(
+        Rect(size.width / 4 - 6, 6, 12, 12), Color.system('red'),
+      )
+      painter.text(
+        'sin(x), clicked ${self.taps} times', Point(10, size.height - 22),
+        TextStyle({ size: 12, color: Color.system('secondary_label') }),
+      )
+    }, { repaint: self.taps })
+  }
+
+  build(context) {
+    return SplitView([
+      VisualEffect(ListView.builder(
+        5000,
+        @(ctx, i) => Padding(
+          EdgeInsets.symmetric({ horizontal: 10 }),
+          Align(Text('Item ${i}'), { alignment: Alignment.CENTER_LEFT }),
+        ),
+        { item_extent: 22 },
+      )),
+      Padding(EdgeInsets.all(12), TabView([
+        Tab(
+          'People',
+          Padding(
+            EdgeInsets.all(8),
+            DataTable(
+              [
+                DataColumn('name', 'Name', { width: 160, sortable: true }),
+                DataColumn('age', 'Age', { width: 50, align: 'end' }),
+                DataColumn('role', 'Role'),
+              ],
+              people.length(), @(row, column) {
+                var p = people[row]
+                return column == 'name' ? p[0] : column == 'age' ? p[1] : p[2]
+              }, {
+                selected: self.selected,
+                sort: ['name', true],
+                on_selection_changed: @(rows) {
+                  self.set_state(@{
+                    self.selected = rows
+                  })
+                },
+              },
+            ),
+          ),
+        ),
+        Tab(
+          'Chart',
+          Padding(
+            EdgeInsets.all(8),
+            PointerArea(
+              self.chart(), {
+                cursor: Cursor.POINTING_HAND,
+                on_tap: @(e) {
+                  self.set_state(@{
+                    self.taps++
+                  })
+                },
+              },
+            ),
+          ),
+        ),
+      ], self.tab, {
+        on_changed: @(i) {
+          self.set_state(@{
+            self.tab = i
+          })
+        },
+      })),
+    ], { initial: [180] })
+  }
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Containers',
+    windows: [Window('Containers', Demo(), { size: Size(720, 420) })],
+  }))
+}

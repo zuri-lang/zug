@@ -1,0 +1,212 @@
+import test { * }
+
+import ..app.engine { Calculator, factorial }
+import ..app.format { NumberFormat }
+
+# The display and expression line after pressing `keys` in turn.
+def press(keys: list) {
+  var calculator = Calculator()
+
+  for key in keys {
+    calculator.press(key)
+  }
+
+  return calculator
+}
+
+describe('entering numbers', @{
+  it('builds a number from digits and a point', @{
+    expect(press(['1', '2', '.', '5']).display()).to_be('12.5')
+    expect(press(['.', '5']).display()).to_be('0.5')
+    expect(press(['0', '0', '7']).display()).to_be('7')
+  })
+
+  it('groups thousands as they are typed', @{
+    expect(press([
+      '1', '2', '3', '4', '5', '6', '7',
+    ]).display()).to_be('1,234,567')
+  })
+
+  it('ignores a second point and digits past the limit', @{
+    expect(press(['1', '.', '2', '.', '3']).display()).to_be('1.23')
+    var calculator = Calculator()
+
+    iter var i = 0; i < 20; i++ {
+      calculator.press('9')
+    }
+
+    expect(calculator.entry.length()).to_be(16)
+  })
+
+  it('deletes the last digit', @{
+    expect(press(['1', '2', '3', 'backspace']).display()).to_be('12')
+    expect(press(['5', 'backspace']).display()).to_be('0')
+  })
+})
+
+describe('arithmetic', @{
+  it('follows precedence', @{
+    expect(press(['2', '+', '3', '*', '4', '=']).display()).to_be('14')
+    expect(press(['2', '*', '3', '+', '4', '=']).display()).to_be('10')
+    expect(press(['1', '0', '-', '4', '-', '3', '=']).display()).to_be('3')
+    expect(press(['2', '^', '3', '^', '2', '=']).display()).to_be('512')
+  })
+
+  it('shows the running value as operators are pressed', @{
+    expect(press(['2', '+', '3', '*']).display()).to_be('3')
+    expect(press(['2', '+', '3', '*', '4', '+']).display()).to_be('14')
+  })
+
+  it('replaces an operator pressed twice', @{
+    expect(press(['6', '+', '*', '2', '=']).display()).to_be('12')
+  })
+
+  it('evaluates parentheses', @{
+    expect(press([
+      '(', '2', '+', '3', ')', '*', '4', '=',
+    ]).display()).to_be('20')
+    expect(press(['2', '(', '3', '+', '4', ')', '=']).display()).to_be('14')
+    expect(press(['(', '1', '+', '2', '=']).display()).to_be('3')
+  })
+
+  it('repeats the last operation on another equals', @{
+    expect(press(['2', '+', '3', '=', '=']).display()).to_be('8')
+    expect(press(['1', '0', '/', '2', '=', '=']).display()).to_be('2.5')
+  })
+
+  it('avoids binary rounding in what it shows', @{
+    expect(press([
+      '0', '.', '1', '+', '0', '.', '2', '=',
+    ]).display()).to_be('0.3')
+  })
+
+  it('starts afresh when a digit follows a result', @{
+    expect(press(['2', '+', '3', '=', '7']).display()).to_be('7')
+    expect(press(['2', '+', '3', '=', '*', '2', '=']).display()).to_be('10')
+  })
+})
+
+describe('percent, sign and clear', @{
+  it('takes a percentage of the value being added to', @{
+    expect(press([
+      '2', '0', '0', '+', '1', '0', '%', '=',
+    ]).display()).to_be('220')
+    expect(press(['5', '0', '%']).display()).to_be('0.5')
+    expect(press([
+      '2', '0', '0', '*', '1', '0', '%', '=',
+    ]).display()).to_be('20')
+  })
+
+  it('changes sign', @{
+    expect(press(['9', 'negate']).display()).to_be('-9')
+    expect(press(['9', 'negate', 'negate']).display()).to_be('9')
+    expect(press(['2', '+', '3', '=', 'negate']).display()).to_be('-5')
+  })
+
+  it('clears the entry, then everything', @{
+    var calculator = press(['2', '+', '3'])
+    expect(calculator.clear_label()).to_be('C')
+    calculator.press('clear')
+    expect(calculator.display()).to_be('2')
+    expect(calculator.clear_label()).to_be('AC')
+    calculator.press('4')
+    calculator.press('=')
+    expect(calculator.display()).to_be('6')
+    calculator.press('clear')
+    expect(calculator.display()).to_be('0')
+    expect(calculator.expression()).to_be('')
+  })
+})
+
+describe('errors', @{
+  it('shows an error for division by zero, until the next number', @{
+    var calculator = press(['5', '/', '0', '='])
+    expect(calculator.display()).to_be('Error')
+    expect(calculator.current()).to_be_nil()
+    calculator.press('+')
+    expect(calculator.display()).to_be('Error')
+    calculator.press('3')
+    expect(calculator.display()).to_be('3')
+  })
+
+  it('shows an error for a function with no value', @{
+    expect(press(['1', 'negate', 'sqrt']).display()).to_be('Error')
+    expect(press(['0', 'reciprocal']).display()).to_be('Error')
+    expect(press(['0', 'ln']).display()).to_be('Error')
+  })
+})
+
+describe('functions and memory', @{
+  it('applies functions to the value shown', @{
+    expect(press(['9', 'sqrt']).display()).to_be('3')
+    expect(press(['5', 'square']).display()).to_be('25')
+    expect(press(['5', 'factorial']).display()).to_be('120')
+    expect(press(['3', '0', 'sin']).display()).to_be('0.5')
+    expect(press(['1', '8', '0', 'sin']).display()).to_be('0')
+    expect(press(['1', '0', '0', 'log']).display()).to_be('2')
+  })
+
+  it('works in radians', @{
+    var calculator = Calculator()
+    calculator.angle = 'rad'
+    calculator.press('pi')
+    calculator.press('cos')
+    expect(calculator.display()).to_be('-1')
+  })
+
+  it('shows what a function key made in the expression line', @{
+    var calculator = press(['3', '0', 'sin'])
+    expect(calculator.expression()).to_be('sin(30)')
+    calculator.press('+')
+    calculator.press('1')
+    calculator.press('=')
+    expect(calculator.expression()).to_be('sin(30) + 1 =')
+    expect(calculator.display()).to_be('1.5')
+  })
+
+  it('adds to, recalls and clears the memory', @{
+    var calculator = press(['5', 'm+', '3', 'm+', 'clear', 'mr'])
+    expect(calculator.display()).to_be('8')
+    expect(calculator.has_memory()).to_be_true()
+    calculator.press('2')
+    calculator.press('m-')
+    calculator.press('mr')
+    expect(calculator.display()).to_be('6')
+    calculator.press('mc')
+    expect(calculator.has_memory()).to_be_false()
+  })
+
+  it('refuses a key it does not have', @{
+    expect(@{
+      Calculator().press('teleport')
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('history', @{
+  it('records each finished calculation', @{
+    var calculator = press(['2', '+', '3', '=', '*', '4', '='])
+    expect(calculator.history.map(
+      @(entry) => entry.expression,
+    )).to_equal(['2 + 3', '5 × 4'])
+    expect(calculator.history.map(@(entry) => entry.result)).to_equal([5, 20])
+  })
+
+  it('shows a typed expression as a result', @{
+    var calculator = Calculator()
+    calculator.enter_result('2^10', 1024)
+    expect(calculator.display()).to_be('1,024')
+    expect(calculator.expression()).to_be('2^10 =')
+    expect(calculator.history[-1].expression).to_be('2^10')
+  })
+})
+
+describe('factorial', @{
+  it('takes whole numbers from 0 to 170', @{
+    expect(factorial(0)).to_be(1)
+    expect(factorial(10)).to_be(3628800)
+    expect(factorial(-1)).to_be_nil()
+    expect(factorial(2.5)).to_be_nil()
+    expect(factorial(171)).to_be_nil()
+  })
+})

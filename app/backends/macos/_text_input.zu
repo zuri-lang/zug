@@ -1,0 +1,400 @@
+/**
+ * Text inputs: fields, secure fields, search fields, combo boxes and
+ * multi-line text views.
+ *
+ * One delegate serves them all. It hears every edit, every change of
+ * focus, the Escape key, and a combo box's choice, and passes each to the
+ * input it came from.
+ */
+
+import ffi
+import .. ..foundation { Size, Constraints }
+import ._runtime {
+  cls, sel, send, send_void, send_void_id, send_void_bool, send_void_int,
+  send_void_uint, send_size, send_int, typed, ns_string, zuri_string, retain,
+  rect, create_with_frame, define_class, ns_array, NSRange, CGSize,
+}
+import ._classes { register, unregister, host_for, shared_target, B }
+import ._cocoa { ns_color, ns_font, text_alignment }
+import ._views { MacView, control_size }
+
+var _cancel = sel('cancelOperation:')
+
+/**
+ * The delegate of every text input.
+ *
+ * @type Pointer
+ */
+var ZugTextDelegate = define_class('ZugTextDelegate', 'NSObject', {
+  'controlTextDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.text_changed()
+    }
+  }],
+  'controlTextDidBeginEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.fire('focus_changed', { focused: true })
+    }
+  }],
+  'controlTextDidEndEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.fire('focus_changed', { focused: false })
+    }
+  }],
+  'control:textView:doCommandBySelector:': [
+    '${B}@:@@:', ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr],
+    @(this, control, view, command) {
+      var host = host_for(control)
+
+      if host != nil
+        and command.address() == _cancel.address()
+        and host.handles_escape() {
+        host.fire('escape', nil)
+        return true
+      }
+
+      return false
+    }, false,
+  ],
+  'textDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.text_changed()
+    }
+  }],
+  'textDidBeginEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.fire('focus_changed', { focused: true })
+    }
+  }],
+  'textDidEndEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.fire('focus_changed', { focused: false })
+    }
+  }],
+  'comboBoxSelectionDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.combo_selected()
+    }
+  }],
+})
+
+var _delegate = nil
+
+def _shared_delegate() {
+  if _delegate == nil {
+    _delegate = send(send(ZugTextDelegate, 'alloc'), 'init')
+  }
+
+  return _delegate
+}
+
+var _set_action = typed(ffi.void, [ffi.ptr])
+var _selected_range = typed(NSRange, [])
+var _set_selected_range = typed(ffi.void, [NSRange])
+
+/**
+ * A single-line field: plain, secure, search or combo box, all of which
+ * are `NSTextField`s.
+ */
+class MacTextField < MacView {
+  var applied_selection
+
+  @new(backend, kind: string, props: dict, dispatch: function) {
+    var class_name = 'NSTextField'
+
+    if kind == 'search_field' {
+      class_name = 'NSSearchField'
+    } else if kind == 'combo_box' {
+      class_name = 'NSComboBox'
+    } else if props.get('secure', false) {
+      class_name = 'NSSecureTextField'
+    }
+
+    var field = create_with_frame(class_name, rect(0, 0, 160, 22))
+    send_void_bool(send(field, 'cell'), 'setScrollable:', true)
+    send_void_bool(send(field, 'cell'), 'setSendsActionOnEndEditing:', false)
+
+    if kind == 'search_field' {
+      send_void_bool(send(field, 'cell'), 'setSendsWholeSearchString:', true)
+    }
+
+    if kind == 'combo_box' {
+      send_void_bool(field, 'setUsesDataSource:', false)
+    }
+
+    send_void_id(field, 'setDelegate:', _shared_delegate())
+    send_void_id(field, 'setTarget:', shared_target())
+    _set_action(field, sel('setAction:'), sel('zugAction:'))
+    self.setup(backend, kind, field, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'text' {
+        var current = zuri_string(send(self.native, 'stringValue'))
+
+        if current != value {
+          send_void_id(
+            self.native, 'setStringValue:',
+            ns_string(value == nil ? '' : value),
+          )
+        }
+      }
+      when 'placeholder' {
+        send_void_id(
+          self.native, 'setPlaceholderString:',
+          value == nil ? nil : ns_string(value),
+        )
+      }
+      when 'editable' {
+        send_void_bool(self.native, 'setEditable:', value == true)
+        send_void_bool(self.native, 'setSelectable:', true)
+      }
+      when 'enabled' {
+        send_void_bool(self.native, 'setEnabled:', value == true)
+      }
+      when 'bezel' {
+        send_void_bool(self.native, 'setBezeled:', value != 'none')
+        send_void_bool(self.native, 'setDrawsBackground:', value != 'none')
+
+        # NSTextFieldSquareBezel 0, RoundedBezel 1.
+        if value != 'none' {
+          send_void_uint(
+            self.native, 'setBezelStyle:', value == 'square' ? 0 : 1,
+          )
+        }
+      }
+      when 'align' {
+        send_void_int(self.native, 'setAlignment:', text_alignment(value))
+      }
+      when 'style' {
+        var style = value == nil ? {} : value
+        send_void_id(self.native, 'setFont:', ns_font(style, nil))
+        var color = style.get('color')
+        send_void_id(
+          self.native, 'setTextColor:',
+          color == nil
+            ? send(cls('NSColor'), 'controlTextColor')
+            : ns_color(color),
+        )
+      }
+      when 'selection' {
+        self._select(value)
+      }
+      when 'items' {
+        send_void(self.native, 'removeAllItems')
+        send_void_id(
+          self.native, 'addItemsWithObjectValues:',
+          ns_array(value.map(@(item) => ns_string(item))),
+        )
+      }
+      when 'completes' {
+        send_void_bool(self.native, 'setCompletes:', value == true)
+      }
+      when 'visible_items' {
+        send_void_int(self.native, 'setNumberOfVisibleItems:', value)
+      }
+      when 'control_size' {
+        send_void_uint(self.native, 'setControlSize:', control_size(value))
+      }
+    }
+  }
+
+  _select(request) {
+    if request == nil or request == self.applied_selection {
+      return
+    }
+
+    self.applied_selection = request
+    var editor = send(self.native, 'currentEditor')
+
+    if editor == nil {
+      self.focus()
+      editor = send(self.native, 'currentEditor')
+    }
+
+    if editor != nil {
+      _set_selected_range(
+        editor, sel('setSelectedRange:'),
+        { location: request[0], length: request[1] - request[0] },
+      )
+    }
+  }
+
+  measure(constraints: Constraints) {
+    var size = send_size(self.native, 'fittingSize')
+    return Size(size.width.max(160), size.height)
+  }
+
+  /**
+   * @internal
+   * @returns bool
+   */
+  handles_escape() {
+    return self.kind_name == 'text_field'
+  }
+
+  /**
+   * The text was edited.
+   *
+   * @internal
+   */
+  text_changed() {
+    var text = zuri_string(send(self.native, 'stringValue'))
+    var selection = nil
+    var editor = send(self.native, 'currentEditor')
+
+    if editor != nil {
+      var range = _selected_range(editor, sel('selectedRange'))
+      selection = [range.location, range.location + range.length]
+    }
+
+    self.fire('changed', { text: text == nil ? '' : text, selection })
+  }
+
+  /**
+   * A combo box item was chosen.
+   *
+   * @internal
+   */
+  combo_selected() {
+    var index = send_int(self.native, 'indexOfSelectedItem')
+
+    if index < 0 {
+      return
+    }
+
+    var text = zuri_string(send(self.native, 'objectValueOfSelectedItem'))
+    self.fire('selected', { index, text: text == nil ? '' : text })
+  }
+
+  on_action() {
+    self.fire('submitted', nil)
+  }
+}
+
+/**
+ * Multi-line text: an `NSTextView` in a scroll view.
+ */
+class MacTextArea < MacView {
+  var text_view
+
+  @new(backend, props: dict, dispatch: function) {
+    var scroll = retain(send(cls('NSTextView'), 'scrollableTextView'))
+    self.text_view = send(scroll, 'documentView')
+    send_void_bool(self.text_view, 'setRichText:', false)
+    send_void_bool(self.text_view, 'setAllowsUndo:', true)
+    send_void_id(self.text_view, 'setDelegate:', _shared_delegate())
+    register(self.text_view, self)
+    self.setup(backend, 'text_area', scroll, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'text' {
+        var current = zuri_string(send(self.text_view, 'string'))
+
+        if current != value {
+          send_void_id(
+            self.text_view, 'setString:', ns_string(value == nil ? '' : value),
+          )
+        }
+      }
+      when 'editable' {
+        send_void_bool(self.text_view, 'setEditable:', value == true)
+      }
+      when 'style' {
+        var style = value == nil ? {} : value
+        send_void_id(self.text_view, 'setFont:', ns_font(style, nil))
+        var color = style.get('color')
+        send_void_id(
+          self.text_view, 'setTextColor:',
+          color == nil ? send(cls('NSColor'), 'textColor') : ns_color(color),
+        )
+      }
+      when 'wrap' {
+        var container = send(self.text_view, 'textContainer')
+        send_void_bool(container, 'setWidthTracksTextView:', value == true)
+        send_void_bool(
+          self.text_view, 'setHorizontallyResizable:', value != true,
+        )
+        send_void_bool(self.native, 'setHasHorizontalScroller:', value != true)
+
+        if value != true {
+          typed(ffi.void, [CGSize])(
+            container, sel('setContainerSize:'),
+            { width: 10000000, height: 10000000 },
+          )
+        }
+      }
+      when 'bordered' {
+        # NSBezelBorder 2, NSNoBorder 0.
+        send_void_uint(self.native, 'setBorderType:', value ? 2 : 0)
+      }
+      when 'selection' {
+        if value != nil {
+          _set_selected_range(
+            self.text_view, sel('setSelectedRange:'),
+            { location: value[0], length: value[1] - value[0] },
+          )
+        }
+      }
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return Size(200, 100)
+  }
+
+  baseline() {
+    return nil
+  }
+
+  focus_target() {
+    return self.text_view
+  }
+
+  /**
+   * @internal
+   * @returns bool
+   */
+  handles_escape() {
+    return false
+  }
+
+  /**
+   * The text was edited.
+   *
+   * @internal
+   */
+  text_changed() {
+    var text = zuri_string(send(self.text_view, 'string'))
+    var range = _selected_range(self.text_view, sel('selectedRange'))
+    self.fire(
+      'changed',
+      {
+        text: text == nil ? '' : text,
+        selection: [range.location, range.location + range.length],
+      },
+    )
+  }
+
+  before_destroy() {
+    send_void_id(self.text_view, 'setDelegate:', nil)
+    unregister(self.text_view)
+  }
+}

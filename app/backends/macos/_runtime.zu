@@ -1,0 +1,921 @@
+/**
+ * The Objective-C runtime, reached through `ffi`.
+ *
+ * Messages are sent through `objc_msgSend`, bound once for each signature
+ * a call needs and cached. Selectors and classes are looked up once. Classes
+ * of zug's own are made at run time, with Zuri functions as their methods;
+ * every such method runs inside a guard, so an error in Zuri code is
+ * reported and never unwinds into AppKit.
+ *
+ * On Apple silicon one `objc_msgSend` serves every signature. On Intel, a
+ * method returning a record larger than 16 bytes goes through
+ * `objc_msgSend_stret` instead, which `typed()` chooses by itself.
+ */
+
+import ffi
+import .. ..foundation { report_error }
+
+var _objc = ffi.open('/usr/lib/libobjc.A.dylib')
+
+/**
+ * Foundation.
+ *
+ * @type Library
+ */
+var foundation = ffi.open(
+  '/System/Library/Frameworks/Foundation.framework/Foundation',
+  { global: true },
+)
+
+/**
+ * AppKit.
+ *
+ * @type Library
+ */
+var appkit = ffi.open(
+  '/System/Library/Frameworks/AppKit.framework/AppKit', { global: true },
+)
+
+/**
+ * CoreFoundation.
+ *
+ * @type Library
+ */
+var core_foundation = ffi.open('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+
+/**
+ * CoreGraphics.
+ *
+ * @type Library
+ */
+var core_graphics = ffi.open('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+
+/**
+ * QuartzCore.
+ *
+ * @type Library
+ */
+var quartz = ffi.open('/System/Library/Frameworks/QuartzCore.framework/QuartzCore')
+
+var _c = _objc.declare('
+  #include <stdbool.h>
+  typedef void *id;
+  void *objc_getClass(const char *name);
+  void *sel_registerName(const char *name);
+  void *objc_allocateClassPair(void *superclass, const char *name, unsigned long extra);
+  void objc_registerClassPair(void *cls);
+  bool class_addMethod(void *cls, void *name, void *imp, const char *types);
+  void *class_getSuperclass(void *cls);
+  void *object_getClass(void *obj);
+  const char *object_getClassName(void *obj);
+  void *objc_autoreleasePoolPush(void);
+  void objc_autoreleasePoolPop(void *pool);
+  void *objc_retain(void *obj);
+  void objc_release(void *obj);
+')
+
+var _intel = ffi.platform().arch == 'x86_64'
+
+/**
+ * `CGPoint`, also `NSPoint`.
+ *
+ * @type StructType
+ */
+var CGPoint = ffi
+  .struct('CGPoint')
+  .add_field('x', ffi.double)
+  .add_field('y', ffi.double)
+
+/**
+ * `CGSize`, also `NSSize`.
+ *
+ * @type StructType
+ */
+var CGSize = ffi
+  .struct('CGSize')
+  .add_field('width', ffi.double)
+  .add_field('height', ffi.double)
+
+/**
+ * `CGRect`, also `NSRect`.
+ *
+ * @type StructType
+ */
+var CGRect = ffi
+  .struct('CGRect')
+  .add_field('origin', CGPoint)
+  .add_field('size', CGSize)
+
+/**
+ * `NSRange`.
+ *
+ * @type StructType
+ */
+var NSRange = ffi
+  .struct('NSRange')
+  .add_field('location', ffi.ulong)
+  .add_field('length', ffi.ulong)
+
+/**
+ * `NSEdgeInsets`.
+ *
+ * @type StructType
+ */
+var NSEdgeInsets = ffi
+  .struct('NSEdgeInsets')
+  .add_field('top', ffi.double)
+  .add_field('left', ffi.double)
+  .add_field('bottom', ffi.double)
+  .add_field('right', ffi.double)
+
+var _ObjcSuper = ffi
+  .struct('objc_super')
+  .add_field('receiver', ffi.ptr)
+  .add_field('super_class', ffi.ptr)
+
+var _selectors = {}
+var _classes = {}
+var _senders = {}
+var _super_senders = {}
+var _callbacks = []
+
+/**
+ * The selector named `name`, such as `setTitle:`.
+ *
+ * @param string name
+ * @returns Pointer
+ */
+def sel(name: string) {
+  var found = _selectors.get(name)
+
+  if found == nil {
+    found = _c.sel_registerName(name)
+    _selectors[name] = found
+  }
+
+  return found
+}
+
+/**
+ * The class named `name`, or `nil` when there is none.
+ *
+ * @param string name
+ * @returns ?Pointer
+ */
+def cls(name: string) {
+  var found = _classes.get(name)
+
+  if found == nil {
+    found = _c.objc_getClass(name)
+
+    if found != nil {
+      _classes[name] = found
+    }
+  }
+
+  return found
+}
+
+def _signature_key(ret, params: list) {
+  var names = [ret.name()]
+
+  for param in params {
+    names.append(param.name())
+  }
+
+  return '|'.join(names)
+}
+
+/**
+ * `objc_msgSend` bound to return `ret` and take `params` after the
+ * receiver and selector. Bound once per signature.
+ *
+ * @param Type ret
+ * @param list params
+ * @returns function called as `f(receiver, selector, ...arguments)`.
+ */
+def typed(ret, params: list) {
+  var key = _signature_key(ret, params)
+  var found = _senders.get(key)
+
+  if found == nil {
+    var symbol = 'objc_msgSend'
+
+    if _intel and ret.kind() == 'struct' and ret.size() > 16 {
+      symbol = 'objc_msgSend_stret'
+    }
+
+    found = _objc.function(symbol, ret, [ffi.ptr, ffi.ptr] + params)
+    _senders[key] = found
+  }
+
+  return found
+}
+
+/**
+ * `objc_msgSendSuper` bound for a signature, to call the superclass's
+ * version of a method from an override.
+ *
+ * @param Type ret
+ * @param list params
+ * @returns function called as `f(objc_super, selector, ...arguments)`.
+ */
+def typed_super(ret, params: list) {
+  var key = _signature_key(ret, params)
+  var found = _super_senders.get(key)
+
+  if found == nil {
+    var symbol = 'objc_msgSendSuper'
+
+    if _intel and ret.kind() == 'struct' and ret.size() > 16 {
+      symbol = 'objc_msgSendSuper_stret'
+    }
+
+    found = _objc.function(
+      symbol, ret, [ffi.pointer(_ObjcSuper), ffi.ptr] + params,
+    )
+    _super_senders[key] = found
+  }
+
+  return found
+}
+
+/**
+ * The record `objc_msgSendSuper` takes, to reach `superclass`'s method
+ * for `receiver`.
+ *
+ * @param Pointer receiver
+ * @param Pointer superclass
+ * @returns dict
+ */
+def super_of(receiver, superclass) {
+  return { receiver, super_class: superclass }
+}
+
+var _id = typed(ffi.ptr, [])
+var _id_id = typed(ffi.ptr, [ffi.ptr])
+var _id_id_id = typed(ffi.ptr, [ffi.ptr, ffi.ptr])
+var _id_long = typed(ffi.ptr, [ffi.long])
+var _id_ulong = typed(ffi.ptr, [ffi.ulong])
+var _id_rect = typed(ffi.ptr, [CGRect])
+var _id_double = typed(ffi.ptr, [ffi.double])
+var _id_cstring = typed(ffi.ptr, [ffi.string])
+var _void = typed(ffi.void, [])
+var _void_id = typed(ffi.void, [ffi.ptr])
+var _void_id_id = typed(ffi.void, [ffi.ptr, ffi.ptr])
+var _void_bool = typed(ffi.void, [ffi.bool])
+var _void_long = typed(ffi.void, [ffi.long])
+var _void_ulong = typed(ffi.void, [ffi.ulong])
+var _void_double = typed(ffi.void, [ffi.double])
+var _void_rect = typed(ffi.void, [CGRect])
+var _void_size = typed(ffi.void, [CGSize])
+var _void_point = typed(ffi.void, [CGPoint])
+var _long = typed(ffi.long, [])
+var _ulong = typed(ffi.ulong, [])
+var _double = typed(ffi.double, [])
+var _bool = typed(ffi.bool, [])
+var _rect = typed(CGRect, [])
+var _size = typed(CGSize, [])
+var _point = typed(CGPoint, [])
+var _cstring = typed(ffi.string, [])
+
+/**
+ * Sends `name` with no arguments, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @returns ?Pointer
+ */
+def send(obj, name: string) {
+  return _id(obj, sel(name))
+}
+
+/**
+ * Sends `name` with one object argument, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param ?Pointer arg
+ * @returns ?Pointer
+ */
+def send_id(obj, name: string, arg) {
+  return _id_id(obj, sel(name), arg)
+}
+
+/**
+ * Sends `name` with two object arguments, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param ?Pointer a
+ * @param ?Pointer b
+ * @returns ?Pointer
+ */
+def send_id_id(obj, name: string, a, b) {
+  return _id_id_id(obj, sel(name), a, b)
+}
+
+/**
+ * Sends `name` with one `NSInteger`, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param number n
+ * @returns ?Pointer
+ */
+def send_id_int(obj, name: string, n: number) {
+  return _id_long(obj, sel(name), n)
+}
+
+/**
+ * Sends `name` with one `NSUInteger`, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param number n
+ * @returns ?Pointer
+ */
+def send_id_uint(obj, name: string, n: number) {
+  return _id_ulong(obj, sel(name), n)
+}
+
+/**
+ * Sends `name` with one rectangle, returning an object, as
+ * `initWithFrame:` does.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param dict rect
+ * @returns ?Pointer
+ */
+def send_id_rect(obj, name: string, rect: dict) {
+  return _id_rect(obj, sel(name), rect)
+}
+
+/**
+ * Sends `name` with one double, returning an object.
+ *
+ * @param Pointer obj
+ * @param string name
+ * @param number value
+ * @returns ?Pointer
+ */
+def send_id_double(obj, name: string, value: number) {
+  return _id_double(obj, sel(name), value)
+}
+
+/**
+ * Sends `name` and ignores the result.
+ *
+ * @param Pointer obj
+ * @param string name
+ */
+def send_void(obj, name: string) {
+  _void(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param ?Pointer arg
+ */
+def send_void_id(obj, name: string, arg) {
+  _void_id(obj, sel(name), arg)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param ?Pointer a
+ * @param ?Pointer b
+ */
+def send_void_id_id(obj, name: string, a, b) {
+  _void_id_id(obj, sel(name), a, b)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param bool flag
+ */
+def send_void_bool(obj, name: string, flag: bool) {
+  _void_bool(obj, sel(name), flag)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param number n: an `NSInteger`.
+ */
+def send_void_int(obj, name: string, n: number) {
+  _void_long(obj, sel(name), n)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param number n: an `NSUInteger`.
+ */
+def send_void_uint(obj, name: string, n: number) {
+  _void_ulong(obj, sel(name), n)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param number value
+ */
+def send_void_double(obj, name: string, value: number) {
+  _void_double(obj, sel(name), value)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param dict rect
+ */
+def send_void_rect(obj, name: string, rect: dict) {
+  _void_rect(obj, sel(name), rect)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param dict size
+ */
+def send_void_size(obj, name: string, size: dict) {
+  _void_size(obj, sel(name), size)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @param dict point
+ */
+def send_void_point(obj, name: string, point: dict) {
+  _void_point(obj, sel(name), point)
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns number an `NSInteger`.
+ */
+def send_int(obj, name: string) {
+  return _long(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns number an `NSUInteger`.
+ */
+def send_uint(obj, name: string) {
+  return _ulong(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns number
+ */
+def send_double(obj, name: string) {
+  return _double(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns bool
+ */
+def send_bool(obj, name: string) {
+  return _bool(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns dict a `CGRect`.
+ */
+def send_rect(obj, name: string) {
+  return _rect(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns dict a `CGSize`.
+ */
+def send_size(obj, name: string) {
+  return _size(obj, sel(name))
+}
+
+/**
+ * @param Pointer obj
+ * @param string name
+ * @returns dict a `CGPoint`.
+ */
+def send_point(obj, name: string) {
+  return _point(obj, sel(name))
+}
+
+/**
+ * Allocates and initialises an instance of the class `name` with `init`.
+ * The caller owns it.
+ *
+ * @param string name
+ * @returns Pointer
+ */
+def create(name: string) {
+  return send(send(cls(name), 'alloc'), 'init')
+}
+
+/**
+ * Allocates an instance of the class `name` initialised with
+ * `initWithFrame:`. The caller owns it.
+ *
+ * @param string name
+ * @param ?dict rect: a `CGRect`, the zero rectangle when left out.
+ * @returns Pointer
+ */
+def create_with_frame(name: string, rect: ?dict) {
+  return send_id_rect(
+    send(cls(name), 'alloc'), 'initWithFrame:', rect == nil ? ZERO_RECT : rect,
+  )
+}
+
+/**
+ * The zero `CGRect`.
+ *
+ * @type dict
+ */
+var ZERO_RECT = { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+
+/**
+ * A `CGRect` from a position and size.
+ *
+ * @param number x
+ * @param number y
+ * @param number width
+ * @param number height
+ * @returns dict
+ */
+def rect(x: number, y: number, width: number, height: number) {
+  return { origin: { x, y }, size: { width, height } }
+}
+
+/**
+ * Retains `obj` and returns it.
+ *
+ * @param Pointer obj
+ * @returns Pointer
+ */
+def retain(obj) {
+  return _c.objc_retain(obj)
+}
+
+/**
+ * Releases `obj`. Does nothing for `nil`.
+ *
+ * @param ?Pointer obj
+ */
+def release(obj) {
+  if obj != nil {
+    _c.objc_release(obj)
+  }
+}
+
+/**
+ * The name of `obj`'s class.
+ *
+ * @param Pointer obj
+ * @returns string
+ */
+def class_name(obj) {
+  return _c.object_getClassName(obj)
+}
+
+/**
+ * The class of `obj`.
+ *
+ * @param Pointer obj
+ * @returns Pointer
+ */
+def class_of(obj) {
+  return _c.object_getClass(obj)
+}
+
+/**
+ * The superclass of `klass`.
+ *
+ * @param Pointer klass
+ * @returns ?Pointer
+ */
+def superclass_of(klass) {
+  return _c.class_getSuperclass(klass)
+}
+
+/**
+ * Runs `fn` inside an autorelease pool, so objects it autoreleases are
+ * released when it returns.
+ *
+ * @param function fn
+ * @returns any what `fn` returned.
+ */
+def with_pool(fn: function) {
+  var pool = _c.objc_autoreleasePoolPush()
+  var result = nil
+
+  catch {
+    result = fn()
+  } as error {
+    _c.objc_autoreleasePoolPop(pool)
+    raise error
+  }
+
+  _c.objc_autoreleasePoolPop(pool)
+  return result
+}
+
+/**
+ * Pushes an autorelease pool. Pop it with `pop_pool()`.
+ *
+ * @returns Pointer
+ */
+def push_pool() {
+  return _c.objc_autoreleasePoolPush()
+}
+
+/**
+ * @param Pointer pool
+ */
+def pop_pool(pool) {
+  _c.objc_autoreleasePoolPop(pool)
+}
+
+# Strings.
+
+var _NSString = cls('NSString')
+var _string_from_c = typed(ffi.ptr, [ffi.string])
+
+/**
+ * An autoreleased `NSString` holding `text`.
+ *
+ * @param string text
+ * @returns Pointer
+ */
+def ns_string(text: string) {
+  return _string_from_c(_NSString, sel('stringWithUTF8String:'), text)
+}
+
+/**
+ * The text of an `NSString`, or `nil` for `nil`.
+ *
+ * @param ?Pointer string
+ * @returns ?string
+ */
+def zuri_string(string) {
+  if string == nil {
+    return nil
+  }
+
+  return _cstring(string, sel('UTF8String'))
+}
+
+/**
+ * An autoreleased `NSNumber` holding `value`.
+ *
+ * @param number value
+ * @returns Pointer
+ */
+def ns_number(value: number) {
+  return send_id_double(cls('NSNumber'), 'numberWithDouble:', value)
+}
+
+/**
+ * An autoreleased `NSArray` of `items`, which are objects.
+ *
+ * @param list items
+ * @returns Pointer
+ */
+def ns_array(items: list) {
+  var array = send(cls('NSMutableArray'), 'array')
+
+  for item in items {
+    send_void_id(array, 'addObject:', item)
+  }
+
+  return array
+}
+
+/**
+ * The objects in an `NSArray`, as a list.
+ *
+ * @param ?Pointer array
+ * @returns list
+ */
+def from_ns_array(array) {
+  if array == nil {
+    return []
+  }
+
+  var count = send_uint(array, 'count')
+  var items = []
+
+  iter var i = 0; i < count; i++ {
+    items.append(send_id_uint(array, 'objectAtIndex:', i))
+  }
+
+  return items
+}
+
+# Classes of zug's own.
+
+/**
+ * Makes a subclass of `superclass` called `name`, with `methods` as its
+ * methods, and returns it. When a class of that name already exists, it is
+ * returned as it is.
+ *
+ * Each method is `selector: [encoding, ret, params, fn]`: the Objective-C
+ * type encoding, the return type, the types after `self` and `_cmd`, and
+ * the Zuri function, which is called with the receiver and those
+ * arguments. A function that raises has its error reported and returns
+ * `fallback`, the fifth item when given and otherwise `nil`.
+ *
+ * @param string name
+ * @param string superclass
+ * @param dict methods
+ * @returns Pointer
+ */
+def define_class(name: string, superclass: string, methods: dict) {
+  var existing = cls(name)
+
+  if existing != nil {
+    return existing
+  }
+
+  var klass = _c.objc_allocateClassPair(cls(superclass), name, 0)
+
+  for selector, method in methods {
+    var encoding = method[0]
+    var ret = method[1]
+    var params = method[2]
+    var fn = method[3]
+    var fallback = method.length() > 4 ? method[4] : nil
+    var callback = ffi.callback(
+      _guard(fn, '${name} ${selector}', fallback),
+      ffi.function_type(ret, [ffi.ptr, ffi.ptr] + params),
+    )
+    _callbacks.append(callback)
+    _c.class_addMethod(klass, sel(selector), callback.pointer(), encoding)
+  }
+
+  _c.objc_registerClassPair(klass)
+  _classes[name] = klass
+  return klass
+}
+
+# Wraps a method body so an error is reported rather than raised into
+# Objective-C, dropping the selector argument the body does not need.
+def _guard(fn: function, context: string, fallback) {
+  var arity = fn.arity()
+
+  if arity <= 1 {
+    return @(receiver, cmd) {
+      var result = fallback
+
+      catch {
+        result = fn(receiver)
+      } as error {
+        report_error(error, 'running ${context}')
+        return fallback
+      }
+
+      return result
+    }
+  }
+
+  if arity == 2 {
+    return @(receiver, cmd, a) {
+      var result = fallback
+
+      catch {
+        result = fn(receiver, a)
+      } as error {
+        report_error(error, 'running ${context}')
+        return fallback
+      }
+
+      return result
+    }
+  }
+
+  if arity == 3 {
+    return @(receiver, cmd, a, b) {
+      var result = fallback
+
+      catch {
+        result = fn(receiver, a, b)
+      } as error {
+        report_error(error, 'running ${context}')
+        return fallback
+      }
+
+      return result
+    }
+  }
+
+  return @(receiver, cmd, a, b, c) {
+    var result = fallback
+
+    catch {
+      result = fn(receiver, a, b, c)
+    } as error {
+      report_error(error, 'running ${context}')
+      return fallback
+    }
+
+    return result
+  }
+}
+
+# Blocks.
+
+var _BlockDescriptor = ffi
+  .struct('Block_descriptor')
+  .add_field('reserved', ffi.ulong)
+  .add_field('size', ffi.ulong)
+var _BlockLiteral = ffi
+  .struct('Block_literal')
+  .add_field('isa', ffi.ptr)
+  .add_field('flags', ffi.int)
+  .add_field('reserved', ffi.int)
+  .add_field('invoke', ffi.ptr)
+  .add_field('descriptor', ffi.ptr)
+var _global_block_class = ffi.open().symbol('_NSConcreteGlobalBlock')
+var _live_blocks = {}
+
+/**
+ * An Objective-C block that calls a Zuri function, for APIs that take a
+ * completion handler.
+ *
+ * It is made as a global block, which the runtime never copies or frees,
+ * and it stays alive until `release()`.
+ */
+class Block {
+
+  /**
+   * The block, to pass where a block is expected.
+   *
+   * @type Pointer
+   */
+  var pointer
+
+  var _callback
+  var _descriptor
+
+  /**
+   * @param function fn: called with the block's arguments.
+   * @param list params: the types of the block's arguments.
+   * @constructor
+   */
+  @new(fn: function, params: list) {
+    self._callback = ffi.callback(
+      _guard_block(fn), ffi.function_type(ffi.void, [ffi.ptr] + params),
+    )
+    self._descriptor = ffi.alloc(_BlockDescriptor)
+    self._descriptor.set(0, { reserved: 0, size: _BlockLiteral.size() })
+    self.pointer = ffi.alloc(_BlockLiteral)
+
+    # BLOCK_IS_GLOBAL.
+    self.pointer.set(
+      0,
+      {
+        isa: _global_block_class,
+        flags: 1 << 28,
+        reserved: 0,
+        invoke: self._callback.pointer(),
+        descriptor: self._descriptor,
+      },
+    )
+    _live_blocks[id(self)] = self
+  }
+
+  /**
+   * Lets the block go. It must not be called again.
+   */
+  release() {
+    _live_blocks.remove(id(self))
+    self._callback.release()
+  }
+}
+
+def _guard_block(fn: function) {
+  return @(block, a, b) {
+    catch {
+      fn(a, b)
+    } as error {
+      report_error(error, 'running a completion handler')
+    }
+  }
+}

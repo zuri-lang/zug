@@ -1,0 +1,181 @@
+/**
+ * Checking the options dictionaries widgets take.
+ *
+ * Zuri has no named arguments, so a widget takes what it cannot do
+ * without as positional arguments and everything else in a trailing
+ * dictionary. `check_options()` makes that dictionary as strict as named
+ * arguments would be: an unknown name or a value of the wrong type is an
+ * `OptionError` naming the widget and the option, with a suggestion when
+ * the name looks like a misspelling.
+ *
+ * ```zuri
+ * import zug { check_options }
+ *
+ * var SPEC = { label: 'string', size: 'number', on_pressed: 'function' }
+ *
+ * def describe(options) {
+ *   var o = check_options(options, 'Badge', SPEC)
+ *   return '${o.get("label", "")} at ${o.get("size", 12)}'
+ * }
+ * ```
+ */
+
+import zuri
+import .errors { OptionError }
+
+# What each type name in a specification accepts.
+var _checks = {
+  any: @(value) => true,
+  number: @(value) => is_number(value),
+  string: @(value) => is_string(value),
+  bool: @(value) => is_bool(value),
+  function: @(value) => is_callable(value),
+  list: @(value) => is_list(value),
+  dict: @(value) => is_dict(value),
+}
+
+var _empty = {}
+
+/**
+ * Checks `options` against `spec` and returns it, or an empty dictionary
+ * when `options` is `nil`. Options set to `nil` are left out of what is
+ * returned, so `get(name, fallback)` gives the fallback for them too.
+ *
+ * Each value in `spec` says what an option accepts: one of the names
+ * `any`, `number`, `string`, `bool`, `function`, `list` and `dict`, a
+ * class, or a list of these for an option that takes several. `nil` is
+ * accepted for every option and means the same as leaving it out.
+ *
+ * @param ?dict options: what the caller passed.
+ * @param string owner: the widget or function, for messages.
+ * @param dict spec: option names to what each accepts.
+ * @returns dict
+ * @throws OptionError When an option is unknown or has the wrong type
+ */
+def check_options(options: ?dict, owner: string, spec: dict) {
+  if options == nil {
+    return _empty
+  }
+
+  var has_nil = false
+
+  for name, value in options {
+    if !spec.contains(name) {
+      raise OptionError(_unknown_message(name, owner, spec), owner, name)
+    }
+
+    if value == nil {
+      has_nil = true
+    } else if !_accepts(spec[name], value) {
+      raise OptionError(
+        "option '${name}' of ${owner} must be ${_describe(spec[name])}, got ${typeof(value)}",
+        owner,
+        name,
+      )
+    }
+  }
+
+  if has_nil {
+    var present = {}
+
+    for name, value in options {
+      if value != nil {
+        present[name] = value
+      }
+    }
+
+    return present
+  }
+
+  return options
+}
+
+# Whether `value` satisfies one entry of a specification.
+def _accepts(expected, value) {
+  if is_list(expected) {
+    for each in expected {
+      if _accepts(each, value) {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  if is_string(expected) {
+    var check = _checks.get(expected)
+
+    if check == nil {
+      raise ValueError("unknown option type '${expected}'")
+    }
+
+    return check(value)
+  }
+
+  return instance_of(value, expected)
+}
+
+def _describe(expected) {
+  if is_list(expected) {
+    return ' or '.join(expected.map(@(each) => _describe(each)))
+  }
+
+  if is_string(expected) {
+    return expected == 'any' ? 'anything' : 'a ${expected}'
+  }
+
+  return 'a ${zuri.reflect.class_info(expected).name}'
+}
+
+def _unknown_message(name: string, owner: string, spec: dict) {
+  var known = spec.keys().sort()
+  var message = "unknown option '${name}' for ${owner}"
+  var closest = _closest(name, known)
+
+  if closest != nil {
+    message += "; did you mean '${closest}'?"
+  }
+
+  return message + ' Known options: ${", ".join(known)}'
+}
+
+# The known name nearest to `name` by edit distance, when it is near
+# enough to be a likely misspelling.
+def _closest(name: string, known: list) {
+  var best = nil
+  var best_distance = 3
+
+  for candidate in known {
+    var distance = _distance(name, candidate)
+
+    if distance < best_distance {
+      best = candidate
+      best_distance = distance
+    }
+  }
+
+  return best
+}
+
+def _distance(a: string, b: string) {
+  var previous = []
+
+  iter var j = 0; j <= b.length(); j++ {
+    previous.append(j)
+  }
+
+  iter var i = 1; i <= a.length(); i++ {
+    var current = [i]
+
+    iter var j = 1; j <= b.length(); j++ {
+      var cost = a[i - 1] == b[j - 1] ? 0 : 1
+      current.append((previous[j] + 1)
+        .min(current[j - 1] + 1)
+        .min(previous[j - 1] + cost))
+    }
+
+    previous = current
+  }
+
+  return previous[b.length()]
+}

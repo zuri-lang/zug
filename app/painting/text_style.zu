@@ -1,0 +1,236 @@
+/**
+ * How text looks: its font and colour.
+ *
+ * Every property is optional. A style is merged over the style around it,
+ * so a `Text` that only sets `weight` keeps the theme's size and colour.
+ *
+ * ```zuri
+ * import zug { TextStyle, FontWeight, FontDesign, Color }
+ *
+ * var display = TextStyle({ size: 32, weight: FontWeight.LIGHT, design: FontDesign.MONOSPACED })
+ * var warning = TextStyle({ color: Color.system('red') })
+ * echo display.merge(warning).color
+ * ```
+ */
+
+import ..foundation { Color, check_options }
+
+/**
+ * Font weights, as CSS numbers them.
+ */
+class FontWeight {
+  static var ULTRA_LIGHT = 100
+  static var THIN = 200
+  static var LIGHT = 300
+  static var REGULAR = 400
+  static var MEDIUM = 500
+  static var SEMIBOLD = 600
+  static var BOLD = 700
+  static var HEAVY = 800
+  static var BLACK = 900
+}
+
+/**
+ * The family of the system font to use when no `family` is named.
+ */
+class FontDesign {
+  static var DEFAULT = 'default'
+  static var MONOSPACED = 'monospaced'
+  static var ROUNDED = 'rounded'
+  static var SERIF = 'serif'
+}
+
+var _DESIGNS = ['default', 'monospaced', 'rounded', 'serif']
+
+var _SPEC = {
+  size: 'number',
+  weight: 'number',
+  family: 'string',
+  italic: 'bool',
+  design: 'string',
+  monospaced_digits: 'bool',
+  color: Color,
+  underline: 'bool',
+  strikethrough: 'bool',
+}
+
+var _FIELDS = [
+  'size', 'weight', 'family', 'italic', 'design', 'monospaced_digits', 'color',
+  'underline', 'strikethrough',
+]
+
+/**
+ * A text style. Properties left out are inherited from the style it is
+ * merged over.
+ *
+ * @printable
+ */
+class TextStyle {
+
+  /**
+   * The font size in points.
+   *
+   * @type ?number
+   */
+  var size
+
+  /**
+   * The weight, from 100 to 900. See `FontWeight`.
+   *
+   * @type ?number
+   */
+  var weight
+
+  /**
+   * A font family to use instead of the system font, such as `Menlo`.
+   *
+   * @type ?string
+   */
+  var family
+
+  /**
+   * @type ?bool
+   */
+  var italic
+
+  /**
+   * Which design of the system font to use. See `FontDesign`.
+   *
+   * @type ?string
+   */
+  var design
+
+  /**
+   * Whether digits all take the same width, so changing numbers do not
+   * shift. Calculators and timers want this.
+   *
+   * @type ?bool
+   */
+  var monospaced_digits
+
+  /**
+   * @type ?Color
+   */
+  var color
+
+  /**
+   * @type ?bool
+   */
+  var underline
+
+  /**
+   * @type ?bool
+   */
+  var strikethrough
+
+  /**
+   * A style from its properties.
+   *
+   * @param ?dict options: any of `size`, `weight`, `family`, `italic`,
+   *    `design`, `monospaced_digits`, `color`, `underline` and
+   *    `strikethrough`.
+   * @throws OptionError When an option is unknown or of the wrong type
+   * @throws ValueError When the size, weight or design is out of range
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(options, 'TextStyle', _SPEC)
+    self.size = o.get('size')
+    self.weight = o.get('weight')
+    self.family = o.get('family')
+    self.italic = o.get('italic')
+    self.design = o.get('design')
+    self.monospaced_digits = o.get('monospaced_digits')
+    self.color = o.get('color')
+    self.underline = o.get('underline')
+    self.strikethrough = o.get('strikethrough')
+
+    if self.size != nil and !(self.size > 0 and self.size.is_finite()) {
+      raise ValueError('a font size must be above zero, got ${self.size}')
+    }
+
+    if self.weight != nil and !(self.weight >= 100 and self.weight <= 900) {
+      raise ValueError('a font weight must be from 100 to 900, got ${self.weight}')
+    }
+
+    if self.design != nil and !_DESIGNS.contains(self.design) {
+      raise ValueError("a font design must be one of ${', '.join(_DESIGNS)}, got '${self.design}'")
+    }
+  }
+
+  /**
+   * This style with every property `other` sets taken from `other`.
+   * `nil` gives this style back.
+   *
+   * @param ?TextStyle other
+   * @returns TextStyle
+   */
+  merge(other: ?TextStyle) {
+    if other == nil {
+      return self
+    }
+
+    var merged = TextStyle()
+
+    for field in _FIELDS {
+      var value = getprop(other, field)
+      setprop(merged, field, value != nil ? value : getprop(self, field))
+    }
+
+    return merged
+  }
+
+  /**
+   * A copy with the properties given replaced.
+   *
+   * @param dict options: as the constructor takes.
+   * @returns TextStyle
+   */
+  copy_with(options: dict) {
+    return self.merge(TextStyle(options))
+  }
+
+  /**
+   * The style as a dictionary of the properties it sets, which is how it
+   * reaches a backend.
+   *
+   * @returns dict
+   */
+  to_data() {
+    var data = {}
+
+    for field in _FIELDS {
+      var value = getprop(self, field)
+
+      if value != nil {
+        data[field] = value
+      }
+    }
+
+    return data
+  }
+
+  @eq(other) {
+    if !instance_of(other, TextStyle) {
+      return false
+    }
+
+    for field in _FIELDS {
+      if getprop(self, field) != getprop(other, field) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  @to_string() {
+    var parts = []
+
+    for field, value in self.to_data() {
+      parts.append('${field}: ${value}')
+    }
+
+    return 'TextStyle(${", ".join(parts)})'
+  }
+}

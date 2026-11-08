@@ -1,0 +1,351 @@
+/**
+ * The application and its windows.
+ *
+ * Windows are declared like any other widget. The windows an `App`
+ * lists are the windows that are open: adding one to the list opens it,
+ * and taking it out closes it.
+ *
+ * ```zuri,ignore
+ * run_app(App({
+ *   title: 'Notes',
+ *   windows: [Window('Notes', NotesPage(), { size: Size(640, 480) })],
+ * }))
+ * ```
+ */
+
+import ..foundation { Key, Size, Point, Color, check_options }
+import .menus { MenuBar }
+import .style { Style, StyleSheet, AppearanceTracker }
+import ..rendering { RenderWindow, RenderWindowSet }
+import .framework {
+  Widget, StatefulWidget, State, SingleChildRenderObjectWidget,
+  MultiChildRenderObjectWidget,
+}
+
+/**
+ * Windows, as one widget.
+ *
+ * @internal
+ */
+class WindowSet < MultiChildRenderObjectWidget {
+
+  @new(windows: list) {
+    for window in windows {
+      if !instance_of(window, Widget) {
+        raise TypeError('an App lists windows, got ${typeof(window)}')
+      }
+    }
+
+    self.children = windows
+  }
+
+  create_render_object(context) {
+    return RenderWindowSet()
+  }
+}
+
+var _APP_OPTIONS = {
+  key: Key,
+  title: 'string',
+  windows: 'list',
+  menu_bar: MenuBar,
+  style: StyleSheet,
+  quit_on_last_window_closed: 'bool',
+  on_quit_request: 'function',
+  on_reopen: 'function',
+}
+
+/**
+ * The application: its name, its windows, and how it ends.
+ */
+class App < StatefulWidget {
+
+  /**
+   * The application's name, shown in its menu.
+   *
+   * @type string
+   */
+  var title = ''
+
+  /**
+   * The open windows.
+   *
+   * @type list
+   */
+  var windows = []
+
+  /**
+   * Whether closing the last window quits the application.
+   *
+   * @type bool
+   */
+  var quit_on_last_window_closed = true
+
+  /**
+   * Asked before the application quits; returning `false` keeps it
+   * running.
+   *
+   * @type ?function
+   */
+  var on_quit_request
+
+  /**
+   * Called when the application is activated with no windows open, as by
+   * a click on its dock icon.
+   *
+   * @type ?function
+   */
+  var on_reopen
+
+  /**
+   * The menus, after the application menu. Edit and Window menus are
+   * added when it has none of those.
+   *
+   * @type ?MenuBar
+   */
+  var menu_bar
+
+  /**
+   * The styles for the whole application.
+   *
+   * @type ?StyleSheet
+   */
+  var style
+
+  /**
+   * @param dict options: `windows` (required), `title`, `menu_bar`,
+   *    `style`, `quit_on_last_window_closed` (true when left out),
+   *    `on_quit_request`, `on_reopen` and `key`.
+   * @constructor
+   */
+  @new(options: dict) {
+    var o = check_options(options, 'App', _APP_OPTIONS)
+
+    if o.get('windows') == nil {
+      raise ValueError('an App needs windows, such as windows: [Window(\'Title\', content)]')
+    }
+
+    self.key = o.get('key')
+    self.title = o.get('title', '')
+    self.windows = o.get('windows')
+    self.quit_on_last_window_closed = o.get('quit_on_last_window_closed', true)
+    self.on_quit_request = o.get('on_quit_request')
+    self.on_reopen = o.get('on_reopen')
+    self.menu_bar = o.get('menu_bar')
+    self.style = o.get('style')
+  }
+
+  create_state() {
+    return AppState()
+  }
+}
+
+/**
+ * The state of an `App`, which hands the application's settings to the
+ * runtime.
+ *
+ * @internal
+ */
+class AppState < State {
+
+  init_state() {
+    self._configure()
+  }
+
+  did_update_widget(previous) {
+    self._configure()
+  }
+
+  _configure() {
+    var runtime = self.context().runtime()
+
+    if runtime == nil {
+      return
+    }
+
+    var widget = self.widget
+    runtime.quit_on_last_window_closed = widget.quit_on_last_window_closed
+    runtime.on_quit_requested_handler = widget.on_quit_request == nil
+      ? nil
+      : @(payload) => widget.on_quit_request()
+    runtime.on_reopen_handler = widget.on_reopen == nil
+      ? nil
+      : @(payload) => widget.on_reopen()
+  }
+
+  build(context) {
+    var runtime = context.runtime()
+
+    if runtime != nil {
+      runtime.set_menu_bar(
+        self.widget.title == '' ? 'zug' : self.widget.title,
+        self.widget.menu_bar,
+      )
+    }
+
+    var windows = WindowSet(self.widget.windows)
+    var tracked = AppearanceTracker(windows)
+    return self.widget.style == nil
+      ? tracked
+      : Style(self.widget.style, tracked)
+  }
+}
+
+/**
+ * How a window's title bar looks.
+ */
+class TitleBar {
+
+  /**
+   * The standard title bar.
+   */
+  static var NORMAL = 'normal'
+
+  /**
+   * A transparent title bar over content that reaches the top of the
+   * window.
+   */
+  static var TRANSPARENT = 'transparent'
+
+  /**
+   * No title shown, with content reaching the top of the window.
+   */
+  static var HIDDEN = 'hidden'
+}
+
+var _TITLE_BARS = ['normal', 'transparent', 'hidden']
+
+var _WINDOW_OPTIONS = {
+  key: Key,
+  size: Size,
+  min_size: Size,
+  max_size: Size,
+  size_to_content: 'bool',
+  resizable: 'bool',
+  closable: 'bool',
+  minimizable: 'bool',
+  title_bar: 'string',
+  background: Color,
+  visible: 'bool',
+  position: Point,
+  floating: 'bool',
+  on_close_request: 'function',
+  on_closed: 'function',
+  on_resize: 'function',
+  on_focus_changed: 'function',
+}
+
+/**
+ * A window, showing `child` in its content area.
+ */
+class Window < SingleChildRenderObjectWidget {
+
+  /**
+   * @type string
+   */
+  var title = ''
+
+  /**
+   * The checked options.
+   *
+   * @type dict
+   */
+  var options = {}
+
+  /**
+   * @param string title
+   * @param Widget child
+   * @param ?dict options: `size` of the content area (480 by 320 when
+   *    left out), `min_size`, `max_size`, `size_to_content` to size the
+   *    window to its content instead, `resizable`, `closable`,
+   *    `minimizable` (each true when left out), `title_bar` (see
+   *    `TitleBar`), `background`, `visible`, `position` of the window's
+   *    top left on the screen (centred when left out), `floating` to keep
+   *    it above other windows, `on_close_request` (return `false` to keep
+   *    the window open), `on_closed`, `on_resize` (called with the new
+   *    content `Size`), `on_focus_changed` (called with a bool) and `key`.
+   * @constructor
+   */
+  @new(title: string, child: Widget, options: ?dict) {
+    var o = check_options(options, 'Window', _WINDOW_OPTIONS)
+
+    if !_TITLE_BARS.contains(o.get('title_bar', 'normal')) {
+      raise ValueError("title_bar of Window must be one of TitleBar's values (${', '.join(_TITLE_BARS)}), got '${o.get('title_bar')}'")
+    }
+
+    self.key = o.get('key')
+    self.title = title
+    self.child = child
+    self.options = o
+  }
+
+  _props() {
+    var o = self.options
+    return {
+      title: self.title,
+      size: o.get('size', Size(480, 320)),
+      min_size: o.get('min_size'),
+      max_size: o.get('max_size'),
+      resizable: o.get('resizable', true),
+      closable: o.get('closable', true),
+      minimizable: o.get('minimizable', true),
+      title_bar: o.get('title_bar', 'normal'),
+      background: o.get('background'),
+      visible: o.get('visible', true),
+      position: o.get('position'),
+      floating: o.get('floating', false),
+    }
+  }
+
+  _handlers(context, window) {
+    var o = self.options
+    var runtime = context.runtime()
+    var on_close_request = o.get('on_close_request')
+    var on_closed = o.get('on_closed')
+    var on_resize = o.get('on_resize')
+    var on_focus_changed = o.get('on_focus_changed')
+
+    return {
+      close_requested: @(payload) => on_close_request == nil
+        ? true
+        : on_close_request() != false,
+      closed: @(payload) {
+        if on_closed != nil {
+          on_closed()
+        }
+      },
+      resized: @(payload) {
+        if on_resize != nil {
+          on_resize(Size(payload.width, payload.height))
+        }
+      },
+      focus_changed: @(payload) {
+        if on_focus_changed != nil {
+          on_focus_changed(payload.focused)
+        }
+      },
+      key: @(payload) => runtime == nil
+        ? false
+        : runtime.dispatch_key(window, payload),
+    }
+  }
+
+  create_render_object(context) {
+    var window = RenderWindow(self._props(), {})
+    window.set_handlers(self._handlers(context, window))
+    window.set_size_to_content(self.options.get('size_to_content', false))
+    return window
+  }
+
+  update_render_object(context, render_object) {
+    render_object.set_handlers(self._handlers(context, render_object))
+    render_object.set_props(self._props())
+    render_object.set_size_to_content(self.options.get(
+      'size_to_content', false,
+    ))
+  }
+
+  @to_string() {
+    return 'Window(${self.title})'
+  }
+}

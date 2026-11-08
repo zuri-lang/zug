@@ -1,0 +1,47 @@
+/**
+ * @module zug
+ *
+ * zug is a toolkit for desktop applications with native controls and a
+ * declarative API in the manner of Flutter: an interface is a tree of
+ * widgets built from the application's state, and zug updates the native
+ * views to match whenever the state changes.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * class Counter < StatefulWidget {
+ *   create_state() {
+ *     return CounterState()
+ *   }
+ * }
+ *
+ * class CounterState < State {
+ *   var count = 0
+ *
+ *   build(context) {
+ *     return Center(Column([
+ *       Text('Pressed ${self.count} times'),
+ *       Button('Press', { on_pressed: @{ self.set_state(@{ self.count++ }) } }),
+ *     ], { spacing: 12, shrink_wrap: true }))
+ *   }
+ * }
+ *
+ * def main() {
+ *   run_app(App({ title: 'Counter', windows: [Window('Counter', Counter())] }))
+ * }
+ * ```
+ *
+ * Everything platform-specific lives in a backend. zug ships one for
+ * macOS, which drives AppKit directly, and a headless one for tests; a
+ * backend for another platform implements the contract in `zug.backend`.
+ *
+ * @copyright 2026, the zug contributors
+ */
+
+import @.foundation { * }
+import @.painting { * }
+import @.backend { * }
+import @.rendering { * }
+import @.widgets { * }
+import @.services { * }
+import .backends

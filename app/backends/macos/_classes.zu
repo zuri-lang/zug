@@ -1,0 +1,220 @@
+/**
+ * The Objective-C classes zug defines, and the registry that finds the
+ * Zuri object behind a native one.
+ *
+ * Native objects reach Zuri through these classes: a view asking how to
+ * draw its layer, a control sending its action, a window or the
+ * application telling its delegate something happened. Each looks up the
+ * Zuri host registered for the object involved and calls it.
+ */
+
+import ffi
+import ._runtime { define_class, send, send_void_bool }
+
+# The type encoding of BOOL: a C bool on Apple silicon, a signed char on
+# Intel.
+var B = ffi.platform().arch == 'x86_64' ? 'c' : 'B'
+
+var _hosts = {}
+
+/**
+ * Records `host` as the Zuri object behind `native`.
+ *
+ * @param Pointer native
+ * @param any host
+ */
+def register(native, host) {
+  _hosts[native.address()] = host
+}
+
+/**
+ * Forgets the Zuri object behind `native`.
+ *
+ * @param Pointer native
+ */
+def unregister(native) {
+  _hosts.remove(native.address())
+}
+
+/**
+ * The Zuri object behind `native`, or `nil`.
+ *
+ * @param ?Pointer native
+ * @returns any
+ */
+def host_for(native) {
+  if native == nil {
+    return nil
+  }
+
+  return _hosts.get(native.address())
+}
+
+/**
+ * How many native objects have a Zuri object registered, for leak checks.
+ *
+ * @returns number
+ */
+def registered_count() {
+  return _hosts.length()
+}
+
+/**
+ * The flipped, layer-backed view zug uses as the content of windows and
+ * as decorated boxes. Its layer is drawn by its host's `update_layer()`,
+ * which AppKit calls with the right appearance current.
+ *
+ * @type Pointer
+ */
+var ZugView = define_class('ZugView', 'NSView', {
+  isFlipped: ['${B}@:', ffi.bool, [], @(this) => true, true],
+  wantsUpdateLayer: ['${B}@:', ffi.bool, [], @(this) => true, true],
+  updateLayer: ['v@:', ffi.void, [], @(this) {
+    var host = host_for(this)
+
+    if host != nil {
+      host.update_layer()
+    }
+  }],
+})
+
+/**
+ * The target of every control's action. The control that sent it finds
+ * its host.
+ *
+ * @type Pointer
+ */
+var ZugTarget = define_class('ZugTarget', 'NSObject', {
+  'zugAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
+    var host = host_for(sender)
+
+    if host != nil {
+      host.on_action()
+    }
+  }],
+})
+
+var _target = nil
+
+/**
+ * The one target every control sends its action to.
+ *
+ * @returns Pointer
+ */
+def shared_target() {
+  if _target == nil {
+    _target = send(send(ZugTarget, 'alloc'), 'init')
+  }
+
+  return _target
+}
+
+/**
+ * The delegate of every window.
+ *
+ * @type Pointer
+ */
+var ZugWindowDelegate = define_class('ZugWindowDelegate', 'NSObject', {
+  'windowShouldClose:': ['${B}@:@', ffi.bool, [ffi.ptr], @(this, window) {
+    var host = host_for(window)
+    return host == nil ? true : host.should_close()
+  }, true],
+  'windowWillClose:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.did_close()
+    }
+  }],
+  'windowDidResize:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.did_resize()
+    }
+  }],
+  'windowDidBecomeKey:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.did_change_key(true)
+    }
+  }],
+  'windowDidResignKey:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.did_change_key(false)
+    }
+  }],
+})
+
+var _window_delegate = nil
+
+/**
+ * The one delegate every window has.
+ *
+ * @returns Pointer
+ */
+def shared_window_delegate() {
+  if _window_delegate == nil {
+    _window_delegate = send(send(ZugWindowDelegate, 'alloc'), 'init')
+  }
+
+  return _window_delegate
+}
+
+var _application = nil
+
+/**
+ * Sets the Zuri object the application delegate reports to: the
+ * backend.
+ *
+ * @param any backend
+ */
+def set_application_host(backend) {
+  _application = backend
+}
+
+/**
+ * The application's delegate.
+ *
+ * @type Pointer
+ */
+var ZugAppDelegate = define_class('ZugAppDelegate', 'NSObject', {
+  'applicationShouldTerminate:': ['Q@:@', ffi.ulong, [ffi.ptr], @(this, app) {
+    return _application == nil or _application.should_terminate() ? 1 : 0
+  }, 1],
+  'applicationShouldTerminateAfterLastWindowClosed:': [
+    '${B}@:@', ffi.bool, [ffi.ptr], @(this, app) => false, false,
+  ],
+  'applicationShouldHandleReopen:hasVisibleWindows:': [
+    '${B}@:@${B}', ffi.bool, [ffi.ptr, ffi.bool], @(this, app, visible) {
+      if !visible and _application != nil {
+        _application.reopen()
+      }
+
+      return true
+    }, true,
+  ],
+  'applicationDidFinishLaunching:': [
+    'v@:@', ffi.void, [ffi.ptr], @(this, note) {
+      if _application != nil {
+        _application.did_finish_launching()
+      }
+    },
+  ],
+  'observeValueForKeyPath:ofObject:change:context:': [
+    'v@:@@@^v', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr],
+    @(this, path, object, change, context) {
+      if _application != nil {
+        _application.appearance_changed()
+      }
+    },
+  ],
+  'zugMenuAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, item) {
+    if _application != nil {
+      _application.menu_action(item)
+    }
+  }],
+})

@@ -1,0 +1,251 @@
+/**
+ * Objects that tell listeners when they change.
+ *
+ * Application state that several widgets show lives well in an
+ * `Observable`: a widget rebuilds when it fires, through an `Observer` or
+ * by listening in its `State`.
+ *
+ * ```zuri
+ * import zug { Observable, ObservableValue }
+ *
+ * class Cart < Observable {
+ *   var items = []
+ *
+ *   add(item) {
+ *     self.items.append(item)
+ *     self.notify()
+ *   }
+ * }
+ *
+ * var count = ObservableValue(0)
+ * count.add_listener(@{ echo 'count is now ${count.value()}' })
+ * count.set(5)
+ * ```
+ */
+
+import .errors { report_error, LifecycleError }
+
+/**
+ * Something listeners can subscribe to. Extend it and call `notify()`
+ * whenever the state listeners care about has changed.
+ */
+class Observable {
+  var _listeners = []
+  var _disposed = false
+
+  /**
+   * Calls `listener` with no arguments every time this object notifies.
+   * Adding the same function twice calls it twice.
+   *
+   * @param function listener
+   * @returns Observable this same instance
+   * @throws LifecycleError When the object has been disposed
+   */
+  add_listener(listener: function) {
+    if self._disposed {
+      raise LifecycleError('${typeof(self)} was used after it was disposed')
+    }
+
+    self._listeners.append(listener)
+    return self
+  }
+
+  /**
+   * Stops calling `listener`. Removes one registration of it, and does
+   * nothing when it is not registered.
+   *
+   * @param function listener
+   * @returns Observable this same instance
+   */
+  remove_listener(listener: function) {
+    var index = self._listeners.index_of(listener)
+
+    if index >= 0 {
+      self._listeners.remove_at(index)
+    }
+
+    return self
+  }
+
+  /**
+   * Whether anything is listening.
+   *
+   * @returns bool
+   */
+  has_listeners() {
+    return !self._listeners.is_empty()
+  }
+
+  /**
+   * Calls every listener. A listener removed by an earlier one during the
+   * same call is skipped, and one added during the call waits for the
+   * next. An error a listener raises goes to `report_error()` and the
+   * other listeners still run.
+   */
+  notify() {
+    if self._disposed {
+      raise LifecycleError('${typeof(self)} was used after it was disposed')
+    }
+
+    if self._listeners.is_empty() {
+      return
+    }
+
+    var snapshot = self._listeners.clone()
+
+    for listener in snapshot {
+      if self._listeners.contains(listener) {
+        catch {
+          listener()
+        } as error {
+          report_error(error, 'notifying a listener of ${typeof(self)}')
+        }
+      }
+    }
+  }
+
+  /**
+   * Drops every listener and refuses further use. Call it when the owner
+   * of this object is done with it.
+   */
+  dispose() {
+    self._listeners = []
+    self._disposed = true
+  }
+
+  /**
+   * Whether `dispose()` has been called.
+   *
+   * @returns bool
+   */
+  is_disposed() {
+    return self._disposed
+  }
+
+  /**
+   * An observable that notifies whenever any of `sources` does. It only
+   * listens to the sources while something listens to it.
+   *
+   * @param list sources: observables.
+   * @returns Observable
+   */
+  static merge(sources: list) {
+    return MergedObservable(sources)
+  }
+}
+
+/**
+ * An observable holding one value, which notifies when the value changes.
+ *
+ * @printable
+ */
+class ObservableValue < Observable {
+  var _value
+
+  /**
+   * @param any value: the starting value.
+   * @constructor
+   */
+  @new(value) {
+    self._value = value
+  }
+
+  /**
+   * The current value.
+   *
+   * @returns any
+   */
+  value() {
+    return self._value
+  }
+
+  /**
+   * Replaces the value, and notifies when the new value is not `==` to the
+   * old one. A list or dictionary changed in place is the same value, so
+   * call `notify()` after changing one.
+   *
+   * @param any value
+   * @returns ObservableValue this same instance
+   */
+  set(value) {
+    if value == self._value {
+      return self
+    }
+
+    self._value = value
+    self.notify()
+    return self
+  }
+
+  /**
+   * Replaces the value with what `fn` returns when given the current one.
+   *
+   * @param function fn
+   * @returns ObservableValue this same instance
+   */
+  update(fn: function) {
+    return self.set(fn(self._value))
+  }
+
+  @to_string() {
+    return 'ObservableValue(${self._value})'
+  }
+}
+
+/**
+ * What `Observable.merge()` returns.
+ */
+class MergedObservable < Observable {
+  var _sources = []
+  var _forward
+
+  /**
+   * @param list sources
+   * @constructor
+   */
+  @new(sources: list) {
+    for source in sources {
+      if !instance_of(source, Observable) {
+        raise TypeError('Observable.merge() takes observables, got ${typeof(source)}')
+      }
+    }
+
+    self._sources = sources.clone()
+    self._forward = @{
+      self.notify()
+    }
+  }
+
+  add_listener(listener: function) {
+    var first = !self.has_listeners()
+    parent.add_listener(listener)
+
+    if first {
+      for source in self._sources {
+        source.add_listener(self._forward)
+      }
+    }
+
+    return self
+  }
+
+  remove_listener(listener: function) {
+    parent.remove_listener(listener)
+
+    if !self.has_listeners() {
+      for source in self._sources {
+        source.remove_listener(self._forward)
+      }
+    }
+
+    return self
+  }
+
+  dispose() {
+    for source in self._sources {
+      source.remove_listener(self._forward)
+    }
+
+    parent.dispose()
+  }
+}

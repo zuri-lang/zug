@@ -1,0 +1,12 @@
+[project]
+name = "zug"
+version = "0.1.0"
+description = "Native GUI toolkit for Zuri with a declarative, Flutter-like API"
+authors = []
+license = "MIT"
+readme = "README.md"
+keywords = ["gui", "ui", "macos", "appkit", "widgets", "desktop"]
+zuri = ">=0.1"
+exclude = ["examples/**", "tests/**", "tmp/**"]
+
+[dependencies]

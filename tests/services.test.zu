@@ -1,0 +1,357 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+def square(n) {
+  return n * n
+}
+
+def fail_with(message) {
+  raise ValueError(message)
+}
+
+def echo_worker(inbox, outbox) {
+  while true {
+    var message = inbox.recv()
+
+    if message == nil and inbox.is_closed() {
+      return
+    }
+
+    outbox.send(message * 2)
+  }
+}
+
+describe('Promise', @{
+  it('runs then() after the call that resolved it', @{
+    var seen = []
+    var deferred = Deferred()
+    deferred.promise.then(@(value) {
+      seen.append(value)
+    })
+    deferred.resolve(5)
+    expect(seen).to_be_empty()
+    run_microtasks()
+    expect(seen).to_equal([5])
+  })
+
+  it('chains values, promises and errors', @{
+    var seen = []
+    var inner = Deferred()
+    Promise.resolved(1)
+      .then(@(value) => value + 1)
+      .then(@(value) => inner.promise)
+      .then(@(value) {
+        raise ValueError('bad ${value}')
+      })
+      .catch_error(@(error) {
+        seen.append(error.message)
+      })
+    run_microtasks()
+    inner.resolve(10)
+    run_microtasks()
+    expect(seen).to_equal(['bad 10'])
+  })
+
+  it('collects every value with all()', @{
+    var seen = []
+    Promise.all([Promise.resolved(1), Promise.resolved(2)]).then(@(values) {
+      seen.append(values)
+    })
+    run_microtasks()
+    expect(seen).to_equal([[1, 2]])
+  })
+
+  it('reports a rejection nothing handles', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(context)
+    })
+    Promise.rejected(ValueError('lost'))
+    run_microtasks()
+    set_error_handler(nil)
+    expect(reported).to_equal(['a promise rejection nothing handled'])
+  })
+
+  it('refuses to settle twice', @{
+    var deferred = Deferred()
+    deferred.resolve(1)
+    expect(@{
+      deferred.resolve(2)
+    }).to_raise_instance_of(ZugError)
+    run_microtasks()
+  })
+})
+
+describe('Timer', @{
+  it('fires once after its duration, or repeatedly', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var once = []
+    var ticks = []
+    Timer(Duration.ms(500), @{
+      once.append(true)
+    })
+    var periodic = Timer.periodic(Duration.ms(200), @(timer) {
+      ticks.append(timer.ticks)
+
+      if timer.ticks == 3 {
+        timer.cancel()
+      }
+    })
+    t.advance(0.4)
+    expect(once).to_be_empty()
+    t.advance(0.2)
+    expect(once).to_equal([true])
+    t.advance(2)
+    expect(ticks).to_equal([1, 2, 3])
+    expect(periodic.is_active()).to_be_false()
+    t.dispose()
+  })
+
+  it('needs a running application', @{
+    expect(@{
+      Timer(Duration.ms(1), @{})
+    }).to_raise_instance_of(LifecycleError)
+  })
+
+  it('resolves a delay', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var seen = []
+    delay(Duration.seconds(1), 'done').then(@(value) {
+      seen.append(value)
+    })
+    t.advance(1)
+    expect(seen).to_equal(['done'])
+    t.dispose()
+  })
+})
+
+describe('keys', @{
+  it('go to the deepest handler first, and stop where used', @{
+    var seen = []
+    var t = WidgetTester().pump_widget(Shortcuts({
+      'escape': @{
+        seen.append('outer escape')
+      },
+      'cmd+k': @{
+        seen.append('outer cmd+k')
+      },
+    }, KeyListener(Shortcuts({ 'escape': @{
+      seen.append('inner escape')
+    } }, Text('x')), {
+      on_key: @(event) {
+        if event.characters.is_number() {
+          seen.append('digit ${event.characters}')
+          return true
+        }
+
+        return false
+      },
+    })))
+    var window = t.window()
+    expect(window.press_key('escape')).to_be_true()
+    expect(window.press_key('7')).to_be_true()
+    expect(window.press_key('cmd+k')).to_be_true()
+    expect(window.press_key('cmd+j')).to_be_false()
+    expect(seen).to_equal(['inner escape', 'digit 7', 'outer cmd+k'])
+    t.dispose()
+  })
+
+  it('match single characters by what they type', @{
+    var seen = []
+    var t = WidgetTester().pump_widget(Shortcuts({ '+': @{
+      seen.append('plus')
+    }, '*': @{
+      seen.append('times')
+    } }, Text('x')))
+    t.window().press_key('shift+=', '+')
+    t.window().press_key('shift+8', '*')
+    expect(seen).to_equal(['plus', 'times'])
+    t.dispose()
+  })
+
+  it('stop when the handler leaves the tree', @{
+    var on = ObservableValue(true)
+    var seen = []
+    var t = WidgetTester().pump_widget(Observer(
+      on, @(context) => on.value() ? Shortcuts({ 'a': @{
+        seen.append('a')
+      } }, Text('x')) : Text('y'),
+    ))
+    on.set(false)
+    t.pump()
+    expect(t.window().press_key('a')).to_be_false()
+    expect(seen).to_be_empty()
+    t.dispose()
+  })
+
+  it('refuse a modifier that does not exist', @{
+    expect(@{
+      Shortcuts({ 'hyper+k': @{} }, Text('x'))
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('menus', @{
+  it('build the bar with the application menu, Edit and Window', @{
+    var chosen = []
+    var t = WidgetTester().pump_app(App({
+      title: 'Calc',
+      menu_bar: MenuBar([
+        Menu(
+          'View',
+          [MenuItem('Basic', { shortcut: 'cmd+1', checked: true, on_selected: @{
+            chosen.append('basic')
+          } })],
+        ),
+      ], {
+        app_items: [MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{
+          chosen.append('settings')
+        } })],
+      }),
+      windows: [Window('Calc', Text('x'))],
+    }))
+    var menus = t.backend.menus
+    expect(menus.map(
+      @(menu) => menu.title,
+    )).to_equal(['Calc', 'Edit', 'View', 'Window'])
+    expect(menus[0].items[0].title).to_be('About Calc')
+    expect(menus[0].items[-1].role).to_be('quit')
+    t.choose_menu('Calc', 'Settings…')
+    t.choose_menu('View', 'Basic')
+    expect(chosen).to_equal(['settings', 'basic'])
+    expect(@{
+      t.choose_menu('Calc', 'Quit Calc')
+    }).to_raise_instance_of(ZugError)
+    expect(@{
+      t.choose_menu('File', 'Open')
+    }).to_raise_instance_of(ZugError)
+    t.dispose()
+  })
+})
+
+describe('Style and Appearance', @{
+  it('give Text its default style', @{
+    var t = WidgetTester().pump_widget(Style(
+      StyleSheet({ text: TextStyle({ size: 20, color: Color.RED }) }),
+      Text('styled', { style: TextStyle({ weight: 700 }) }),
+    ))
+    var style = t.one('styled').props.style
+    expect(style.size).to_be(20)
+    expect(style.weight).to_be(700)
+    expect(style.color).to_equal(Color.RED)
+    t.dispose()
+  })
+
+  it('rebuild what reads the appearance when it changes', @{
+    var t = WidgetTester().pump_widget(Builder(
+      @(context) => Text('mode ${Appearance.of(context)}'),
+    ))
+    expect(t.find_text('mode light')).to_have_length(1)
+    t.backend.set_appearance('dark')
+    expect(t.find_text('mode dark')).to_have_length(1)
+    t.dispose()
+  })
+})
+
+describe('dialogs and the clipboard', @{
+  it('resolve an alert with the button chosen', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var answers = []
+    show_alert(
+      nil,
+      {
+        title: 'Delete?',
+        buttons: ['Delete', 'Cancel'],
+        style: AlertStyle.WARNING,
+      },
+    ).then(@(answer) {
+      answers.append(answer)
+    })
+    var dialog = t.backend.dialogs[0]
+    expect(dialog.spec.buttons).to_equal(['Delete', 'Cancel'])
+    t.backend.answer_dialog({ button: 1, suppressed: false })
+    expect(answers).to_equal([{ button: 1, suppressed: false }])
+    t.dispose()
+  })
+
+  it('resolve file pickers with paths or nil', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var paths = []
+    pick_files(nil, { types: ['csv'], multiple: true }).then(@(chosen) {
+      paths.append(chosen)
+    })
+    save_file(nil, { name: 'out.csv' }).then(@(chosen) {
+      paths.append(chosen)
+    })
+    t.backend.answer_dialog(['/a.csv', '/b.csv'])
+    t.backend.answer_dialog(nil)
+    expect(paths).to_equal([['/a.csv', '/b.csv'], nil])
+    t.dispose()
+  })
+
+  it('reads and writes the clipboard', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    Clipboard.write_text('42')
+    expect(Clipboard.read_text()).to_be('42')
+    t.dispose()
+  })
+})
+
+describe('background work', @{
+  it('resolves with the result of a function run on another isolate', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var results = []
+    run_in_background(square, 12).then(@(value) {
+      results.append(value)
+    })
+    run_in_background(fail_with, 'nope').catch_error(@(error) {
+      results.append(error.message)
+    })
+
+    iter var i = 0; i < 500 and results.length() < 2; i++ {
+      t.advance(0.01)
+    }
+
+    expect(results).to_contain(144)
+    expect(results.filter(
+      @(item) => is_string(item) and item.lines()[0] == 'ValueError: nope',
+    )).to_have_length(1)
+    t.dispose()
+  })
+
+  it('exchanges messages with a worker', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var replies = []
+    var worker = Worker(echo_worker, { on_message: @(reply) {
+      replies.append(reply)
+    } })
+    worker.send(1)
+    worker.send(2)
+
+    iter var i = 0; i < 500 and replies.length() < 2; i++ {
+      t.advance(0.01)
+    }
+
+    worker.close()
+    expect(replies).to_equal([2, 4])
+    t.dispose()
+  })
+})
+
+describe('PromiseBuilder', @{
+  it('rebuilds when the promise settles', @{
+    var deferred = Deferred()
+    var t = WidgetTester().pump_widget(PromiseBuilder(
+      deferred.promise, @(context, snapshot) {
+        return Text(snapshot.is_pending() ? 'waiting' : 'got ${snapshot.value}')
+      },
+    ))
+    expect(t.find_text('waiting')).to_have_length(1)
+    deferred.resolve(7)
+    t.pump()
+    expect(t.find_text('got 7')).to_have_length(1)
+    t.dispose()
+  })
+})

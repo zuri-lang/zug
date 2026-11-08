@@ -1,0 +1,54 @@
+import test { * }
+
+import ..app.format { NumberFormat, format_number, group_text }
+
+describe('format_number', @{
+  var plain = NumberFormat()
+
+  it('rounds to significant digits and trims zeros', @{
+    expect(format_number(0.1 + 0.2, plain)).to_be('0.3')
+    expect(format_number(1 / 3, plain)).to_be('0.333333333333')
+    expect(format_number(2.50, plain)).to_be('2.5')
+    expect(format_number(-0, plain)).to_be('0')
+  })
+
+  it('groups thousands, or not', @{
+    expect(format_number(1234567.891, plain)).to_be('1,234,567.891')
+    expect(format_number(-1234, plain)).to_be('-1,234')
+    expect(format_number(
+      1234567, NumberFormat({ grouping: false }),
+    )).to_be('1234567')
+  })
+
+  it('switches to scientific notation for very large and small values', @{
+    expect(format_number(1e20, plain)).to_be('1e20')
+    expect(format_number(1.5e-12, plain)).to_be('1.5e-12')
+    expect(format_number(-2.5e15, plain)).to_be('-2.5e15')
+  })
+
+  it('shows a fixed number of places when asked', @{
+    expect(format_number(2.5, NumberFormat({ places: 2 }))).to_be('2.50')
+    expect(format_number(1234.5678, NumberFormat({ places: 0 }))).to_be('1,235')
+    expect(format_number(3, NumberFormat({ places: 3 }))).to_be('3.000')
+  })
+
+  it('shows Error for values that are not numbers', @{
+    expect(format_number(0 / 0, plain)).to_be('Error')
+    expect(format_number(1 / 0, plain)).to_be('Error')
+  })
+
+  it('honours fewer significant digits', @{
+    expect(format_number(
+      1 / 3, NumberFormat({ significant: 6 }),
+    )).to_be('0.333333')
+  })
+})
+
+describe('group_text', @{
+  it('groups the whole part and keeps the rest', @{
+    expect(group_text('1234567.000')).to_be('1,234,567.000')
+    expect(group_text('-1234.')).to_be('-1,234.')
+    expect(group_text('12')).to_be('12')
+    expect(group_text('1e20')).to_be('1e20')
+  })
+})

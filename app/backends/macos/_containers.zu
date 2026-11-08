@@ -1,0 +1,803 @@
+/**
+ * Containers: scroll views, tab views, split views, tables and visual
+ * effect views.
+ *
+ * The notifications and data-source calls these views make all arrive at
+ * one object of class `ZugEvents`, which passes each to the host of the
+ * view it concerns.
+ */
+
+import ffi
+import .. ..foundation { Size, EdgeInsets, Constraints }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_int, send_void_uint, send_void_double, send_void_rect,
+  send_void_size, send_void_point, send_int, send_double, send_rect, typed,
+  ns_string, zuri_string, retain, release, rect, create, create_with_frame,
+  define_class, from_ns_array,
+}
+import ._classes { register, unregister, host_for, B }
+import ._cocoa { ns_color, text_alignment }
+import ._views { MacView }
+
+/**
+ * Receives notifications and data-source calls for container views.
+ *
+ * @type Pointer
+ */
+var ZugEvents = define_class('ZugEvents', 'NSObject', {
+  'boundsDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.bounds_changed()
+    }
+  }],
+  'tabView:didSelectTabViewItem:': [
+    'v@:@@', ffi.void, [ffi.ptr, ffi.ptr], @(this, view, item) {
+      var host = host_for(view)
+
+      if host != nil {
+        host.tab_selected()
+      }
+    },
+  ],
+  'splitViewDidResizeSubviews:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.panes_resized()
+    }
+  }],
+  'numberOfRowsInTableView:': ['q@:@', ffi.long, [ffi.ptr], @(this, table) {
+    var host = host_for(table)
+    return host == nil ? 0 : host.props.get('row_count', 0)
+  }, 0],
+  'tableView:objectValueForTableColumn:row:': [
+    '@@:@@q', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long],
+    @(this, table, column, row) {
+      var host = host_for(table)
+      return host == nil ? nil : host.cell_value(column, row)
+    },
+  ],
+  'tableViewSelectionDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var host = host_for(send(note, 'object'))
+
+    if host != nil {
+      host.selection_changed()
+    }
+  }],
+  'selectionShouldChangeInTableView:': [
+    '${B}@:@', ffi.bool, [ffi.ptr], @(this, table) {
+      var host = host_for(table)
+      return host == nil or host.props.get('selection') != 'none'
+    }, true,
+  ],
+  'tableView:sortDescriptorsDidChange:': [
+    'v@:@@', ffi.void, [ffi.ptr, ffi.ptr], @(this, table, previous) {
+      var host = host_for(table)
+
+      if host != nil {
+        host.sort_changed()
+      }
+    },
+  ],
+  'zugDoubleAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, table) {
+    var host = host_for(table)
+
+    if host != nil {
+      host.double_clicked()
+    }
+  }],
+})
+
+var _events = nil
+
+/**
+ * The one `ZugEvents` instance.
+ *
+ * @returns Pointer
+ */
+def shared_events() {
+  if _events == nil {
+    _events = create('ZugEvents')
+  }
+
+  return _events
+}
+
+var _center = nil
+
+def _notifications() {
+  if _center == nil {
+    _center = send(cls('NSNotificationCenter'), 'defaultCenter')
+  }
+
+  return _center
+}
+
+def _global(name: string) {
+  return ffi.open().symbol(name).read(ffi.ptr)
+}
+
+/**
+ * A scroll view. Its document view is a flipped view of zug's, so content
+ * is laid out from the top left, and scrolling starts at the top.
+ */
+class MacScroll < MacView {
+  var document
+  var clip
+  var applied_request
+
+  @new(backend, props: dict, dispatch: function) {
+    var scroll = create_with_frame('NSScrollView', nil)
+    send_void_bool(scroll, 'setAutohidesScrollers:', true)
+    self.document = create_with_frame('ZugView', nil)
+    send_void_id(scroll, 'setDocumentView:', self.document)
+    self.clip = send(scroll, 'contentView')
+    send_void_bool(self.clip, 'setPostsBoundsChangedNotifications:', true)
+    typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr])(
+      _notifications(), sel('addObserver:selector:name:object:'),
+      shared_events(), sel('boundsDidChange:'),
+      _global('NSViewBoundsDidChangeNotification'), self.clip,
+    )
+    register(self.clip, self)
+    self.setup(backend, 'scroll', scroll, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'axis' {
+        send_void_bool(
+          self.native, 'setHasVerticalScroller:',
+          value == 'vertical' or value == 'both',
+        )
+        send_void_bool(
+          self.native, 'setHasHorizontalScroller:',
+          value == 'horizontal' or value == 'both',
+        )
+      }
+      when 'bordered' {
+        send_void_uint(self.native, 'setBorderType:', value ? 2 : 0)
+      }
+      when 'background' {
+        send_void_bool(self.native, 'setDrawsBackground:', value != nil)
+
+        if value != nil {
+          send_void_id(self.native, 'setBackgroundColor:', ns_color(value))
+        }
+      }
+      when 'scroll_to' {
+        if value != nil and value != self.applied_request {
+          self.applied_request = value
+          send_void_point(
+            self.clip, 'scrollToPoint:', { x: value[0], y: value[1] },
+          )
+          send_void_id(self.native, 'reflectScrolledClipView:', self.clip)
+        }
+      }
+    }
+  }
+
+  container_for(slot) {
+    return self.document
+  }
+
+  set_content_size(slot, size: Size) {
+    send_void_size(
+      self.document, 'setFrameSize:',
+      { width: size.width, height: size.height },
+    )
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  /**
+   * @internal
+   */
+  bounds_changed() {
+    var bounds = send_rect(self.clip, 'bounds')
+    self.fire('scrolled', { x: bounds.origin.x, y: bounds.origin.y })
+  }
+
+  before_destroy() {
+    typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr])(
+      _notifications(), sel('removeObserver:name:object:'), shared_events(),
+      _global('NSViewBoundsDidChangeNotification'), self.clip,
+    )
+    unregister(self.clip)
+    release(self.document)
+  }
+}
+
+/**
+ * A tab view. Each tab's view is a flipped view of zug's.
+ */
+class MacTabs < MacView {
+  var panes = []
+  var _applying = false
+
+  @new(backend, props: dict, dispatch: function) {
+    var tabs = create_with_frame('NSTabView', rect(0, 0, 300, 200))
+    send_void_id(tabs, 'setDelegate:', shared_events())
+    self.setup(backend, 'tabs', tabs, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'tabs' {
+        self._applying = true
+        var items = from_ns_array(send(self.native, 'tabViewItems'))
+
+        while items.length() > value.length() {
+          send_void_id(self.native, 'removeTabViewItem:', items.pop())
+          release(self.panes.pop())
+        }
+
+        iter var i = 0; i < value.length(); i++ {
+          if i < items.length() {
+            send_void_id(items[i], 'setLabel:', ns_string(value[i]))
+          } else {
+            var pane = create_with_frame('ZugView', nil)
+            var item = send_id(
+              send(cls('NSTabViewItem'), 'alloc'), 'initWithIdentifier:',
+              ns_string('${i}'),
+            )
+            send_void_id(item, 'setLabel:', ns_string(value[i]))
+            send_void_id(item, 'setView:', pane)
+            send_void_id(self.native, 'addTabViewItem:', item)
+            release(item)
+            self.panes.append(pane)
+          }
+        }
+
+        self._applying = false
+        self._select()
+      }
+      when 'selected' {
+        self._select()
+      }
+    }
+  }
+
+  _select() {
+    var index = self.props.get('selected', 0)
+
+    if index >= 0 and index < self.panes.length() {
+      self._applying = true
+      send_void_int(self.native, 'selectTabViewItemAtIndex:', index)
+      self._applying = false
+    }
+  }
+
+  container_for(slot) {
+    return self.panes[slot]
+  }
+
+  _content_rect(size: Size) {
+    var frame = send_rect(self.native, 'frame')
+    send_void_size(
+      self.native, 'setFrameSize:', { width: size.width, height: size.height },
+    )
+    var content = send_rect(self.native, 'contentRect')
+    send_void_size(self.native, 'setFrameSize:', frame.size)
+    return content
+  }
+
+  slot_size(slot, size: Size) {
+    var content = self._content_rect(size)
+    return Size(content.size.width, content.size.height)
+  }
+
+  content_insets(slot) {
+    var probe = Size(300, 300)
+    var content = self._content_rect(probe)
+    var left = content.origin.x
+    var top = content.origin.y
+    return EdgeInsets(
+      left, top, probe.width - left - content.size.width,
+      probe.height - top - content.size.height,
+    )
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  /**
+   * @internal
+   */
+  tab_selected() {
+    if !self._applying {
+      var item = send(self.native, 'selectedTabViewItem')
+      var index = typed(ffi.long, [ffi.ptr])(
+        self.native, sel('indexOfTabViewItem:'), item,
+      )
+      self.fire('changed', { selected: index })
+    }
+  }
+
+  before_destroy() {
+    send_void_id(self.native, 'setDelegate:', nil)
+
+    for pane in self.panes {
+      release(pane)
+    }
+  }
+}
+
+# NSSplitViewDividerStyle values.
+var _DIVIDERS = { thick: 1, thin: 2, pane: 3 }
+
+/**
+ * A split view of panes, each a flipped view of zug's.
+ */
+class MacSplit < MacView {
+  var panes = []
+  var _initial_applied = false
+  var _adjusting = false
+
+  @new(backend, props: dict, dispatch: function) {
+    var split = create_with_frame('NSSplitView', rect(0, 0, 400, 300))
+    send_void_id(split, 'setDelegate:', shared_events())
+    self.setup(backend, 'split', split, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'axis' {
+        # Vertical dividers put the panes side by side.
+        send_void_bool(self.native, 'setVertical:', value == 'horizontal')
+      }
+      when 'divider' {
+        send_void_int(self.native, 'setDividerStyle:', _DIVIDERS.get(value, 2))
+      }
+      when 'panes' {
+        while self.panes.length() > value {
+          var pane = self.panes.pop()
+          send_void(pane, 'removeFromSuperview')
+          release(pane)
+        }
+
+        while self.panes.length() < value {
+          var pane = create_with_frame('ZugView', nil)
+          send_void_id(self.native, 'addArrangedSubview:', pane)
+          self.panes.append(pane)
+        }
+      }
+    }
+  }
+
+  container_for(slot) {
+    return self.panes[slot]
+  }
+
+  slot_size(slot, size: Size) {
+    self._adjusting = true
+    var current = send_rect(self.native, 'frame').size
+
+    if current.width != size.width
+      or current.height != size.height
+      or !self._initial_applied {
+      send_void_size(
+        self.native, 'setFrameSize:',
+        { width: size.width, height: size.height },
+      )
+      send_void(self.native, 'adjustSubviews')
+      self._apply_initial(size)
+    }
+
+    self._adjusting = false
+
+    if slot >= self.panes.length() {
+      return Size.ZERO
+    }
+
+    var frame = send_rect(self.panes[slot], 'frame')
+    return Size(frame.size.width, frame.size.height)
+  }
+
+  _apply_initial(size: Size) {
+    if self._initial_applied {
+      return
+    }
+
+    self._initial_applied = true
+    var initial = self.props.get('initial')
+
+    if initial == nil {
+      return
+    }
+
+    var position = 0
+    var thickness = send_double(self.native, 'dividerThickness')
+    var set_position = typed(ffi.void, [ffi.double, ffi.long])
+
+    iter var i = 0; i < initial.length() and i < self.panes.length() - 1; i++ {
+      position += initial[i]
+      set_position(
+        self.native, sel('setPosition:ofDividerAtIndex:'), position, i,
+      )
+      position += thickness
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  /**
+   * @internal
+   */
+  panes_resized() {
+    if self._adjusting {
+      return
+    }
+
+    var vertical = self.props.get('axis', 'horizontal') == 'horizontal'
+    var sizes = self.panes.map(@(pane) {
+      var frame = send_rect(pane, 'frame')
+      return vertical ? frame.size.width : frame.size.height
+    })
+
+    self.fire('resized', { sizes })
+  }
+
+  before_destroy() {
+    send_void_id(self.native, 'setDelegate:', nil)
+
+    for pane in self.panes {
+      release(pane)
+    }
+  }
+}
+
+var _index_after = typed(ffi.long, [ffi.long])
+
+/**
+ * A table of text, in a scroll view.
+ */
+class MacTable < MacView {
+  var table
+  var header
+  var columns = []
+  var _applying = false
+
+  @new(backend, props: dict, dispatch: function) {
+    var scroll = create_with_frame('NSScrollView', nil)
+    self.table = create_with_frame('NSTableView', nil)
+    self.header = retain(send(self.table, 'headerView'))
+    send_void_bool(scroll, 'setHasVerticalScroller:', true)
+    send_void_bool(scroll, 'setAutohidesScrollers:', true)
+    send_void_uint(scroll, 'setBorderType:', 2)
+    send_void_id(scroll, 'setDocumentView:', self.table)
+    send_void_id(self.table, 'setDataSource:', shared_events())
+    send_void_id(self.table, 'setDelegate:', shared_events())
+    send_void_id(self.table, 'setTarget:', shared_events())
+    typed(ffi.void, [ffi.ptr])(
+      self.table, sel('setDoubleAction:'), sel('zugDoubleAction:'),
+    )
+
+    # NSTableViewStylePlain keeps rows the width of the table.
+    send_void_int(self.table, 'setStyle:', 4)
+    register(self.table, self)
+    self.setup(backend, 'table', scroll, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'columns' {
+        for column in self.columns {
+          send_void_id(self.table, 'removeTableColumn:', column)
+          release(column)
+        }
+
+        self.columns = []
+
+        for spec in value {
+          var column = send_id(
+            send(cls('NSTableColumn'), 'alloc'), 'initWithIdentifier:',
+            ns_string(spec.id),
+          )
+          send_void_id(
+            send(column, 'headerCell'), 'setStringValue:',
+            ns_string(spec.title),
+          )
+          send_void_int(
+            send(column, 'headerCell'), 'setAlignment:',
+            text_alignment(spec.get('align', 'start')),
+          )
+          send_void_int(
+            send(column, 'dataCell'), 'setAlignment:',
+            text_alignment(spec.get('align', 'start')),
+          )
+
+          if spec.get('width') != nil {
+            send_void_double(column, 'setWidth:', spec.width)
+          }
+
+          if spec.get('min_width') != nil {
+            send_void_double(column, 'setMinWidth:', spec.min_width)
+          }
+
+          if spec.get('max_width') != nil {
+            send_void_double(column, 'setMaxWidth:', spec.max_width)
+          }
+
+          if spec.get('sortable', false) {
+            var prototype = typed(ffi.ptr, [ffi.ptr, ffi.bool])(
+              cls('NSSortDescriptor'), sel('sortDescriptorWithKey:ascending:'),
+              ns_string(spec.id), true,
+            )
+            send_void_id(column, 'setSortDescriptorPrototype:', prototype)
+          }
+
+          send_void_id(self.table, 'addTableColumn:', column)
+          self.columns.append(column)
+        }
+
+        if !self.columns.is_empty() {
+          # NSTableViewLastColumnOnlyAutoresizingStyle.
+          send_void_uint(self.table, 'setColumnAutoresizingStyle:', 4)
+        }
+
+        self._show_sort()
+        send_void(self.table, 'reloadData')
+      }
+      when 'row_count', 'version' {
+        self._applying = true
+        send_void(self.table, 'reloadData')
+        self._select()
+        self._applying = false
+      }
+      when 'selection' {
+        send_void_bool(
+          self.table, 'setAllowsMultipleSelection:', value == 'multiple',
+        )
+        send_void_bool(self.table, 'setAllowsEmptySelection:', true)
+      }
+      when 'selected' {
+        self._select()
+      }
+      when 'alternating' {
+        send_void_bool(
+          self.table, 'setUsesAlternatingRowBackgroundColors:', value == true,
+        )
+      }
+      when 'grid' {
+        send_void_uint(self.table, 'setGridStyleMask:', value ? 3 : 0)
+      }
+      when 'header' {
+        send_void_id(self.table, 'setHeaderView:', value ? self.header : nil)
+      }
+      when 'sort' {
+        self._show_sort()
+      }
+    }
+  }
+
+  _select() {
+    var rows = self.props.get('selected', [])
+    var set = send(cls('NSMutableIndexSet'), 'indexSet')
+
+    for row in rows {
+      if row >= 0 and row < self.props.get('row_count', 0) {
+        send_void_uint(set, 'addIndex:', row)
+      }
+    }
+
+    self._applying = true
+    typed(ffi.void, [ffi.ptr, ffi.bool])(
+      self.table, sel('selectRowIndexes:byExtendingSelection:'), set, false,
+    )
+    self._applying = false
+  }
+
+  _show_sort() {
+    var sort = self.props.get('sort')
+    var set_indicator = typed(ffi.void, [ffi.ptr, ffi.ptr])
+
+    for column in self.columns {
+      var id = zuri_string(send(column, 'identifier'))
+      var image = nil
+
+      if sort != nil and sort.column == id {
+        image = send_id(
+          cls('NSImage'), 'imageNamed:',
+          ns_string(
+            sort.ascending
+              ? 'NSAscendingSortIndicator'
+              : 'NSDescendingSortIndicator',
+          ),
+        )
+      }
+
+      set_indicator(
+        self.table, sel('setIndicatorImage:inTableColumn:'), image, column,
+      )
+    }
+  }
+
+  set_frame(frame) {
+    parent.set_frame(frame)
+    send_void(self.table, 'sizeLastColumnToFit')
+  }
+
+  measure(constraints: Constraints) {
+    return Size(200, 120)
+  }
+
+  baseline() {
+    return nil
+  }
+
+  focus_target() {
+    return self.table
+  }
+
+  /**
+   * The text of one cell, as an autoreleased string.
+   *
+   * @internal
+   * @param Pointer column
+   * @param number row
+   * @returns Pointer
+   */
+  cell_value(column, row: number) {
+    var id = zuri_string(send(column, 'identifier'))
+    var text = self.query('cell', { row, column: id })
+    return ns_string(text == nil ? '' : '${text}')
+  }
+
+  /**
+   * @internal
+   */
+  selection_changed() {
+    if self._applying {
+      return
+    }
+
+    var rows = []
+    var count = self.props.get('row_count', 0)
+    var indexes = send(self.table, 'selectedRowIndexes')
+    var selected = send_int(indexes, 'count')
+
+    # The walk stops at the last index, because the index set marks its
+    # end with NSNotFound, which does not fit in a number.
+    var row = selected == 0 ? nil : send_int(indexes, 'firstIndex')
+
+    iter var i = 0; i < selected; i++ {
+      if row < count {
+        rows.append(row)
+      }
+
+      if i + 1 < selected {
+        row = _index_after(indexes, sel('indexGreaterThanIndex:'), row)
+      }
+    }
+
+    self.fire('changed', { selected: rows })
+  }
+
+  /**
+   * @internal
+   */
+  sort_changed() {
+    var descriptors = from_ns_array(send(self.table, 'sortDescriptors'))
+
+    if descriptors.is_empty() {
+      return
+    }
+
+    var first = descriptors[0]
+    self.fire(
+      'sorted',
+      {
+        column: zuri_string(send(first, 'key')),
+        ascending: typed(ffi.bool, [])(first, sel('ascending')),
+      },
+    )
+  }
+
+  /**
+   * @internal
+   */
+  double_clicked() {
+    var row = send_int(self.table, 'clickedRow')
+
+    if row >= 0 {
+      self.fire('activated', { row })
+    }
+  }
+
+  before_destroy() {
+    send_void_id(self.table, 'setDataSource:', nil)
+    send_void_id(self.table, 'setDelegate:', nil)
+    unregister(self.table)
+
+    for column in self.columns {
+      release(column)
+    }
+
+    release(self.header)
+    release(self.table)
+  }
+}
+
+# NSVisualEffectMaterial values.
+var _MATERIALS = {
+  sidebar: 7,
+  header: 10,
+  content: 18,
+  window: 12,
+  menu: 5,
+  popover: 6,
+  hud: 13,
+  under_window: 21,
+}
+
+/**
+ * A visual effect view, with a flipped view of zug's inside it for the
+ * child.
+ */
+class MacVisualEffect < MacView {
+  var content
+
+  @new(backend, props: dict, dispatch: function) {
+    var view = create_with_frame('NSVisualEffectView', nil)
+    self.content = create_with_frame('ZugView', nil)
+    send_void_uint(self.content, 'setAutoresizingMask:', 18)
+    send_void_id(view, 'addSubview:', self.content)
+    self.setup(backend, 'visual_effect', view, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'material' {
+        send_void_int(self.native, 'setMaterial:', _MATERIALS.get(value, 7))
+      }
+      when 'blending' {
+        send_void_int(
+          self.native, 'setBlendingMode:', value == 'within' ? 1 : 0,
+        )
+      }
+    }
+  }
+
+  set_frame(frame) {
+    parent.set_frame(frame)
+    send_void_rect(
+      self.content, 'setFrame:', rect(0, 0, frame.width, frame.height),
+    )
+  }
+
+  container_for(slot) {
+    return self.content
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  before_destroy() {
+    release(self.content)
+  }
+}

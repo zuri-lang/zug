@@ -1,0 +1,371 @@
+/**
+ * Conversions between zug's values and Cocoa's: colours, fonts, text
+ * alignment, and the large finite numbers AppKit uses for "no limit".
+ */
+
+import ffi
+import .. ..foundation { Color, INFINITY, Size }
+import ._runtime {
+  cls, sel, send, send_id, send_id_double, typed, ns_string, CGSize, CGRect,
+}
+
+/**
+ * The extent AppKit is given for an unbounded axis.
+ *
+ * @type number
+ */
+var UNBOUNDED = 10000000
+
+/**
+ * `value`, or `UNBOUNDED` when it is infinite.
+ *
+ * @param number value
+ * @returns number
+ */
+def finite(value: number) {
+  return value == INFINITY ? UNBOUNDED : value
+}
+
+# Colours.
+
+var _SYSTEM_SELECTORS = {
+  label: 'labelColor',
+  secondary_label: 'secondaryLabelColor',
+  tertiary_label: 'tertiaryLabelColor',
+  quaternary_label: 'quaternaryLabelColor',
+  text: 'textColor',
+  placeholder_text: 'placeholderTextColor',
+  selected_text: 'selectedTextColor',
+  text_background: 'textBackgroundColor',
+  selected_text_background: 'selectedTextBackgroundColor',
+  window_background: 'windowBackgroundColor',
+  under_page_background: 'underPageBackgroundColor',
+  control_background: 'controlBackgroundColor',
+  control: 'controlColor',
+  control_text: 'controlTextColor',
+  disabled_control_text: 'disabledControlTextColor',
+  selected_control: 'selectedControlColor',
+  selected_control_text: 'selectedControlTextColor',
+  alternate_selected_control_text: 'alternateSelectedControlTextColor',
+  selected_content_background: 'selectedContentBackgroundColor',
+  unemphasized_selected_content_background: 'unemphasizedSelectedContentBackgroundColor',
+  separator: 'separatorColor',
+  grid: 'gridColor',
+  header_text: 'headerTextColor',
+  link: 'linkColor',
+  accent: 'controlAccentColor',
+  find_highlight: 'findHighlightColor',
+  red: 'systemRedColor',
+  orange: 'systemOrangeColor',
+  yellow: 'systemYellowColor',
+  green: 'systemGreenColor',
+  mint: 'systemMintColor',
+  teal: 'systemTealColor',
+  cyan: 'systemCyanColor',
+  blue: 'systemBlueColor',
+  indigo: 'systemIndigoColor',
+  purple: 'systemPurpleColor',
+  pink: 'systemPinkColor',
+  brown: 'systemBrownColor',
+  gray: 'systemGrayColor',
+}
+
+var _srgb = typed(ffi.ptr, [ffi.double, ffi.double, ffi.double, ffi.double])
+
+/**
+ * The `NSColor` for `color`, autoreleased. A system colour stays dynamic,
+ * following the appearance wherever AppKit resolves it.
+ *
+ * @param Color color
+ * @returns Pointer
+ */
+def ns_color(color: Color) {
+  var NSColor = cls('NSColor')
+
+  if color.system != nil {
+    var selector = _SYSTEM_SELECTORS.get(color.system)
+    var base = selector == nil ? nil : send(NSColor, selector)
+
+    if base == nil {
+      base = send(NSColor, 'labelColor')
+    }
+
+    return color.alpha < 1
+      ? send_id_double(base, 'colorWithAlphaComponent:', color.alpha)
+      : base
+  }
+
+  return _srgb(
+    NSColor, sel('colorWithSRGBRed:green:blue:alpha:'), color.red / 255,
+    color.green / 255, color.blue / 255, color.alpha,
+  )
+}
+
+/**
+ * The `CGColor` of `color` as the current appearance resolves it. Valid
+ * while the `NSColor` it came from lives, which is until the current
+ * autorelease pool drains.
+ *
+ * @param Color color
+ * @returns Pointer
+ */
+def cg_color(color: Color) {
+  return send(ns_color(color), 'CGColor')
+}
+
+# Fonts.
+
+var _font_size_weight = typed(ffi.ptr, [ffi.double, ffi.double])
+var _font_name_size = typed(ffi.ptr, [ffi.ptr, ffi.double])
+var _font_descriptor_size = typed(ffi.ptr, [ffi.ptr, ffi.double])
+var _descriptor_traits = typed(ffi.ptr, [ffi.uint32])
+var _system_font_size = typed(ffi.double, [])
+
+# CSS weights to AppKit's NSFontWeight values.
+def _weight(css: number) {
+  if css <= 150 {
+    return -0.8
+  }
+
+  if css <= 250 {
+    return -0.6
+  }
+
+  if css <= 350 {
+    return -0.4
+  }
+
+  if css <= 450 {
+    return 0
+  }
+
+  if css <= 550 {
+    return 0.23
+  }
+
+  if css <= 650 {
+    return 0.3
+  }
+
+  if css <= 750 {
+    return 0.4
+  }
+
+  if css <= 850 {
+    return 0.56
+  }
+
+  return 0.62
+}
+
+var _DESIGNS = {
+  rounded: 'NSFontDescriptorSystemDesignRounded',
+  serif: 'NSFontDescriptorSystemDesignSerif',
+  monospaced: 'NSFontDescriptorSystemDesignMonospaced',
+}
+
+var _design_names = {}
+
+def _design(name: string) {
+  var found = _design_names.get(name)
+
+  if found == nil {
+    var symbol = ffi.open().symbol(_DESIGNS[name])
+    found = symbol == nil ? nil : symbol.read(ffi.ptr)
+    _design_names[name] = found
+  }
+
+  return found
+}
+
+var _fonts = {}
+
+/**
+ * The system font size, 13 points on current macOS.
+ *
+ * @returns number
+ */
+def system_font_size() {
+  return _system_font_size(cls('NSFont'), sel('systemFontSize'))
+}
+
+/**
+ * The `NSFont` for a `TextStyle`'s data, cached. `base_size` is used when
+ * the style sets no size.
+ *
+ * @param dict style
+ * @param ?number base_size
+ * @returns Pointer
+ */
+def ns_font(style: dict, base_size: ?number) {
+  var size = style.get(
+    'size', base_size == nil ? system_font_size() : base_size,
+  )
+  var weight = style.get('weight', 400)
+  var family = style.get('family')
+  var design = style.get('design', 'default')
+  var italic = style.get('italic', false)
+  var digits = style.get('monospaced_digits', false)
+  var key = '${size}|${weight}|${family}|${design}|${italic}|${digits}'
+  var found = _fonts.get(key)
+
+  if found != nil {
+    return found
+  }
+
+  var NSFont = cls('NSFont')
+  var font = nil
+
+  if family != nil {
+    font = _font_name_size(
+      NSFont, sel('fontWithName:size:'), ns_string(family), size,
+    )
+  }
+
+  if font == nil {
+    if digits {
+      font = _font_size_weight(
+        NSFont, sel('monospacedDigitSystemFontOfSize:weight:'), size,
+        _weight(weight),
+      )
+    } else if design == 'monospaced' {
+      font = _font_size_weight(
+        NSFont, sel('monospacedSystemFontOfSize:weight:'), size,
+        _weight(weight),
+      )
+    } else {
+      font = _font_size_weight(
+        NSFont, sel('systemFontOfSize:weight:'), size, _weight(weight),
+      )
+
+      if design == 'rounded' or design == 'serif' {
+        var descriptor = send_id(
+          send(font, 'fontDescriptor'), 'fontDescriptorWithDesign:',
+          _design(design),
+        )
+
+        if descriptor != nil {
+          font = _font_descriptor_size(
+            NSFont, sel('fontWithDescriptor:size:'), descriptor, size,
+          )
+        }
+      }
+    }
+  }
+
+  if italic {
+    var italic_descriptor = _descriptor_traits(
+      send(font, 'fontDescriptor'), sel('fontDescriptorWithSymbolicTraits:'), 1,
+    )
+    var slanted = _font_descriptor_size(
+      NSFont, sel('fontWithDescriptor:size:'), italic_descriptor, size,
+    )
+
+    if slanted != nil {
+      font = slanted
+    }
+  }
+
+  send(font, 'retain')
+  _fonts[key] = font
+  return font
+}
+
+# Text.
+
+# NSTextAlignment takes iOS's values on Apple silicon, where centre is 1
+# and right is 2, and its own on Intel, where they are the other way round.
+var _intel = ffi.platform().arch == 'x86_64'
+var _ALIGN_RIGHT = _intel ? 1 : 2
+var _ALIGN_CENTER = _intel ? 2 : 1
+
+/**
+ * `NSTextAlignment` for a `TextAlign` value.
+ *
+ * @param string align
+ * @returns number
+ */
+def text_alignment(align: string) {
+  using align {
+    when 'center' {
+      return _ALIGN_CENTER
+    }
+    when 'end' {
+      return _ALIGN_RIGHT
+    }
+    when 'justify' {
+      return 3
+    }
+  }
+
+  return 4
+}
+
+/**
+ * `NSSize` data from a `Size`.
+ *
+ * @param Size size
+ * @returns dict
+ */
+def size_data(size: Size) {
+  return { width: finite(size.width), height: finite(size.height) }
+}
+
+/**
+ * A `Size` from `NSSize` data.
+ *
+ * @param dict data
+ * @returns Size
+ */
+def to_size(data: dict) {
+  return Size(data.width, data.height)
+}
+
+/**
+ * Splits a shortcut such as `cmd+shift+k` into the key equivalent and
+ * the `NSEventModifierFlags` mask.
+ *
+ * @param string shortcut
+ * @returns list `[key, mask]`
+ */
+def parse_shortcut(shortcut: string) {
+  var parts = shortcut.lower().split('+')
+  var key = parts[-1]
+  var mask = 0
+
+  for part in parts[0, parts.length() - 1] {
+    using part {
+      when 'cmd', 'command' {
+        mask = mask | (1 << 20)
+      }
+      when 'shift' {
+        mask = mask | (1 << 17)
+      }
+      when 'alt', 'option', 'opt' {
+        mask = mask | (1 << 19)
+      }
+      when 'ctrl', 'control' {
+        mask = mask | (1 << 18)
+      }
+    }
+  }
+
+  var named = {
+    'enter': '\r',
+    'return': '\r',
+    'escape': '\x1b',
+    'esc': '\x1b',
+    'tab': '\t',
+    'space': ' ',
+    'backspace': '\x08',
+    'delete': '\x7f',
+    'plus': '+',
+    'minus': '-',
+  }
+
+  if named.contains(key) {
+    key = named[key]
+  }
+
+  return [key, mask]
+}

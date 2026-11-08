@@ -1,0 +1,292 @@
+/**
+ * Menus: the menu bar, and menus that open from a view.
+ *
+ * A `MenuItem` either does something of the application's, through
+ * `on_selected`, or plays a standard role, such as `copy` or `quit`,
+ * which the platform carries out the way it always does.
+ *
+ * ```zuri
+ * import zug { MenuBar, Menu, MenuItem }
+ *
+ * var bar = MenuBar([
+ *   Menu('File', [
+ *     MenuItem('New', { shortcut: 'cmd+n', on_selected: @{ echo 'new' } }),
+ *     MenuItem.separator(),
+ *     MenuItem('Close', { role: 'close', shortcut: 'cmd+w' }),
+ *   ]),
+ * ])
+ * ```
+ */
+
+import ..foundation { check_options }
+
+/**
+ * The standard roles a menu item may play.
+ *
+ * @type list
+ */
+var MENU_ROLES = [
+  'about',
+  'hide',
+  'hide_others',
+  'show_all',
+  'quit',
+  'undo',
+  'redo',
+  'cut',
+  'copy',
+  'paste',
+  'delete',
+  'select_all',
+  'minimize',
+  'zoom',
+  'close',
+  'fullscreen',
+  'bring_all_to_front',
+]
+
+/**
+ * One item of a menu.
+ */
+class MenuItem {
+  var label = ''
+  var on_selected
+  var shortcut
+  var enabled = true
+  var checked = false
+  var role
+  var items
+  var is_separator = false
+
+  /**
+   * @param string label
+   * @param ?dict options: `on_selected`, `shortcut` such as `cmd+shift+s`,
+   *    `enabled`, `checked`, `role` (one of `MENU_ROLES`) and `items` for a
+   *    submenu.
+   * @constructor
+   */
+  @new(label: string, options: ?dict) {
+    var o = check_options(
+      options, 'MenuItem',
+      {
+        on_selected: 'function',
+        shortcut: 'string',
+        enabled: 'bool',
+        checked: 'bool',
+        role: 'string',
+        items: 'list',
+      },
+    )
+    self.label = label
+    self.on_selected = o.get('on_selected')
+    self.shortcut = o.get('shortcut')
+    self.enabled = o.get('enabled', true)
+    self.checked = o.get('checked', false)
+    self.role = o.get('role')
+    self.items = o.get('items')
+
+    if self.role != nil and !MENU_ROLES.contains(self.role) {
+      raise ValueError("'${self.role}' is not a menu role; the roles are ${', '.join(MENU_ROLES)}")
+    }
+  }
+
+  /**
+   * A line between groups of items.
+   *
+   * @returns MenuItem
+   */
+  static separator() {
+    var item = MenuItem('')
+    item.is_separator = true
+    return item
+  }
+}
+
+/**
+ * A titled menu of the menu bar.
+ */
+class Menu {
+  var title = ''
+  var items = []
+
+  /**
+   * @param string title
+   * @param list items: `MenuItem`s.
+   * @constructor
+   */
+  @new(title: string, items: list) {
+    self.title = title
+    self.items = items
+  }
+}
+
+/**
+ * The menus of the menu bar, after the application's own menu, which is
+ * always there. An Edit menu and a Window menu are added unless the bar
+ * has menus of those titles.
+ */
+class MenuBar {
+  var menus = []
+
+  /**
+   * Items added to the application's own menu, after About.
+   *
+   * @type list
+   */
+  var app_items = []
+
+  /**
+   * @param list menus: `Menu`s.
+   * @param ?dict options: `app_items`, `MenuItem`s for the application
+   *    menu, such as Settings.
+   * @constructor
+   */
+  @new(menus: list, options: ?dict) {
+    var o = check_options(options, 'MenuBar', { app_items: 'list' })
+
+    for menu in menus {
+      if !instance_of(menu, Menu) {
+        raise TypeError('a MenuBar takes Menus, got ${typeof(menu)}')
+      }
+    }
+
+    self.menus = menus
+    self.app_items = o.get('app_items', [])
+  }
+}
+
+var _EDIT_ITEMS = [
+  { role: 'undo', title: 'Undo', shortcut: 'cmd+z' },
+  { role: 'redo', title: 'Redo', shortcut: 'cmd+shift+z' },
+  { separator: true },
+  { role: 'cut', title: 'Cut', shortcut: 'cmd+x' },
+  { role: 'copy', title: 'Copy', shortcut: 'cmd+c' },
+  { role: 'paste', title: 'Paste', shortcut: 'cmd+v' },
+  { role: 'delete', title: 'Delete' },
+  { role: 'select_all', title: 'Select All', shortcut: 'cmd+a' },
+]
+
+var _WINDOW_ITEMS = [
+  { role: 'minimize', title: 'Minimize', shortcut: 'cmd+m' },
+  { role: 'zoom', title: 'Zoom' },
+  { separator: true },
+  { role: 'bring_all_to_front', title: 'Bring All to Front' },
+]
+
+/**
+ * The whole menu bar as a backend takes it: the application menu, the
+ * application's menus, and Edit and Window menus where the application has
+ * none of its own. Handlers of items that call back are recorded in
+ * `handlers` by id.
+ *
+ * @internal
+ * @param string title: the application's name.
+ * @param ?MenuBar bar
+ * @param dict handlers
+ * @returns list
+ */
+def menu_bar_spec(title: string, bar, handlers: dict) {
+  var app_items = [{ role: 'about', title: 'About ${title}' }]
+
+  if bar != nil and !bar.app_items.is_empty() {
+    app_items.append({ separator: true })
+    app_items.extend(menu_spec(bar.app_items, handlers, 'app.'))
+  }
+
+  app_items.extend([
+    { separator: true },
+    { role: 'hide', title: 'Hide ${title}', shortcut: 'cmd+h' },
+    { role: 'hide_others', title: 'Hide Others', shortcut: 'cmd+alt+h' },
+    { role: 'show_all', title: 'Show All' },
+    { separator: true },
+    { role: 'quit', title: 'Quit ${title}', shortcut: 'cmd+q' },
+  ])
+
+  var menus = [{ title, items: app_items }]
+  var titles = []
+  var custom = bar == nil ? [] : bar.menus
+
+  iter var i = 0; i < custom.length(); i++ {
+    var menu = custom[i]
+    titles.append(menu.title)
+    var spec = {
+      title: menu.title,
+      items: menu_spec(menu.items, handlers, 'menu${i}.'),
+    }
+
+    if menu.title == 'Window' {
+      spec['window_menu'] = true
+    }
+
+    menus.append(spec)
+  }
+
+  if !titles.contains('Edit') {
+    var at = titles.length() > 0 and titles[0] == 'File' ? 2 : 1
+    menus.insert({ title: 'Edit', items: _EDIT_ITEMS }, at)
+  }
+
+  if !titles.contains('Window') {
+    var at = menus.length()
+
+    if titles.contains('Help') {
+      at = menus.length() - 1
+    }
+
+    menus.insert(
+      { title: 'Window', items: _WINDOW_ITEMS, window_menu: true }, at,
+    )
+  }
+
+  return menus
+}
+
+/**
+ * Turns `items` into the plain description a backend takes, giving each
+ * item that calls back an id, and recording its handler under that id in
+ * `handlers`.
+ *
+ * @internal
+ * @param list items
+ * @param dict handlers
+ * @param string prefix
+ * @returns list
+ */
+def menu_spec(items: list, handlers: dict, prefix: string) {
+  var spec = []
+
+  iter var i = 0; i < items.length(); i++ {
+    var item = items[i]
+
+    if !instance_of(item, MenuItem) {
+      raise TypeError('a menu takes MenuItems, got ${typeof(item)}')
+    }
+
+    if item.is_separator {
+      spec.append({ separator: true })
+      continue
+    }
+
+    var entry = {
+      title: item.label,
+      shortcut: item.shortcut,
+      enabled: item.enabled,
+      checked: item.checked,
+      role: item.role,
+    }
+
+    if item.on_selected != nil {
+      var id = '${prefix}${i}'
+      entry['id'] = id
+      handlers[id] = item.on_selected
+    }
+
+    if item.items != nil {
+      entry['items'] = menu_spec(item.items, handlers, '${prefix}${i}.')
+    }
+
+    spec.append(entry)
+  }
+
+  return spec
+}

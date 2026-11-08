@@ -1,0 +1,134 @@
+/**
+ * Borders and shadows for decorated boxes.
+ *
+ * ```zuri
+ * import zug { Border, Shadow, Color }
+ *
+ * var outline = Border.all(1, Color.system('separator'))
+ * var lift = Shadow({ blur: 8, y: 2, color: Color.BLACK.with_alpha(0.2) })
+ * ```
+ */
+
+import ..foundation { Color, check_options }
+
+/**
+ * A line of one width and colour around all four sides of a box.
+ *
+ * @printable
+ */
+class Border {
+
+  /**
+   * The line width in points.
+   *
+   * @type number
+   */
+  var width = 1
+
+  /**
+   * @type Color
+   */
+  var color
+
+  /**
+   * @param number width: not negative.
+   * @param Color color
+   * @throws ValueError When the width is negative
+   * @constructor
+   */
+  @new(width: number, color: Color) {
+    if width < 0 or !width.is_finite() {
+      raise ValueError('a border width must be finite and not negative, got ${width}')
+    }
+
+    self.width = width
+    self.color = color
+  }
+
+  /**
+   * The same border on every side. Native views draw only uniform
+   * borders, so this is the one way to make one.
+   *
+   * @param number width
+   * @param Color color
+   * @returns Border
+   */
+  static all(width: number, color: Color) {
+    return Border(width, color)
+  }
+
+  @eq(other) {
+    return instance_of(other, Border)
+      and self.width == other.width
+      and self.color == other.color
+  }
+
+  @to_string() {
+    return 'Border(${self.width}, ${self.color})'
+  }
+}
+
+var _SHADOW_SPEC = { color: Color, blur: 'number', x: 'number', y: 'number' }
+
+/**
+ * A soft shadow cast by a box.
+ *
+ * @printable
+ */
+class Shadow {
+
+  /**
+   * @type Color
+   */
+  var color
+
+  /**
+   * How far the shadow spreads, in points.
+   *
+   * @type number
+   */
+  var blur = 4
+
+  /**
+   * The horizontal offset, positive to the right.
+   *
+   * @type number
+   */
+  var x = 0
+
+  /**
+   * The vertical offset, positive downwards.
+   *
+   * @type number
+   */
+  var y = 2
+
+  /**
+   * @param ?dict options: `color` (a translucent black when left out),
+   *    `blur` (4), `x` (0) and `y` (2).
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(options, 'Shadow', _SHADOW_SPEC)
+    self.color = o.get('color', Color(0, 0, 0, 0.25))
+    self.blur = o.get('blur', 4)
+    self.x = o.get('x', 0)
+    self.y = o.get('y', 2)
+
+    if self.blur < 0 {
+      raise ValueError('a shadow blur must not be negative, got ${self.blur}')
+    }
+  }
+
+  @eq(other) {
+    return instance_of(other, Shadow)
+      and self.color == other.color
+      and self.blur == other.blur
+      and self.x == other.x
+      and self.y == other.y
+  }
+
+  @to_string() {
+    return 'Shadow(${self.color}, blur ${self.blur}, ${self.x}, ${self.y})'
+  }
+}

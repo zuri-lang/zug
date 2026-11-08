@@ -1,0 +1,173 @@
+/**
+ * Alerts, open panels and save panels.
+ *
+ * Each is shown as a sheet on the window given, and as a dialog of its own
+ * when there is none. Either way the answer reaches zug through the
+ * backend's `answer()`, after the dialog has closed.
+ */
+
+import ffi
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_uint, send_int, typed, ns_string, zuri_string, from_ns_array,
+  ns_array, Block,
+}
+
+# NSAlertStyle values.
+var _STYLES = { warning: 0, informational: 1, critical: 2 }
+
+# NSModalResponseOK.
+var _OK = 1
+
+var _begin_sheet = typed(ffi.void, [ffi.ptr, ffi.ptr])
+var _run_modal = typed(ffi.long, [])
+
+# Shows `panel` as a sheet on `window`, or on its own, and calls `finish`
+# with the response once it closes.
+def _present(panel, window, finish: function) {
+  if window == nil or window.native == nil or window.closed {
+    finish(_run_modal(panel, sel('runModal')))
+    return
+  }
+
+  var block = nil
+  block = Block(@(response) {
+    block.release()
+    finish(response)
+  }, [ffi.long])
+  _begin_sheet(
+    panel, sel('beginSheetModalForWindow:completionHandler:'), window.native,
+    block.pointer,
+  )
+}
+
+/**
+ * Shows an alert and passes `{ button, suppressed }` to `done`.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function done
+ */
+def show_alert(backend, window, spec: dict, done: function) {
+  var alert = send(send(cls('NSAlert'), 'alloc'), 'init')
+  send_void_id(alert, 'setMessageText:', ns_string(spec.get('title', '')))
+  send_void_id(alert, 'setInformativeText:', ns_string(spec.get('message', '')))
+  send_void_uint(
+    alert, 'setAlertStyle:', _STYLES.get(spec.get('style', 'informational'), 1),
+  )
+
+  for title in spec.get('buttons', ['OK']) {
+    send_id(alert, 'addButtonWithTitle:', ns_string(title))
+  }
+
+  var suppression = spec.get('suppression')
+
+  if suppression != nil {
+    send_void_bool(alert, 'setShowsSuppressionButton:', true)
+    send_void_id(
+      send(alert, 'suppressionButton'), 'setTitle:', ns_string(suppression),
+    )
+  }
+
+  _present(alert, window, @(response) {
+    # NSAlertFirstButtonReturn is 1000, and each button after counts up.
+    var suppressed = suppression != nil
+      and send_int(send(alert, 'suppressionButton'), 'state') == 1
+    send_void(alert, 'release')
+    backend.answer(done, { button: response - 1000, suppressed })
+  })
+}
+
+def _apply_common(panel, spec: dict) {
+  var title = spec.get('title')
+
+  if title != nil {
+    send_void_id(panel, 'setMessage:', ns_string(title))
+  }
+
+  var types = spec.get('types')
+
+  if types != nil and !types.is_empty() {
+    send_void_id(
+      panel, 'setAllowedFileTypes:',
+      ns_array(types.map(@(type) => ns_string(type))),
+    )
+  }
+
+  var directory = spec.get('directory')
+
+  if directory != nil {
+    var url = typed(ffi.ptr, [ffi.ptr, ffi.bool])(
+      cls('NSURL'), sel('fileURLWithPath:isDirectory:'), ns_string(directory),
+      true,
+    )
+    send_void_id(panel, 'setDirectoryURL:', url)
+  }
+}
+
+/**
+ * Asks for files or directories, and passes the paths, or `nil`, to
+ * `done`.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function done
+ */
+def pick_files(backend, window, spec: dict, done: function) {
+  var panel = send(cls('NSOpenPanel'), 'openPanel')
+  send_void_bool(panel, 'setCanChooseFiles:', spec.get('files', true) != false)
+  send_void_bool(
+    panel, 'setCanChooseDirectories:', spec.get('directories', false) == true,
+  )
+  send_void_bool(
+    panel, 'setAllowsMultipleSelection:', spec.get('multiple', false) == true,
+  )
+  _apply_common(panel, spec)
+  send_void(panel, 'retain')
+
+  _present(panel, window, @(response) {
+    var paths = nil
+
+    if response == _OK {
+      paths = from_ns_array(send(
+        panel, 'URLs',
+      )).map(@(url) => zuri_string(send(url, 'path')))
+    }
+
+    send_void(panel, 'release')
+    backend.answer(done, paths)
+  })
+}
+
+/**
+ * Asks where to save a file, and passes the path, or `nil`, to `done`.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function done
+ */
+def save_file(backend, window, spec: dict, done: function) {
+  var panel = send(cls('NSSavePanel'), 'savePanel')
+  _apply_common(panel, spec)
+  var name = spec.get('name')
+
+  if name != nil {
+    send_void_id(panel, 'setNameFieldStringValue:', ns_string(name))
+  }
+
+  send_void(panel, 'retain')
+
+  _present(panel, window, @(response) {
+    var path = nil
+
+    if response == _OK {
+      path = zuri_string(send(send(panel, 'URL'), 'path'))
+    }
+
+    send_void(panel, 'release')
+    backend.answer(done, path)
+  })
+}

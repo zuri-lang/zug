@@ -1,0 +1,45 @@
+/**
+ * Value equality that sees through lists and dictionaries.
+ */
+
+/**
+ * Whether `a` and `b` are equal, comparing lists and dictionaries item by
+ * item with `==`, so values inside them that define `@eq`, such as `Color`
+ * and `EdgeInsets`, compare by value. Zuri's own `==` on a list compares
+ * instances inside it by identity.
+ *
+ * @param any a
+ * @param any b
+ * @returns bool
+ */
+def values_equal(a, b) {
+  if is_list(a) {
+    if !is_list(b) or a.length() != b.length() {
+      return false
+    }
+
+    iter var i = 0; i < a.length(); i++ {
+      if !values_equal(a[i], b[i]) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  if is_dict(a) {
+    if !is_dict(b) or a.length() != b.length() {
+      return false
+    }
+
+    for key, value in a {
+      if !b.contains(key) or !values_equal(value, b[key]) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  return a == b
+}

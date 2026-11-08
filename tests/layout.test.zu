@@ -1,0 +1,462 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+# A coloured box of a fixed size, findable by name.
+def block(name, width, height) {
+  return Box({
+    width, height, color: Color.RED, accessibility_identifier: name,
+  })
+}
+
+# A coloured box that takes the size it is given.
+def fill(name) {
+  return Box({ color: Color.BLUE, accessibility_identifier: name })
+}
+
+def frame(tester, name) {
+  return tester.one(name).window_frame()
+}
+
+def show(widget, size) {
+  var tester = WidgetTester()
+  tester.pump_widget(widget, { size: size == nil ? Size(300, 200) : size })
+  return tester
+}
+
+describe('Row', @{
+  it('lays children out left to right with spacing', @{
+    var t = show(Row([block('a', 50, 20), block('b', 30, 10)], { spacing: 10 }))
+    expect(frame(t, 'a')).to_equal(Rect(0, 90, 50, 20))
+    expect(frame(t, 'b')).to_equal(Rect(60, 95, 30, 10))
+    t.dispose()
+  })
+
+  it('justifies along the main axis', @{
+    var cases = {
+      start: [0, 50],
+      end: [200, 250],
+      center: [100, 150],
+      space_between: [0, 250],
+      space_around: [50, 200],
+      space_evenly: [66.66666666666667, 183.33333333333334],
+    }
+
+    for justify, expected in cases {
+      var t = show(Row([block('a', 50, 20), block('b', 50, 20)], { justify }))
+      expect([frame(t, 'a').x, frame(t, 'b').x]).to_equal(expected)
+      t.dispose()
+    }
+  })
+
+  it('aligns items across the main axis', @{
+    var t = show(Row(
+      [block('a', 10, 20), block('b', 10, 40)], { align_items: AlignItems.END },
+    ))
+    expect(frame(t, 'a').y).to_be(180)
+    expect(frame(t, 'b').y).to_be(160)
+    t.dispose()
+
+    var stretched = show(Row(
+      [fill('a'), block('b', 10, 40)], { align_items: AlignItems.STRETCH },
+    ))
+    expect(frame(stretched, 'a').height).to_be(200)
+    stretched.dispose()
+
+    var top = show(Row(
+      [block('a', 10, 20), block('b', 10, 40)],
+      { align_items: AlignItems.START },
+    ))
+    expect(frame(top, 'a').y).to_be(0)
+    expect(frame(top, 'b').y).to_be(0)
+    top.dispose()
+  })
+
+  it('lines text up on its baseline', @{
+    var small = Text(
+      'small',
+      { style: TextStyle({ size: 10 }), accessibility_identifier: 'small' },
+    )
+    var large = Text(
+      'large',
+      { style: TextStyle({ size: 30 }), accessibility_identifier: 'large' },
+    )
+    var t = show(Row([small, large], { align_items: AlignItems.BASELINE }))
+    expect(frame(t, 'small').y + 10).to_be(frame(t, 'large').y + 30)
+    t.dispose()
+  })
+
+  it('takes only what it needs when shrink-wrapped', @{
+    var t = show(Center(Box({
+      color: Color.GRAY,
+      accessibility_identifier: 'row',
+      child: Row([block('a', 50, 20)], { shrink_wrap: true }),
+    })))
+    expect(frame(t, 'row').width).to_be(50)
+    t.dispose()
+  })
+
+  it('shares the spare space among Expanded children by flex', @{
+    var t = show(Row([
+      block('a', 60, 10), Expanded(fill('b')), Expanded(fill('c'), { flex: 2 }),
+    ]))
+    expect(frame(t, 'b')).to_equal(Rect(60, 0, 80, 200))
+    expect(frame(t, 'c')).to_equal(Rect(140, 0, 160, 200))
+    t.dispose()
+  })
+
+  it('lets a Flexible child be smaller than its share', @{
+    var t = show(Row([Flexible(block('a', 40, 10)), Expanded(fill('b'))]))
+    expect(frame(t, 'a').width).to_be(40)
+    expect(frame(t, 'b')).to_equal(Rect(40, 0, 150, 200))
+    t.dispose()
+  })
+
+  it('makes a Spacer push its neighbours apart', @{
+    var t = show(Row([block('a', 20, 10), Spacer(), block('b', 20, 10)]))
+    expect(frame(t, 'b').x).to_be(280)
+    t.dispose()
+  })
+
+  it('reports Expanded children in an unbounded row', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.type)
+    })
+    var t = show(Row([Row([Expanded(fill('a'))])]))
+    set_error_handler(nil)
+    expect(reported).to_contain('LayoutError')
+    t.dispose()
+  })
+})
+
+describe('Column', @{
+  it('lays children out top to bottom, centred across by default', @{
+    var t = show(Column([block('a', 50, 20), Gap(5), block('b', 30, 10)]))
+    expect(frame(t, 'a')).to_equal(Rect(125, 0, 50, 20))
+    expect(frame(t, 'b')).to_equal(Rect(135, 25, 30, 10))
+    t.dispose()
+  })
+
+  it('stretches children across when asked', @{
+    var t = show(Column(
+      [fill('a'), block('b', 10, 10)], { align_items: AlignItems.STRETCH },
+    ))
+    expect(frame(t, 'a').width).to_be(300)
+    expect(frame(t, 'b').width).to_be(300)
+    t.dispose()
+  })
+})
+
+describe('Padding and Box', @{
+  it('insets its child', @{
+    var t = show(Padding(EdgeInsets(1, 2, 3, 4), fill('a')))
+    expect(frame(t, 'a')).to_equal(Rect(1, 2, 296, 194))
+    t.dispose()
+  })
+
+  it('applies margin outside and padding inside the decoration', @{
+    var t = show(Center(Box({
+      margin: EdgeInsets.all(5),
+      padding: EdgeInsets.all(10),
+      color: Color.GRAY,
+      accessibility_identifier: 'box',
+      child: block('a', 20, 20),
+    })))
+    expect(frame(t, 'box')).to_equal(Rect(130, 80, 40, 40))
+    expect(frame(t, 'a')).to_equal(Rect(140, 90, 20, 20))
+    t.dispose()
+  })
+
+  it('fills the space it is given when empty', @{
+    var t = show(fill('a'))
+    expect(frame(t, 'a').size()).to_equal(Size(300, 200))
+    t.dispose()
+  })
+
+  it('bounds its size', @{
+    var t = show(Center(Box({
+      min_width: 120,
+      max_height: 15,
+      color: Color.GRAY,
+      accessibility_identifier: 'box',
+      child: block('a', 20, 20),
+    })))
+    expect(frame(t, 'box').size()).to_equal(Size(120, 15))
+    t.dispose()
+  })
+
+  it('takes a fraction of the space', @{
+    var t = show(Box({
+      width_factor: 0.5,
+      height_factor: 0.25,
+      color: Color.GRAY,
+      accessibility_identifier: 'box',
+    }))
+    expect(frame(t, 'box')).to_equal(Rect(75, 75, 150, 50))
+    t.dispose()
+  })
+
+  it('aligns its child', @{
+    var t = show(Box({
+      alignment: Alignment.BOTTOM_RIGHT,
+      child: block('a', 10, 10),
+    }))
+    expect(frame(t, 'a').origin()).to_equal(Point(290, 190))
+    t.dispose()
+  })
+
+  it('refuses bad values', @{
+    expect(@{
+      Box({ opacity: 2 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Box({ width: -1 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Box({ colour: Color.RED })
+    }).to_raise_instance_of(OptionError)
+  })
+})
+
+describe('Align and Center', @{
+  it('places the child by alignment', @{
+    var t = show(Align(block('a', 10, 10), { alignment: Alignment.TOP_RIGHT }))
+    expect(frame(t, 'a').origin()).to_equal(Point(290, 0))
+    t.dispose()
+  })
+
+  it('shrinks to a multiple of the child with factors', @{
+    var t = show(Center(Box({
+      color: Color.GRAY,
+      accessibility_identifier: 'outer',
+      child: Center(
+        block('a', 10, 20), { width_factor: 2, height_factor: 1.5 },
+      ),
+    })))
+    expect(frame(t, 'outer').size()).to_equal(Size(20, 30))
+    t.dispose()
+  })
+})
+
+describe('Stack', @{
+  it('sizes to its largest plain child and places positioned ones by edge', @{
+    var t = show(Center(Box({
+      color: Color.GRAY,
+      accessibility_identifier: 'stack',
+      child: Stack([
+        block('base', 100, 60),
+        Positioned(block('badge', 10, 10), { top: 5, right: 5 }),
+        Positioned(fill('strip'), { left: 0, right: 0, bottom: 0, height: 8 }),
+      ]),
+    })))
+    var origin = frame(t, 'stack').origin()
+    expect(frame(t, 'stack').size()).to_equal(Size(100, 60))
+    expect(frame(t, 'badge').origin() - origin).to_equal(Point(85, 5))
+    expect(frame(t, 'strip')).to_equal(Rect(origin.x, origin.y + 52, 100, 8))
+    t.dispose()
+  })
+
+  it('aligns plain children', @{
+    var t = show(Stack(
+      [block('big', 100, 100), block('small', 10, 10)],
+      { alignment: Alignment.CENTER, fit: StackFit.LOOSE },
+    ))
+    expect(
+      frame(t, 'small').origin() - frame(t, 'big').origin(),
+    ).to_equal(Point(45, 45))
+    t.dispose()
+  })
+
+  it('refuses Positioned outside a Stack', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.message)
+    })
+    var t = show(Column([Positioned(block('a', 1, 1), { top: 0 })]))
+    set_error_handler(nil)
+    expect(reported.length() >= 1).to_be_true()
+    t.dispose()
+  })
+})
+
+describe('Wrap', @{
+  it('starts a new run when the next child does not fit', @{
+    var t = show(Wrap(
+      [block('a', 120, 10), block('b', 120, 20), block('c', 120, 10)],
+      { spacing: 10, run_spacing: 5 },
+    ))
+    expect(frame(t, 'a').origin()).to_equal(Point(0, 0))
+    expect(frame(t, 'b').origin()).to_equal(Point(130, 0))
+    expect(frame(t, 'c').origin()).to_equal(Point(0, 25))
+    t.dispose()
+  })
+})
+
+describe('Grid', @{
+  it('flows children into equal columns, with spans', @{
+    var t = show(Grid([
+      fill('a'), fill('b'), fill('c'),
+      GridCell(fill('wide'), { column_span: 2 }), fill('d'),
+    ], { columns: 3, spacing: 6, row_height: 40 }))
+    expect(frame(t, 'a')).to_equal(Rect(0, 0, 96, 40))
+    expect(frame(t, 'c')).to_equal(Rect(204, 0, 96, 40))
+    expect(frame(t, 'wide')).to_equal(Rect(0, 46, 198, 40))
+    expect(frame(t, 'd')).to_equal(Rect(204, 46, 96, 40))
+    t.dispose()
+  })
+
+  it('places a child spanning rows and flows around it', @{
+    var t = show(Grid(
+      [GridCell(fill('tall'), { row_span: 2 }), fill('b'), fill('c')],
+      { columns: 2, row_height: 10 },
+    ))
+    expect(frame(t, 'tall')).to_equal(Rect(0, 0, 150, 20))
+    expect(frame(t, 'b')).to_equal(Rect(150, 0, 150, 10))
+    expect(frame(t, 'c')).to_equal(Rect(150, 10, 150, 10))
+    t.dispose()
+  })
+
+  it('sizes rows from an aspect ratio', @{
+    var t = show(Grid([fill('a'), fill('b')], { columns: 2, aspect_ratio: 3 }))
+    expect(frame(t, 'a').height).to_be(50)
+    t.dispose()
+  })
+
+  it('needs a whole number of columns', @{
+    expect(@{
+      Grid([], { columns: 0 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Grid([], {})
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('AspectRatio and FitContent', @{
+  it('keeps a ratio within the space', @{
+    var t = show(Center(AspectRatio(2, fill('a'))))
+    expect(frame(t, 'a').size()).to_equal(Size(300, 150))
+    t.dispose()
+  })
+
+  it('fits a column to its widest child', @{
+    var t = show(Center(FitContent(
+      Column(
+        [block('a', 40, 10), fill('b')], { align_items: AlignItems.STRETCH },
+      ),
+      { axis: Axis.HORIZONTAL },
+    )))
+    expect(frame(t, 'b').width).to_be(40)
+    t.dispose()
+  })
+})
+
+describe('Visibility', @{
+  it('removes a hidden child', @{
+    var t = show(Column([
+      Visibility(block('a', 10, 10), { visible: false }), block('b', 10, 10),
+    ]))
+    expect(t.find_identifier('a')).to_be_empty()
+    expect(frame(t, 'b').y).to_be(0)
+    t.dispose()
+  })
+
+  it('keeps a hidden child alive with keep_state, out of the window', @{
+    var visible = ObservableValue(true)
+    var t = show(Observer(
+      visible,
+      @(context) => Column([
+        Visibility(
+          block('a', 10, 10), { visible: visible.value(), keep_state: true },
+        ),
+        block('b', 10, 10),
+      ]),
+    ))
+    var view = t.one('a')
+    visible.set(false)
+    t.pump()
+    expect(view.destroyed).to_be_false()
+    expect(view.parent_view).to_be_nil()
+    expect(frame(t, 'b').y).to_be(0)
+    visible.set(true)
+    t.pump()
+    expect(view.parent_view == nil).to_be_false()
+    expect(frame(t, 'b').y).to_be(10)
+    t.dispose()
+  })
+})
+
+describe('Responsive', @{
+  it('builds from the constraints it is given, again when they change', @{
+    var t = show(Responsive(@(context, constraints) {
+      if constraints.max_width > 400 {
+        return Text('wide')
+      }
+
+      return Text('narrow')
+    }))
+    expect(t.find_text('narrow')).to_have_length(1)
+    t.window().resize(Size(500, 200))
+    expect(t.find_text('wide')).to_have_length(1)
+    expect(t.find_text('narrow')).to_be_empty()
+    t.dispose()
+  })
+})
+
+describe('Text', @{
+  it('wraps at the width it is given', @{
+    var long = 'x'.rpad(100, 'x')
+    var t = show(
+      Align(
+        Box({
+          width: 120,
+          child: Text(long, { accessibility_identifier: 'text' }),
+        }),
+        { alignment: Alignment.TOP_LEFT },
+      ),
+      Size(300, 300),
+    )
+    var size = frame(t, 'text').size()
+    expect(size.width).to_be(120)
+    expect(size.height > 17).to_be_true()
+    t.dispose()
+  })
+
+  it('limits its lines', @{
+    var long = 'x'.rpad(100, 'x')
+    var t = show(
+      Align(
+        Box({
+          width: 120,
+          child: Text(long, { max_lines: 2, accessibility_identifier: 'text' }),
+        }),
+        { alignment: Alignment.TOP_LEFT },
+      ),
+      Size(300, 300),
+    )
+    expect(frame(t, 'text').height).to_be(34)
+    t.dispose()
+  })
+})
+
+describe('Window', @{
+  it('fills its content area and follows a resize', @{
+    var t = show(fill('a'))
+    t.window().resize(Size(400, 250))
+    expect(frame(t, 'a').size()).to_equal(Size(400, 250))
+    t.dispose()
+  })
+
+  it('can take the size of its content', @{
+    var t = WidgetTester()
+    t.pump_widget(App({
+      windows: [Window(
+        'Fitted', block('a', 120, 80), { size_to_content: true },
+      )],
+    }))
+    expect(t.window().content_size()).to_equal(Size(120, 80))
+    t.dispose()
+  })
+})

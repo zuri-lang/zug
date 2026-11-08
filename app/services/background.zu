@@ -1,0 +1,164 @@
+/**
+ * Work done away from the user interface thread, on isolates.
+ *
+ * The interface stays responsive while the work runs; its result arrives
+ * on the interface thread. The function is run on another isolate, so it
+ * sees copies of what it is given, and its result is copied back.
+ *
+ * ```zuri,ignore
+ * def count_lines(path) {
+ *   return file(path).read().lines().length()
+ * }
+ *
+ * run_in_background(count_lines, 'big.log').then(@(count) {
+ *   self.set_state(@{ self.lines = count })
+ * })
+ * ```
+ */
+
+import isolate
+import ..foundation { Deferred, Duration, Observable, report_error }
+import .timer { Timer }
+
+# How often the interface checks for finished work while any is running.
+var _POLL = Duration.ms(10)
+
+/**
+ * Runs `fn` with `argument` on another isolate. The promise is resolved
+ * with what it returns, or rejected with what it raises, which arrives as
+ * an `IsolateError` whose message starts with the original error's type
+ * and message.
+ *
+ * @param function fn
+ * @param any argument
+ * @returns Promise
+ */
+def run_in_background(fn: function, argument) {
+  var deferred = Deferred()
+  var task = isolate.spawn(fn, argument)
+
+  Timer.periodic(_POLL, @(timer) {
+    if !task.is_done() {
+      return
+    }
+
+    timer.cancel()
+    var result = nil
+
+    catch {
+      result = task.join()
+    } as error {
+      deferred.reject(error)
+      return
+    }
+
+    deferred.resolve(result)
+  })
+
+  return deferred.promise
+}
+
+/**
+ * A long-running isolate that exchanges messages with the interface.
+ *
+ * Its `entry` function is called with two channels: one it receives
+ * messages from, and one it sends replies to. It runs until it returns.
+ *
+ * ```zuri,ignore
+ * def indexer(inbox, outbox) {
+ *   while true {
+ *     var path = inbox.recv()
+ *
+ *     if path == nil and inbox.is_closed() {
+ *       return
+ *     }
+ *
+ *     outbox.send({ path: path, words: file(path).read().split(' ').length() })
+ *   }
+ * }
+ *
+ * var worker = Worker(indexer, { on_message: @(reply) { echo reply } })
+ * worker.send('notes.txt')
+ * ```
+ */
+class Worker {
+  var _inbox
+  var _outbox
+  var _task
+  var _timer
+  var _on_message
+  var _on_error
+
+  /**
+   * @param function entry
+   * @param ?dict options: `on_message`, called with each reply on the
+   *    interface thread; `on_error`, called with the error if `entry`
+   *    raises; and `capacity`, how many messages may wait each way (64).
+   * @constructor
+   */
+  @new(entry: function, options: ?dict) {
+    var o = options == nil ? {} : options
+    var capacity = o.get('capacity', 64)
+    self._on_message = o.get('on_message')
+    self._on_error = o.get('on_error')
+    self._inbox = isolate.channel(capacity)
+    self._outbox = isolate.channel(capacity)
+    self._task = isolate.spawn(entry, self._inbox, self._outbox)
+    self._timer = Timer.periodic(_POLL, @(timer) {
+      self._poll()
+    })
+  }
+
+  _poll() {
+    while self._outbox.length() > 0 {
+      var reply = self._outbox.try_recv()
+
+      if self._on_message != nil {
+        catch {
+          self._on_message(reply)
+        } as error {
+          report_error(error, 'handling a message from a worker')
+        }
+      }
+    }
+
+    if self._task.is_done() {
+      self._timer.cancel()
+
+      catch {
+        self._task.join()
+      } as error {
+        if self._on_error != nil {
+          self._on_error(error)
+        } else {
+          report_error(error, 'running a worker')
+        }
+      }
+    }
+  }
+
+  /**
+   * Sends `message` to the worker, waiting while its inbox is full.
+   *
+   * @param any message
+   */
+  send(message) {
+    self._inbox.send(message)
+  }
+
+  /**
+   * Closes the worker's inbox, so it can finish once it has drained it.
+   */
+  close() {
+    self._inbox.close()
+  }
+
+  /**
+   * Whether the worker is still running.
+   *
+   * @returns bool
+   */
+  is_running() {
+    return !self._task.is_done()
+  }
+}

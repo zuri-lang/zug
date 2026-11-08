@@ -1,0 +1,21 @@
+/**
+ * The backends zug ships, registered so `run_app()` finds the one for the
+ * running platform. Each is loaded only when chosen.
+ */
+
+import os
+import zuri
+import ..backend { register_backend }
+
+var _here = os.dir_name(__file__)
+
+def _load(name: string) {
+  return zuri.import_file(os.join_paths(_here, name, 'index.zu')).create()
+}
+
+register_backend('macos', @{
+  return _load('macos')
+}, @() => os.platform == 'macos')
+register_backend('headless', @{
+  return _load('headless')
+}, @() => true)

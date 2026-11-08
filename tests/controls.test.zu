@@ -1,0 +1,440 @@
+import test { * }
+
+import date
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+# A widget whose single value lives in an observable, so a test can read
+# what a control reported and see the control follow.
+def bound(initial, make) {
+  var value = ObservableValue(initial)
+  var widget = Observer(value, @(context) => make(value.value(), @(next) {
+    value.set(next)
+  }))
+  return [value, widget]
+}
+
+def one_of(tester, kind) {
+  var found = tester.find_kind(kind)
+  expect(found).to_have_length(1)
+  return found[0]
+}
+
+describe('Checkbox', @{
+  it('reports a click and follows the value', @{
+    var pair = bound(
+      false,
+      @(value, set) => Checkbox(value, { label: 'Agree', on_changed: set }),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    var box = one_of(t, 'checkbox')
+    expect(box.props.title).to_be('Agree')
+    box.fire('changed', { value: true })
+    expect(pair[0].value()).to_be_true()
+    expect(box.props.value).to_be_true()
+    t.dispose()
+  })
+
+  it('is disabled without on_changed, and needs tristate for nil', @{
+    var t = WidgetTester().pump_widget(Checkbox(true))
+    expect(one_of(t, 'checkbox').props.enabled).to_be_false()
+    expect(@{
+      Checkbox(nil)
+    }).to_raise_instance_of(ValueError)
+    expect(Checkbox(nil, { tristate: true }).value).to_be_nil()
+    t.dispose()
+  })
+})
+
+describe('RadioGroup', @{
+  it('selects the radio of its value and reports the one chosen', @{
+    var pair = bound(
+      'rad',
+      @(value, set) => RadioGroup(
+        { deg: 'Degrees', rad: 'Radians' }, value, { on_changed: set },
+      ),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    var radios = t.find_kind('radio')
+    expect(radios.map(
+      @(view) => view.props.title,
+    )).to_equal(['Degrees', 'Radians'])
+    expect(radios.map(@(view) => view.props.selected)).to_equal([false, true])
+    radios[0].fire('changed', { selected: true })
+    expect(pair[0].value()).to_be('deg')
+    expect(t
+      .find_kind('radio')
+      .map(@(view) => view.props.selected)).to_equal([true, false])
+    t.dispose()
+  })
+
+  it('puts a refused choice back', @{
+    var t = WidgetTester().pump_widget(RadioGroup(
+      ['a', 'b'], 'a', { on_changed: @(value) {} },
+    ))
+    var radios = t.find_kind('radio')
+    radios[1].fire('changed', { selected: true })
+    expect(radios.map(@(view) => view.props.selected)).to_equal([true, false])
+    t.dispose()
+  })
+})
+
+describe('Switch, Slider and Stepper', @{
+  it('report their values', @{
+    var on = bound(false, @(value, set) => Switch(value, { on_changed: set }))
+    var t = WidgetTester().pump_widget(on[1])
+    one_of(t, 'switch').fire('changed', { value: true })
+    expect(on[0].value()).to_be_true()
+    t.dispose()
+
+    var level = bound(
+      0.5,
+      @(value, set) => Slider(
+        value, { min: 0, max: 10, divisions: 10, on_changed: set },
+      ),
+    )
+    t = WidgetTester().pump_widget(level[1])
+    var slider = one_of(t, 'slider')
+    expect(slider.props.max).to_be(10)
+    slider.fire('changed', { value: 7 })
+    expect(level[0].value()).to_be(7)
+    t.dispose()
+
+    var count = bound(
+      3, @(value, set) => Stepper(value, { min: 0, max: 5, on_changed: set }),
+    )
+    t = WidgetTester().pump_widget(count[1])
+    one_of(t, 'stepper').fire('changed', { value: 4 })
+    expect(count[0].value()).to_be(4)
+    t.dispose()
+  })
+
+  it('clamp a value outside their range', @{
+    var t = WidgetTester().pump_widget(Slider(
+      50, { max: 10, on_changed: @(value) {} },
+    ))
+    expect(one_of(t, 'slider').props.value).to_be(10)
+    t.dispose()
+  })
+
+  it('refuse an empty range', @{
+    expect(@{
+      Slider(0, { min: 1, max: 1 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Stepper(0, { step: 0 })
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('fill a row with a slider', @{
+    var t = WidgetTester().pump_widget(
+      Row([Text('Volume'), Expanded(Slider(0.2, { on_changed: @(value) {} }))]),
+      { size: Size(300, 100) },
+    )
+    expect(one_of(t, 'slider').frame.width > 200).to_be_true()
+    t.dispose()
+  })
+})
+
+describe('Dropdown', @{
+  it('shows the index of its value and reports values, not indices', @{
+    var items = [
+      DropdownItem(0, 'None'), DropdownItem.separator(), DropdownItem(2, 'Two'),
+      DropdownItem(4, 'Four'),
+    ]
+    var pair = bound(
+      2, @(value, set) => Dropdown(items, value, { on_changed: set }),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    var popup = one_of(t, 'popup')
+    expect(popup.props.selected).to_be(2)
+    expect(popup.props.items[1]).to_equal({ separator: true })
+    popup.fire('changed', { selected: 3 })
+    expect(pair[0].value()).to_be(4)
+    expect(popup.props.selected).to_be(3)
+    t.dispose()
+  })
+
+  it('takes plain strings as items', @{
+    var t = WidgetTester().pump_widget(Dropdown(
+      ['Small', 'Large'], 'Large', { on_changed: @(value) {} },
+    ))
+    expect(one_of(t, 'popup').props.selected).to_be(1)
+    t.dispose()
+  })
+})
+
+describe('SegmentedControl', @{
+  it('chooses one segment', @{
+    var pair = bound(
+      0,
+      @(value, set) => SegmentedControl(
+        ['Basic', 'Scientific'], value, { on_changed: set },
+      ),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    var control = one_of(t, 'segmented')
+    expect(control.props.selected).to_equal([0])
+    control.fire('changed', { selected: [1] })
+    expect(pair[0].value()).to_be(1)
+    t.dispose()
+  })
+
+  it('chooses any number of segments', @{
+    var pair = bound(
+      [0],
+      @(value, set) => SegmentedControl(
+        ['B', 'I', 'U'], value, { mode: SegmentMode.ANY, on_changed: set },
+      ),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    one_of(t, 'segmented').fire('changed', { selected: [0, 2] })
+    expect(pair[0].value()).to_equal([0, 2])
+    t.dispose()
+  })
+
+  it('reports clicks in momentary mode', @{
+    var pressed = []
+    var t = WidgetTester().pump_widget(SegmentedControl(
+      ['<', '>'], nil, { mode: SegmentMode.MOMENTARY, on_pressed: @(index) {
+        pressed.append(index)
+      } },
+    ))
+    one_of(t, 'segmented').fire('pressed', { index: 1 })
+    expect(pressed).to_equal([1])
+    t.dispose()
+  })
+})
+
+describe('DatePicker and ColorWell', @{
+  it('pass dates and colours through', @{
+    var start = date.from_time(1700000000)
+    var pair = bound(
+      start, @(value, set) => DatePicker(value, { on_changed: set }),
+    )
+    var t = WidgetTester().pump_widget(pair[1])
+    var picker = one_of(t, 'date_picker')
+    expect(picker.props.value).to_be(1700000000)
+    picker.fire('changed', { value: 1700086400 })
+    expect(pair[0].value().to_time()).to_be(1700086400)
+    expect(@{
+      DatePicker(12)
+    }).to_raise_instance_of(TypeError)
+    t.dispose()
+
+    var shade = bound(
+      Color.RED, @(value, set) => ColorWell(value, { on_changed: set }),
+    )
+    t = WidgetTester().pump_widget(shade[1])
+    one_of(t, 'color_well').fire('changed', { value: Color.BLUE })
+    expect(shade[0].value()).to_equal(Color.BLUE)
+    t.dispose()
+  })
+})
+
+describe('TextField', @{
+  it('keeps its controller and the view in step', @{
+    var controller = TextController('hello')
+    var t = WidgetTester().pump_widget(TextField({ controller }))
+    var field = one_of(t, 'text_field')
+    expect(field.props.text).to_be('hello')
+    field.fire('changed', { text: 'hello world', selection: [11, 11] })
+    expect(controller.text()).to_be('hello world')
+    expect(controller.selection()).to_equal([11, 11])
+    expect(field.updates).to_be_empty()
+    controller.set_text('replaced')
+    t.pump()
+    expect(field.props.text).to_be('replaced')
+    t.dispose()
+  })
+
+  it('reports changes and submissions', @{
+    var changes = []
+    var submitted = []
+    var t = WidgetTester().pump_widget(TextField({ on_changed: @(text) {
+      changes.append(text)
+    }, on_submitted: @(text) {
+      submitted.append(text)
+    } }))
+    var field = one_of(t, 'text_field')
+    field.fire('changed', { text: 'a' })
+    field.fire('changed', { text: 'ab' })
+    field.fire('submitted', nil)
+    expect(changes).to_equal(['a', 'ab'])
+    expect(submitted).to_equal(['ab'])
+    t.dispose()
+  })
+
+  it('caps the length and filters input', @{
+    var controller = TextController()
+    var digits = @(text, previous) => text.match('/^[0-9]*$/') ? true : false
+    var t = WidgetTester().pump_widget(TextField({
+      controller,
+      max_length: 3,
+      input_filter: digits,
+    }))
+    var field = one_of(t, 'text_field')
+    field.fire('changed', { text: '12' })
+    field.fire('changed', { text: '12x' })
+    expect(controller.text()).to_be('12')
+    expect(field.props.text).to_be('12')
+    field.fire('changed', { text: '12345' })
+    expect(controller.text()).to_be('123')
+    expect(field.props.text).to_be('123')
+    t.dispose()
+  })
+
+  it('shows exactly its text when driven by it', @{
+    var t = WidgetTester().pump_widget(TextField({
+      text: 'fixed',
+      on_changed: @(text) {},
+    }))
+    var field = one_of(t, 'text_field')
+    field.fire('changed', { text: 'fixed!' })
+    expect(field.props.text).to_be('fixed')
+    t.dispose()
+  })
+
+  it('is read-only when driven by text with nothing to call', @{
+    var t = WidgetTester().pump_widget(Column([
+      TextField({ text: 'fixed', placeholder: 'fixed' }),
+      TextField({
+        text: 'driven',
+        placeholder: 'driven',
+        on_changed: @(text) {},
+      }),
+      TextArea({ text: 'fixed area' }),
+      TextArea({ controller: TextController('own area') }),
+      SearchField({ text: 'fixed search' }),
+    ]))
+    var fields = t.find_kind('text_field')
+    expect(fields.map(@(field) => field.props.editable)).to_equal([false, true])
+    var areas = t.find_kind('text_area')
+    expect(areas.map(@(area) => area.props.editable)).to_equal([false, true])
+    expect(one_of(t, 'search_field').props.editable).to_be_false()
+    t.dispose()
+  })
+
+  it('takes focus when asked', @{
+    var controller = TextController()
+    var t = WidgetTester().pump_widget(Column([
+      TextField({ placeholder: 'first' }),
+      TextField({ controller, placeholder: 'second' }),
+    ]))
+    controller.request_focus()
+    t.pump()
+    expect(t.backend.focused.props.placeholder).to_be('second')
+    t.dispose()
+  })
+
+  it('takes focus on its own with autofocus', @{
+    var t = WidgetTester().pump_widget(TextField({
+      autofocus: true,
+      placeholder: 'auto',
+    }))
+    expect(t.backend.focused.props.placeholder).to_be('auto')
+    t.dispose()
+  })
+
+  it('becomes a different view when obscured', @{
+    var hidden = ObservableValue(false)
+    var controller = TextController('secret')
+    var t = WidgetTester().pump_widget(Observer(
+      hidden, @(context) => TextField({ controller, obscure: hidden.value() }),
+    ))
+    var before = one_of(t, 'text_field')
+    hidden.set(true)
+    t.pump()
+    var after = one_of(t, 'text_field')
+    expect(after == before).to_be_false()
+    expect(after.props.secure).to_be_true()
+    expect(after.props.text).to_be('secret')
+    t.dispose()
+  })
+
+  it('refuses a controller and text together', @{
+    expect(@{
+      TextField({ controller: TextController(), text: 'x' })
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('ComboBox', @{
+  it('sets its text from a chosen item', @{
+    var controller = TextController()
+    var chosen = []
+    var t = WidgetTester().pump_widget(ComboBox(
+      ['1+1', '2*3'], { controller, on_selected: @(index, text) {
+        chosen.append([index, text])
+      } },
+    ))
+    var combo = one_of(t, 'combo_box')
+    expect(combo.props.items).to_equal(['1+1', '2*3'])
+    combo.fire('selected', { index: 1, text: '2*3' })
+    expect(controller.text()).to_be('2*3')
+    expect(chosen).to_equal([[1, '2*3']])
+    t.dispose()
+  })
+})
+
+describe('Separator', @{
+  it('runs across a column and down a row', @{
+    var t = WidgetTester().pump_widget(
+      Column(
+        [Text('a'), Separator(), Text('b')],
+        { align_items: AlignItems.STRETCH },
+      ),
+      { size: Size(200, 100) },
+    )
+    expect(one_of(t, 'separator').frame.size()).to_equal(Size(200, 1))
+    t.dispose()
+
+    t = WidgetTester().pump_widget(
+      Row(
+        [Text('a'), Separator(), Text('b')],
+        { align_items: AlignItems.STRETCH },
+      ),
+      { size: Size(200, 100) },
+    )
+    expect(one_of(t, 'separator').frame.size()).to_equal(Size(1, 100))
+    t.dispose()
+  })
+})
+
+describe('GroupBox', @{
+  it('puts its child inside its insets', @{
+    var t = WidgetTester().pump_widget(Center(GroupBox(
+      Box({
+        width: 50,
+        height: 20,
+        color: Color.RED,
+        accessibility_identifier: 'inner',
+      }),
+      { title: 'Group' },
+    )))
+    var group = one_of(t, 'group_box')
+    var inner = t.one('inner')
+    expect(group.frame.size()).to_equal(Size(66, 50))
+    expect(inner.parent_view).to_be(group)
+    expect(inner.frame.origin()).to_equal(Point(0, 0))
+    t.dispose()
+  })
+})
+
+describe('Image and Icon', @{
+  it('size a symbol to its point size', @{
+    var t = WidgetTester().pump_widget(Center(Icon('gearshape', { size: 20 })))
+    var image = one_of(t, 'image')
+    expect(image.frame.size()).to_equal(Size(20, 20))
+    expect(image.props.source.symbol).to_be('gearshape')
+    t.dispose()
+  })
+
+  it('take an explicit size', @{
+    var t = WidgetTester().pump_widget(Center(Image(
+      ImageSource.file('/tmp/x.png'), { width: 48, height: 24 },
+    )))
+    expect(one_of(t, 'image').frame.size()).to_equal(Size(48, 24))
+    t.dispose()
+  })
+})

@@ -1,0 +1,753 @@
+/**
+ * Render objects with one child that change its constraints or position.
+ */
+
+import ..foundation {
+  Point, Size, Constraints, EdgeInsets, Alignment, INFINITY, LayoutError,
+}
+import .object { RenderObject }
+
+/**
+ * A render object with at most one child that, by default, takes its
+ * child's size. Subclasses change the constraints or the position.
+ */
+class RenderProxy < RenderObject {
+
+  perform_layout() {
+    var child = self.child()
+
+    if child == nil {
+      self.size = self.constraints.smallest()
+      return
+    }
+
+    child.layout(self.constraints, true)
+    self.place_child(child, Point.ZERO)
+    self.size = child.size
+  }
+}
+
+/**
+ * Insets its child by `padding`.
+ */
+class RenderPadding < RenderObject {
+
+  /**
+   * @type EdgeInsets
+   */
+  var padding
+
+  /**
+   * @param EdgeInsets padding
+   * @constructor
+   */
+  @new(padding: EdgeInsets) {
+    parent()
+    self.padding = padding
+  }
+
+  /**
+   * @param EdgeInsets padding
+   */
+  set_padding(padding: EdgeInsets) {
+    if padding != self.padding {
+      self.padding = padding
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    var child = self.child()
+
+    if child == nil {
+      self.size = self.constraints.constrain(Size(
+        self.padding.horizontal(), self.padding.vertical(),
+      ))
+      return
+    }
+
+    child.layout(self.constraints.deflate(self.padding), true)
+    self.place_child(child, self.padding.top_left())
+    self.size = self.constraints.constrain(self.padding.inflate_size(child.size))
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var child = self.child()
+    var inner = child == nil
+      ? 0
+      : child.min_intrinsic_width((height - self.padding.vertical()).max(0))
+    return inner + self.padding.horizontal()
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    var inner = child == nil
+      ? 0
+      : child.max_intrinsic_width((height - self.padding.vertical()).max(0))
+    return inner + self.padding.horizontal()
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    var child = self.child()
+    var inner = child == nil
+      ? 0
+      : child.min_intrinsic_height((width - self.padding.horizontal()).max(0))
+    return inner + self.padding.vertical()
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    var inner = child == nil
+      ? 0
+      : child.max_intrinsic_height((width - self.padding.horizontal()).max(0))
+    return inner + self.padding.vertical()
+  }
+}
+
+/**
+ * Places its child within itself by `alignment`. On an axis with a factor
+ * or no bound, it takes the child's size times the factor; otherwise it
+ * fills the axis.
+ */
+class RenderAlign < RenderObject {
+
+  /**
+   * @type Alignment
+   */
+  var alignment
+
+  /**
+   * @type ?number
+   */
+  var width_factor
+
+  /**
+   * @type ?number
+   */
+  var height_factor
+
+  /**
+   * @param Alignment alignment
+   * @param ?number width_factor
+   * @param ?number height_factor
+   * @constructor
+   */
+  @new(alignment: Alignment, width_factor: ?number, height_factor: ?number) {
+    parent()
+    self.alignment = alignment
+    self.width_factor = width_factor
+    self.height_factor = height_factor
+  }
+
+  /**
+   * @param Alignment alignment
+   * @param ?number width_factor
+   * @param ?number height_factor
+   */
+  configure(
+    alignment: Alignment, width_factor: ?number, height_factor: ?number,
+  ) {
+    if alignment != self.alignment
+      or width_factor != self.width_factor
+      or height_factor != self.height_factor {
+      self.alignment = alignment
+      self.width_factor = width_factor
+      self.height_factor = height_factor
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    var shrink_width = self.width_factor != nil
+      or !self.constraints.has_bounded_width()
+    var shrink_height = self.height_factor != nil
+      or !self.constraints.has_bounded_height()
+    var child = self.child()
+
+    if child == nil {
+      self.size = self.constraints.constrain(Size(
+        shrink_width ? 0 : INFINITY, shrink_height ? 0 : INFINITY,
+      ))
+      return
+    }
+
+    child.layout(self.constraints.loosen(), true)
+    var width = shrink_width
+      ? child.size.width * (self.width_factor == nil ? 1 : self.width_factor)
+      : INFINITY
+    var height = shrink_height
+      ? child.size.height * (self.height_factor == nil ? 1 : self.height_factor)
+      : INFINITY
+    self.size = self.constraints.constrain(Size(width, height))
+    self.place_child(child, self.alignment.offset_for(child.size, self.size))
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil
+      ? 0
+      : child.min_intrinsic_width(height)
+        * (self.width_factor == nil ? 1 : self.width_factor)
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil
+      ? 0
+      : child.max_intrinsic_width(height)
+        * (self.width_factor == nil ? 1 : self.width_factor)
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil
+      ? 0
+      : child.min_intrinsic_height(width)
+        * (self.height_factor == nil ? 1 : self.height_factor)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil
+      ? 0
+      : child.max_intrinsic_height(width)
+        * (self.height_factor == nil ? 1 : self.height_factor)
+  }
+}
+
+/**
+ * Adds constraints of its own to the ones it is given, and, when `fill`
+ * is set and it has no child, takes the largest size allowed.
+ */
+class RenderConstrained < RenderObject {
+
+  /**
+   * @type Constraints
+   */
+  var extra
+
+  /**
+   * @param Constraints extra
+   * @constructor
+   */
+  @new(extra: Constraints) {
+    parent()
+    self.extra = extra
+  }
+
+  /**
+   * @param Constraints extra
+   */
+  set_extra(extra: Constraints) {
+    if extra != self.extra {
+      self.extra = extra
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    var inner = self.extra.enforce(self.constraints)
+    var child = self.child()
+
+    if child == nil {
+      self.size = inner.constrain(Size.ZERO)
+      return
+    }
+
+    child.layout(inner, true)
+    self.place_child(child, Point.ZERO)
+    self.size = child.size
+  }
+
+  # A fixed, finite dimension is the answer. An expanding one, whose
+  # minimum is infinite, says nothing about intrinsic size, so the child
+  # answers instead.
+  _intrinsic_width(compute) {
+    if self.extra.has_bounded_width() and self.extra.has_tight_width() {
+      return self.extra.min_width
+    }
+
+    var value = compute()
+    return self.extra.min_width == INFINITY
+      ? value
+      : self.extra.constrain_width(value)
+  }
+
+  _intrinsic_height(compute) {
+    if self.extra.has_bounded_height() and self.extra.has_tight_height() {
+      return self.extra.min_height
+    }
+
+    var value = compute()
+    return self.extra.min_height == INFINITY
+      ? value
+      : self.extra.constrain_height(value)
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var child = self.child()
+    return self._intrinsic_width(
+      @() => child == nil ? 0 : child.min_intrinsic_width(height),
+    )
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    return self._intrinsic_width(
+      @() => child == nil ? 0 : child.max_intrinsic_width(height),
+    )
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    var child = self.child()
+    return self._intrinsic_height(
+      @() => child == nil ? 0 : child.min_intrinsic_height(width),
+    )
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    return self._intrinsic_height(
+      @() => child == nil ? 0 : child.max_intrinsic_height(width),
+    )
+  }
+}
+
+/**
+ * Caps an unbounded axis at a limit, leaving bounded axes alone. An empty
+ * `Box` uses it to fill the space it is given without filling an infinite
+ * one.
+ */
+class RenderLimited < RenderObject {
+
+  /**
+   * @type number
+   */
+  var max_width = 0
+
+  /**
+   * @type number
+   */
+  var max_height = 0
+
+  /**
+   * @param number max_width
+   * @param number max_height
+   * @constructor
+   */
+  @new(max_width: number, max_height: number) {
+    parent()
+    self.max_width = max_width
+    self.max_height = max_height
+  }
+
+  _limited() {
+    var c = self.constraints
+    return Constraints(
+      c.min_width,
+      c.has_bounded_width() ? c.max_width : c.constrain_width(self.max_width),
+      c.min_height,
+      c.has_bounded_height()
+        ? c.max_height
+        : c.constrain_height(self.max_height),
+    )
+  }
+
+  perform_layout() {
+    var limited = self._limited()
+    var child = self.child()
+
+    if child == nil {
+      self.size = limited.constrain(Size.ZERO)
+      return
+    }
+
+    child.layout(limited, true)
+    self.place_child(child, Point.ZERO)
+    self.size = self.constraints.constrain(child.size)
+  }
+}
+
+/**
+ * Sizes its child to a fraction of the space it is given, and centres it.
+ */
+class RenderFractional < RenderObject {
+
+  /**
+   * @type ?number
+   */
+  var width_factor
+
+  /**
+   * @type ?number
+   */
+  var height_factor
+
+  /**
+   * @param ?number width_factor
+   * @param ?number height_factor
+   * @constructor
+   */
+  @new(width_factor: ?number, height_factor: ?number) {
+    parent()
+    self.width_factor = width_factor
+    self.height_factor = height_factor
+  }
+
+  /**
+   * @param ?number width_factor
+   * @param ?number height_factor
+   */
+  configure(width_factor: ?number, height_factor: ?number) {
+    if width_factor != self.width_factor
+      or height_factor != self.height_factor {
+      self.width_factor = width_factor
+      self.height_factor = height_factor
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var min_width = c.min_width
+    var max_width = c.max_width
+    var min_height = c.min_height
+    var max_height = c.max_height
+
+    if self.width_factor != nil {
+      if !c.has_bounded_width() {
+        raise LayoutError('a Box with a width_factor needs a bounded width, but was given ${c}')
+      }
+
+      min_width = c.max_width * self.width_factor
+      max_width = min_width
+    }
+
+    if self.height_factor != nil {
+      if !c.has_bounded_height() {
+        raise LayoutError('a Box with a height_factor needs a bounded height, but was given ${c}')
+      }
+
+      min_height = c.max_height * self.height_factor
+      max_height = min_height
+    }
+
+    var inner = Constraints(min_width, max_width, min_height, max_height)
+    var child = self.child()
+
+    if child == nil {
+      self.size = c.constrain(inner.constrain(Size.ZERO))
+      return
+    }
+
+    child.layout(inner, true)
+    self.size = c.constrain(child.size)
+    self.place_child(child, Alignment.CENTER.offset_for(child.size, self.size))
+  }
+}
+
+/**
+ * Sizes its child to an aspect ratio: width divided by height.
+ */
+class RenderAspectRatio < RenderObject {
+
+  /**
+   * @type number
+   */
+  var ratio = 1
+
+  /**
+   * @param number ratio
+   * @throws ValueError When the ratio is not above zero
+   * @constructor
+   */
+  @new(ratio: number) {
+    parent()
+    self.set_ratio(ratio)
+  }
+
+  /**
+   * @param number ratio
+   */
+  set_ratio(ratio: number) {
+    if !(ratio > 0 and ratio.is_finite()) {
+      raise ValueError('an aspect ratio must be above zero and finite, got ${ratio}')
+    }
+
+    if ratio != self.ratio {
+      self.ratio = ratio
+      self.mark_needs_layout()
+    }
+  }
+
+  _apply(c) {
+    if c.is_tight() {
+      return c.smallest()
+    }
+
+    var width = c.max_width
+    var height = 0
+
+    if width.is_finite() {
+      height = width / self.ratio
+    } else {
+      height = c.max_height
+      width = height * self.ratio
+    }
+
+    if width > c.max_width {
+      width = c.max_width
+      height = width / self.ratio
+    }
+
+    if height > c.max_height {
+      height = c.max_height
+      width = height * self.ratio
+    }
+
+    if width < c.min_width {
+      width = c.min_width
+      height = width / self.ratio
+    }
+
+    if height < c.min_height {
+      height = c.min_height
+      width = height * self.ratio
+    }
+
+    if !width.is_finite() or !height.is_finite() {
+      raise LayoutError('AspectRatio needs a bounded width or height, but was given ${c}')
+    }
+
+    return c.constrain(Size(width, height))
+  }
+
+  perform_layout() {
+    self.size = self._apply(self.constraints)
+    var child = self.child()
+
+    if child != nil {
+      child.layout(Constraints.tight(self.size), false)
+      self.place_child(child, Point.ZERO)
+    }
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return height.is_finite() ? height * self.ratio : 0
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return height.is_finite() ? height * self.ratio : 0
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return width.is_finite() ? width / self.ratio : 0
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return width.is_finite() ? width / self.ratio : 0
+  }
+}
+
+/**
+ * Sizes its child to its content on one axis: the narrowest width, or
+ * the least height, at which the content fits without being cut.
+ */
+class RenderFitContent < RenderObject {
+
+  /**
+   * `horizontal` or `vertical`.
+   *
+   * @type string
+   */
+  var axis = 'horizontal'
+
+  /**
+   * @param string axis
+   * @constructor
+   */
+  @new(axis: string) {
+    parent()
+    self.axis = axis
+  }
+
+  /**
+   * @param string axis
+   */
+  set_axis(axis: string) {
+    if axis != self.axis {
+      self.axis = axis
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    var child = self.child()
+    var c = self.constraints
+
+    if child == nil {
+      self.size = c.smallest()
+      return
+    }
+
+    var inner = c
+
+    if self.axis == 'horizontal' {
+      if !c.has_tight_width() {
+        var width = c.constrain_width(child.max_intrinsic_width(c.max_height))
+        inner = c.tighten({ width })
+      }
+    } else if !c.has_tight_height() {
+      var height = c.constrain_height(child.max_intrinsic_height(c.max_width))
+      inner = c.tighten({ height })
+    }
+
+    child.layout(inner, true)
+    self.place_child(child, Point.ZERO)
+    self.size = child.size
+  }
+}
+
+/**
+ * Shows or hides its child. A hidden child is still laid out and keeps
+ * its native views, which are taken out of their window until it is shown
+ * again.
+ */
+class RenderVisibility < RenderObject {
+
+  /**
+   * @type bool
+   */
+  var visible = true
+
+  /**
+   * @param bool visible
+   * @constructor
+   */
+  @new(visible: bool) {
+    parent()
+    self.visible = visible
+  }
+
+  /**
+   * @param bool visible
+   */
+  set_visible(visible: bool) {
+    if visible != self.visible {
+      self.visible = visible
+      self.mark_needs_layout()
+      self.mark_host_structure_dirty()
+      self.mark_needs_commit()
+    }
+  }
+
+  perform_layout() {
+    var child = self.child()
+
+    if child != nil {
+      child.layout(self.constraints, self.visible)
+      self.place_child(child, Point.ZERO)
+    }
+
+    self.size = self.visible and child != nil
+      ? child.size
+      : self.constraints.smallest()
+  }
+
+  collect_hosts(slot, out: list) {
+    if self.visible {
+      parent.collect_hosts(slot, out)
+    }
+  }
+
+  commit(origin: Point, host, forced: bool) {
+    if self.visible {
+      parent.commit(origin, host, forced)
+    }
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self.visible ? parent.compute_min_intrinsic_width(height) : 0
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self.visible ? parent.compute_max_intrinsic_width(height) : 0
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self.visible ? parent.compute_min_intrinsic_height(width) : 0
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self.visible ? parent.compute_max_intrinsic_height(width) : 0
+  }
+
+  compute_baseline() {
+    return self.visible ? parent.compute_baseline() : nil
+  }
+}
+
+/**
+ * Asks its element to build its child from the constraints it is given,
+ * during layout. The element of `Responsive` sets `on_build`.
+ */
+class RenderResponsive < RenderObject {
+
+  /**
+   * Called with the constraints whenever the child must be built.
+   *
+   * @type ?function
+   */
+  var on_build
+
+  var _built_for
+  var _needs_build = true
+
+  /**
+   * Makes the next layout build the child again.
+   */
+  mark_needs_build() {
+    self._needs_build = true
+    self.mark_needs_layout()
+  }
+
+  perform_layout() {
+    var c = self.constraints
+
+    if self._needs_build or self._built_for != c {
+      self._needs_build = false
+      self._built_for = c
+
+      if self.on_build != nil {
+        self.on_build(c)
+      }
+    }
+
+    var child = self.child()
+
+    if child == nil {
+      self.size = c.smallest()
+      return
+    }
+
+    child.layout(c, true)
+    self.place_child(child, Point.ZERO)
+    self.size = child.size
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+  }
+}

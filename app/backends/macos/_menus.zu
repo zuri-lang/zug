@@ -1,0 +1,246 @@
+/**
+ * The menu bar.
+ *
+ * Menus are built from the plain description `Backend.set_menu_bar()`
+ * takes. An item with a `role` does what AppKit does for that role, through
+ * the responder chain, so text fields get Cut, Copy and Paste with nothing
+ * more. An item with an `id` reports itself when chosen.
+ */
+
+import ffi
+import ._runtime {
+  cls, sel, send, send_void_id, send_void_bool, send_void_int, send_void_uint,
+  typed, ns_string, release,
+}
+import ._cocoa { parse_shortcut }
+
+# Roles to the actions AppKit already has for them.
+var _ROLE_ACTIONS = {
+  about: 'orderFrontStandardAboutPanel:',
+  hide: 'hide:',
+  hide_others: 'hideOtherApplications:',
+  show_all: 'unhideAllApplications:',
+  quit: 'terminate:',
+  undo: 'undo:',
+  redo: 'redo:',
+  cut: 'cut:',
+  copy: 'copy:',
+  paste: 'paste:',
+  delete: 'delete:',
+  select_all: 'selectAll:',
+  minimize: 'performMiniaturize:',
+  zoom: 'performZoom:',
+  close: 'performClose:',
+  fullscreen: 'toggleFullScreen:',
+  bring_all_to_front: 'arrangeInFront:',
+}
+
+/**
+ * The roles a menu item may have.
+ *
+ * @type list
+ */
+var MENU_ROLES = _ROLE_ACTIONS.keys()
+
+/**
+ * The action AppKit sends for `role`, or `nil` for a role it has none for.
+ *
+ * @param string role
+ * @returns ?string
+ */
+def role_action(role: string) {
+  return _ROLE_ACTIONS.get(role)
+}
+
+/**
+ * The menus an application has before it sets its own: its application
+ * menu, Edit and Window.
+ *
+ * @param string app_name
+ * @returns list
+ */
+def default_menus(app_name: string) {
+  return [
+    {
+      title: app_name,
+      items: [
+        { role: 'about', title: 'About ${app_name}' },
+        { separator: true },
+        { role: 'hide', title: 'Hide ${app_name}', shortcut: 'cmd+h' },
+        { role: 'hide_others', title: 'Hide Others', shortcut: 'cmd+alt+h' },
+        { role: 'show_all', title: 'Show All' },
+        { separator: true },
+        { role: 'quit', title: 'Quit ${app_name}', shortcut: 'cmd+q' },
+      ],
+    },
+    {
+      title: 'Edit',
+      items: [
+        { role: 'undo', title: 'Undo', shortcut: 'cmd+z' },
+        { role: 'redo', title: 'Redo', shortcut: 'cmd+shift+z' },
+        { separator: true },
+        { role: 'cut', title: 'Cut', shortcut: 'cmd+x' },
+        { role: 'copy', title: 'Copy', shortcut: 'cmd+c' },
+        { role: 'paste', title: 'Paste', shortcut: 'cmd+v' },
+        { role: 'delete', title: 'Delete' },
+        { role: 'select_all', title: 'Select All', shortcut: 'cmd+a' },
+      ],
+    },
+    {
+      title: 'Window',
+      window_menu: true,
+      items: [
+        { role: 'minimize', title: 'Minimize', shortcut: 'cmd+m' },
+        { role: 'zoom', title: 'Zoom' },
+        { separator: true },
+        { role: 'bring_all_to_front', title: 'Bring All to Front' },
+      ],
+    },
+  ]
+}
+
+var _new_item = typed(ffi.ptr, [ffi.ptr, ffi.ptr, ffi.ptr])
+var _set_action = typed(ffi.void, [ffi.ptr])
+
+def _make_menu(spec: dict, target, ids: dict, action: ?string) {
+  var menu = typed(ffi.ptr, [ffi.ptr])(
+    send(cls('NSMenu'), 'alloc'), sel('initWithTitle:'),
+    ns_string(spec.get('title', '')),
+  )
+
+  for item in spec.get('items', []) {
+    var native = nil
+
+    if item.get('separator', false) {
+      native = send(cls('NSMenuItem'), 'separatorItem')
+      send_void_id(menu, 'addItem:', native)
+      continue
+    }
+
+    var shortcut = item.get('shortcut')
+    var key = ''
+    var mask = 0
+
+    if shortcut != nil {
+      var parsed = parse_shortcut(shortcut)
+      key = parsed[0]
+      mask = parsed[1]
+    }
+
+    native = _new_item(
+      send(cls('NSMenuItem'), 'alloc'),
+      sel('initWithTitle:action:keyEquivalent:'),
+      ns_string(item.get('title', '')), nil, ns_string(key),
+    )
+    send_void_uint(native, 'setKeyEquivalentModifierMask:', mask)
+
+    var role = item.get('role')
+    var id = item.get('id')
+
+    # Quitting goes through zug, so the application can refuse and can
+    # shut down cleanly.
+    if role == 'quit' and id == nil {
+      id = '__quit'
+    }
+
+    if id != nil {
+      send_void_id(native, 'setTarget:', target)
+      _set_action(
+        native, sel('setAction:'),
+        sel(action == nil ? 'zugMenuAction:' : action),
+      )
+      ids[native.address()] = id
+    } else if role != nil and _ROLE_ACTIONS.contains(role) {
+      _set_action(native, sel('setAction:'), sel(_ROLE_ACTIONS[role]))
+    }
+
+    if item.get('checked', false) {
+      send_void_int(native, 'setState:', 1)
+    }
+
+    if item.get('enabled', true) == false {
+      send_void_bool(native, 'setEnabled:', false)
+    }
+
+    var children = item.get('items')
+
+    if children != nil {
+      var submenu = _make_menu(
+        { title: item.get('title', ''), items: children }, target, ids, action,
+      )
+      send_void_id(native, 'setSubmenu:', submenu)
+      release(submenu)
+    }
+
+    send_void_id(menu, 'addItem:', native)
+    release(native)
+  }
+
+  return menu
+}
+
+/**
+ * Builds the main menu from `menus`. The first menu is the application
+ * menu. `ids` is filled with each item's address and id, so a chosen item
+ * can be reported. The caller owns the menu returned.
+ *
+ * @param list menus
+ * @param string app_name
+ * @param Pointer target: the object chosen items send `zugMenuAction:`
+ *    to.
+ * @param dict ids
+ * @returns Pointer
+ */
+def build_menu_bar(menus: list, app_name: string, target, ids: dict) {
+  var bar = typed(ffi.ptr, [ffi.ptr])(
+    send(cls('NSMenu'), 'alloc'), sel('initWithTitle:'), ns_string('Main'),
+  )
+  var app = send(cls('NSApplication'), 'sharedApplication')
+  for spec in menus {
+    var menu = _make_menu(spec, target, ids, nil)
+    var has_items_disabled = false
+
+    for item in spec.get('items', []) {
+      if item.get('enabled', true) == false {
+        has_items_disabled = true
+      }
+    }
+
+    if has_items_disabled {
+      send_void_bool(menu, 'setAutoenablesItems:', false)
+    }
+
+    var holder = _new_item(
+      send(cls('NSMenuItem'), 'alloc'),
+      sel('initWithTitle:action:keyEquivalent:'),
+      ns_string(spec.get('title', '')), nil, ns_string(''),
+    )
+    send_void_id(holder, 'setSubmenu:', menu)
+    send_void_id(bar, 'addItem:', holder)
+
+    if spec.get('window_menu', false) {
+      send_void_id(app, 'setWindowsMenu:', menu)
+    }
+
+    release(holder)
+    release(menu)
+  }
+
+  return bar
+}
+
+/**
+ * Builds one menu from a list of item descriptions, as `build_menu_bar()`
+ * builds each of its menus. Items with an `id` send `zugMenuAction:` to
+ * `target`, and `ids` is filled with each such item's address and id. The
+ * caller owns the menu returned.
+ *
+ * @param list items
+ * @param Pointer target
+ * @param dict ids
+ * @param ?string action: the selector items with an id send.
+ * @returns Pointer
+ */
+def build_menu(items: list, target, ids: dict, action: ?string) {
+  return _make_menu({ title: '', items }, target, ids, action)
+}

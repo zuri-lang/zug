@@ -1,0 +1,133 @@
+/**
+ * Lengths of time, for timers and animations.
+ *
+ * ```zuri
+ * import zug { Duration }
+ *
+ * var short = Duration.ms(150)
+ * var long = Duration.seconds(2)
+ * echo (short + long).in_seconds()
+ * ```
+ */
+
+/**
+ * A length of time, held in milliseconds.
+ *
+ * @printable
+ */
+class Duration {
+
+  /**
+   * @type number
+   */
+  var milliseconds = 0
+
+  /**
+   * A duration of `milliseconds`. `Duration.ms()` and
+   * `Duration.seconds()` read better at a call site.
+   *
+   * @param number milliseconds
+   * @throws RangeError When the duration is negative or not finite
+   * @constructor
+   */
+  @new(milliseconds: number) {
+    if milliseconds < 0 or !milliseconds.is_finite() {
+      raise RangeError('a duration must be finite and not negative, got ${milliseconds}ms')
+    }
+
+    self.milliseconds = milliseconds
+  }
+
+  /**
+   * No time at all.
+   *
+   * @type Duration
+   */
+  static var ZERO = nil
+
+  /**
+   * @param number milliseconds
+   * @returns Duration
+   */
+  static ms(milliseconds: number) {
+    return Duration(milliseconds)
+  }
+
+  /**
+   * @param number seconds
+   * @returns Duration
+   */
+  static seconds(seconds: number) {
+    return Duration(seconds * 1000)
+  }
+
+  /**
+   * @param number minutes
+   * @returns Duration
+   */
+  static minutes(minutes: number) {
+    return Duration(minutes * 60000)
+  }
+
+  /**
+   * @returns number
+   */
+  in_milliseconds() {
+    return self.milliseconds
+  }
+
+  /**
+   * @returns number
+   */
+  in_seconds() {
+    return self.milliseconds / 1000
+  }
+
+  /**
+   * Whether this is no time at all.
+   *
+   * @returns bool
+   */
+  is_zero() {
+    return self.milliseconds == 0
+  }
+
+  @add(other: Duration) {
+    return Duration(self.milliseconds + other.milliseconds)
+  }
+
+  @sub(other: Duration) {
+    return Duration((self.milliseconds - other.milliseconds).max(0))
+  }
+
+  @mul(factor: number) {
+    return Duration(self.milliseconds * factor)
+  }
+
+  @lt(other: Duration) {
+    return self.milliseconds < other.milliseconds
+  }
+
+  @lte(other: Duration) {
+    return self.milliseconds <= other.milliseconds
+  }
+
+  @gt(other: Duration) {
+    return self.milliseconds > other.milliseconds
+  }
+
+  @gte(other: Duration) {
+    return self.milliseconds >= other.milliseconds
+  }
+
+  @eq(other) {
+    return instance_of(other, Duration)
+      and self.milliseconds == other.milliseconds
+  }
+
+  @to_string() {
+    return 'Duration(${self.milliseconds}ms)'
+  }
+}
+
+Duration.ZERO = Duration(0)

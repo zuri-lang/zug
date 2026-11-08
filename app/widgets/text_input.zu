@@ -1,0 +1,705 @@
+/**
+ * Text the user types: single-line fields, multi-line areas, search
+ * fields and combo boxes.
+ *
+ * Each holds its text in a `TextController`, its own or one the
+ * application passes in. The controller is where the application reads
+ * the text, changes it, selects part of it, and asks for focus; a field
+ * always shows what its controller holds.
+ *
+ * A field can also be driven by its `text` option alone: it then shows
+ * exactly that text and reports edits through `on_changed`, as other
+ * controls report their values. Without `on_changed` it is read-only.
+ *
+ * ```zuri
+ * import zug { TextController, TextField }
+ *
+ * var name = TextController('Ada')
+ * var field = TextField({ controller: name, placeholder: 'Name', on_submitted: @(text) { echo 'hello ${text}' } })
+ * name.select_all()
+ * ```
+ */
+
+import ..foundation { Key, ValueKey, Observable, check_options }
+import ..painting { TextStyle }
+import .framework { StatefulWidget, State }
+import .host { HostWidget, host_options, common_props }
+
+/**
+ * The text of a field, its selection, and requests for focus.
+ *
+ * @printable
+ */
+class TextController < Observable {
+  var _text = ''
+  var _selection
+  var _selection_request
+  var _requests = 0
+  var _focus_requests = 0
+
+  /**
+   * @param ?string text: the starting text, empty when left out.
+   * @constructor
+   */
+  @new(text: ?string) {
+    self._text = text == nil ? '' : text
+  }
+
+  /**
+   * The text.
+   *
+   * @returns string
+   */
+  text() {
+    return self._text
+  }
+
+  /**
+   * Replaces the text, and notifies when it changed. The selection moves
+   * to the end.
+   *
+   * @param string text
+   * @returns TextController this same instance
+   */
+  set_text(text: string) {
+    if text == self._text {
+      return self
+    }
+
+    self._text = text
+    self._selection = [text.length(), text.length()]
+    self.notify()
+    return self
+  }
+
+  /**
+   * Empties the text.
+   *
+   * @returns TextController this same instance
+   */
+  clear() {
+    return self.set_text('')
+  }
+
+  /**
+   * The selection as `[start, end]` character positions, as last reported
+   * by the field, or `nil` before it has reported one.
+   *
+   * @returns ?list
+   */
+  selection() {
+    return self._selection
+  }
+
+  /**
+   * Selects the characters from `start` up to `end`. Equal positions put
+   * the cursor there.
+   *
+   * @param number start
+   * @param number end
+   * @returns TextController this same instance
+   */
+  select(start: number, end: number) {
+    var length = self._text.length()
+    start = start.max(0).min(length)
+    end = end.max(start).min(length)
+    self._selection = [start, end]
+    self._requests++
+    self._selection_request = [start, end, self._requests]
+    self.notify()
+    return self
+  }
+
+  /**
+   * Selects all the text.
+   *
+   * @returns TextController this same instance
+   */
+  select_all() {
+    return self.select(0, self._text.length())
+  }
+
+  /**
+   * Asks the field showing this controller for keyboard focus.
+   *
+   * @returns TextController this same instance
+   */
+  request_focus() {
+    self._focus_requests++
+    self.notify()
+    return self
+  }
+
+  /**
+   * The latest selection request, for the field to apply.
+   *
+   * @internal
+   * @returns ?list
+   */
+  selection_request() {
+    return self._selection_request
+  }
+
+  /**
+   * How many times focus has been asked for.
+   *
+   * @internal
+   * @returns number
+   */
+  focus_requests() {
+    return self._focus_requests
+  }
+
+  /**
+   * Takes text and selection the field reports, notifying listeners when
+   * the text changed.
+   *
+   * @internal
+   * @param string text
+   * @param ?list selection
+   */
+  update_from_view(text: string, selection: ?list) {
+    if selection != nil {
+      self._selection = selection
+    }
+
+    if text != self._text {
+      self._text = text
+      self.notify()
+    }
+  }
+
+  @to_string() {
+    return 'TextController(${self._text})'
+  }
+}
+
+/**
+ * The native view behind a text input.
+ *
+ * @internal
+ */
+class TextInputHost < HostWidget {
+  var kind_name = 'text_field'
+  var view_props = {}
+  var view_handlers = {}
+
+  @new(kind: string, props: dict, handlers: dict, common: dict, key) {
+    self.kind_name = kind
+    self.view_props = props
+    self.view_handlers = handlers
+    self.common = common
+    self.key = key
+  }
+
+  kind() {
+    return self.kind_name
+  }
+
+  props(context) {
+    return self.view_props.clone()
+  }
+
+  handlers() {
+    return self.view_handlers
+  }
+}
+
+var _BASE_OPTIONS = {
+  controller: TextController,
+  text: 'string',
+  enabled: 'bool',
+  autofocus: 'bool',
+  max_length: 'number',
+  input_filter: 'function',
+  on_changed: 'function',
+  on_submitted: 'function',
+  on_focus_changed: 'function',
+}
+
+/**
+ * The base of every text input widget.
+ */
+class TextInput < StatefulWidget {
+
+  /**
+   * The checked options.
+   *
+   * @type dict
+   */
+  var options = {}
+
+  /**
+   * @internal
+   * @type dict
+   */
+  var common = {}
+
+  /**
+   * Checks and stores options against `spec`.
+   *
+   * @internal
+   * @param ?dict options
+   * @param string owner
+   * @param dict spec
+   */
+  setup(options: ?dict, owner: string, spec: dict) {
+    var all = host_options(_BASE_OPTIONS)
+
+    for name, type in spec {
+      all[name] = type
+    }
+
+    var o = check_options(options, owner, all)
+
+    if o.get('controller') != nil and o.get('text') != nil {
+      raise ValueError('${owner} takes a controller or text, not both')
+    }
+
+    var limit = o.get('max_length')
+
+    if limit != nil and (!is_int(limit) or limit < 0) {
+      raise ValueError('max_length of ${owner} must be a whole number, got ${limit}')
+    }
+
+    self.key = o.get('key')
+    self.options = o
+    self.common = common_props(o)
+  }
+
+  /**
+   * The view kind.
+   *
+   * @returns string
+   */
+  input_kind() {
+    return 'text_field'
+  }
+
+  /**
+   * The kind's props beyond `text` and `selection`.
+   *
+   * @returns dict
+   */
+  input_props() {
+    return {}
+  }
+
+  /**
+   * Handlers for events beyond `changed` and `focus_changed`.
+   *
+   * @param TextController controller
+   * @returns dict
+   */
+  extra_handlers(controller) {
+    return {}
+  }
+
+  create_state() {
+    return TextInputState()
+  }
+}
+
+/**
+ * The state of a text input: its own controller when it was not given
+ * one, and the work of keeping the view and the controller in step.
+ *
+ * @internal
+ */
+class TextInputState < State {
+  var _own
+  var _listener
+  var _focus_seen = 0
+  var _selection_seen
+
+  /**
+   * The controller in use.
+   *
+   * @returns TextController
+   */
+  controller() {
+    var given = self.widget.options.get('controller')
+    return given != nil ? given : self._own
+  }
+
+  init_state() {
+    if self.widget.options.get('controller') == nil {
+      self._own = TextController(self.widget.options.get('text', ''))
+    }
+
+    self._listener = @{
+      if self.mounted() {
+        self.set_state()
+      }
+    }
+
+    self.controller().add_listener(self._listener)
+    self._focus_seen = self.controller().focus_requests()
+
+    if self.widget.options.get('autofocus', false) {
+      self._focus_after_frame()
+    }
+  }
+
+  did_update_widget(previous) {
+    var before = previous.options.get('controller')
+    var after = self.widget.options.get('controller')
+
+    if before != after {
+      var old = before != nil ? before : self._own
+      old.remove_listener(self._listener)
+
+      if after == nil {
+        self._own = TextController(old.text())
+      } else if self._own != nil {
+        self._own.dispose()
+        self._own = nil
+      }
+
+      self.controller().add_listener(self._listener)
+    }
+
+    var declared = self.widget.options.get('text')
+
+    if declared != nil and self._own != nil {
+      self._own.update_from_view(declared, nil)
+    }
+  }
+
+  dispose() {
+    var controller = self.controller()
+
+    if !controller.is_disposed() {
+      controller.remove_listener(self._listener)
+    }
+
+    if self._own != nil {
+      self._own.dispose()
+    }
+  }
+
+  _focus_after_frame() {
+    var runtime = self.context().runtime()
+
+    if runtime == nil {
+      return
+    }
+
+    runtime.add_post_frame_callback(@{
+      if self.mounted() {
+        var host = self.context().find_render_object()
+
+        if host != nil and host.owner != nil {
+          host.focus()
+        }
+      }
+    })
+  }
+
+  _changed(payload) {
+    var o = self.widget.options
+    var controller = self.controller()
+    var previous = controller.text()
+    var text = payload.text
+    var accepted = text
+    var limit = o.get('max_length')
+    var filter = o.get('input_filter')
+
+    if limit != nil and accepted.length() > limit {
+      accepted = accepted[0, limit]
+    }
+
+    if filter != nil and accepted != previous {
+      var verdict = filter(accepted, previous)
+
+      if verdict == false {
+        accepted = previous
+      } else if is_string(verdict) {
+        accepted = verdict
+      }
+    }
+
+    if o.get('text') == nil {
+      controller.update_from_view(accepted, payload.get('selection'))
+    }
+
+    var on_changed = o.get('on_changed')
+
+    if accepted != previous and on_changed != nil {
+      on_changed(accepted)
+    }
+  }
+
+  build(context) {
+    var o = self.widget.options
+    var controller = self.controller()
+
+    if controller.focus_requests() != self._focus_seen {
+      self._focus_seen = controller.focus_requests()
+      self._focus_after_frame()
+    }
+
+    var props = self.widget.input_props()
+    var declared = o.get('text')
+    props['text'] = declared != nil ? declared : controller.text()
+
+    # Text fixed by the `text` option with no `on_changed` cannot change,
+    # so the view takes no typing rather than undo each key.
+    if declared != nil and o.get('on_changed') == nil {
+      props['editable'] = false
+    }
+
+    props['selection'] = controller.selection_request()
+    var handlers = self.widget.extra_handlers(controller)
+    var on_focus_changed = o.get('on_focus_changed')
+    handlers['changed'] = @(payload) => self._changed(payload)
+    handlers['focus_changed'] = @(payload) => on_focus_changed == nil
+      ? nil
+      : on_focus_changed(payload.focused)
+
+    # A secure field is a different native control, so switching makes a
+    # new view.
+    return TextInputHost(
+      self.widget.input_kind(), props, handlers, self.widget.common,
+      ValueKey(props.get('secure', false)),
+    )
+  }
+}
+
+/**
+ * How a text field's border looks.
+ */
+class FieldBezel {
+
+  /**
+   * The standard rounded field.
+   */
+  static var ROUNDED = 'rounded'
+
+  /**
+   * A square-cornered field.
+   */
+  static var SQUARE = 'square'
+
+  /**
+   * No border or background, for text that looks like a label until
+   * edited.
+   */
+  static var NONE = 'none'
+}
+
+/**
+ * A single line of editable text.
+ *
+ * Return calls `on_submitted` with the text, and Escape calls
+ * `on_escape`. With `obscure`, the text is hidden as a password field
+ * hides it. `max_length` caps the length, and `input_filter`, called
+ * with the new text and the old, returns `false` to refuse an edit or a
+ * string to put in its place.
+ */
+class TextField < TextInput {
+
+  /**
+   * @param ?dict options: `controller` or `text`, `placeholder`,
+   *    `obscure`, `read_only`, `enabled`, `bezel` (see `FieldBezel`),
+   *    `align`, `style`, `max_length`, `input_filter`, `autofocus`,
+   *    `on_changed`, `on_submitted`, `on_focus_changed`, `on_escape` and
+   *    the options every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    self.setup(options, 'TextField', {
+      placeholder: 'string',
+      obscure: 'bool',
+      read_only: 'bool',
+      bezel: 'string',
+      align: 'string',
+      style: TextStyle,
+      on_escape: 'function',
+    })
+  }
+
+  input_props() {
+    var o = self.options
+    var style = o.get('style')
+    return {
+      placeholder: o.get('placeholder'),
+      secure: o.get('obscure', false),
+      editable: !o.get('read_only', false),
+      enabled: o.get('enabled', true),
+      bezel: o.get('bezel', 'rounded'),
+      align: o.get('align', 'start'),
+      style: style == nil ? {} : style.to_data(),
+    }
+  }
+
+  extra_handlers(controller) {
+    var on_submitted = self.options.get('on_submitted')
+    var on_escape = self.options.get('on_escape')
+    return {
+      submitted: @(payload) => on_submitted == nil
+        ? nil
+        : on_submitted(controller.text()),
+      escape: @(payload) => on_escape == nil ? nil : on_escape(),
+    }
+  }
+}
+
+/**
+ * Several lines of editable text, scrolling when they do not fit. It
+ * fills the space it is given.
+ */
+class TextArea < TextInput {
+
+  /**
+   * @param ?dict options: `controller` or `text`, `read_only`, `style`,
+   *    `wrap` (true), `bordered` (true), `max_length`, `input_filter`,
+   *    `autofocus`, `on_changed`, `on_focus_changed` and the options every
+   *    host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    self.setup(
+      options, 'TextArea',
+      { read_only: 'bool', style: TextStyle, wrap: 'bool', bordered: 'bool' },
+    )
+  }
+
+  input_kind() {
+    return 'text_area'
+  }
+
+  input_props() {
+    var o = self.options
+    var style = o.get('style')
+    return {
+      editable: !o.get('read_only', false) and o.get('enabled', true),
+      style: style == nil ? {} : style.to_data(),
+      wrap: o.get('wrap', true),
+      bordered: o.get('bordered', true),
+    }
+  }
+}
+
+/**
+ * A field for search text, with a magnifying glass and a button that
+ * clears it. `on_submitted` is called when the user presses Return.
+ */
+class SearchField < TextInput {
+
+  /**
+   * @param ?dict options: `controller` or `text`, `placeholder`,
+   *    `enabled`, `size`, `autofocus`, `on_changed`, `on_submitted`,
+   *    `on_focus_changed` and the options every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    self.setup(
+      options, 'SearchField', { placeholder: 'string', size: 'string' },
+    )
+  }
+
+  input_kind() {
+    return 'search_field'
+  }
+
+  input_props() {
+    var o = self.options
+    return {
+      placeholder: o.get('placeholder'),
+      enabled: o.get('enabled', true),
+      control_size: o.get('size', 'regular'),
+    }
+  }
+
+  extra_handlers(controller) {
+    var on_submitted = self.options.get('on_submitted')
+    return {
+      submitted: @(payload) => on_submitted == nil
+        ? nil
+        : on_submitted(controller.text()),
+    }
+  }
+}
+
+/**
+ * A text field with a list of suggestions to pick from. The text may be
+ * anything typed; picking a suggestion sets the text and calls
+ * `on_selected` with its index and text.
+ */
+class ComboBox < TextInput {
+
+  /**
+   * The suggestions.
+   *
+   * @type list
+   */
+  var items = []
+
+  /**
+   * @param list items: strings.
+   * @param ?dict options: `controller` or `text`, `placeholder`,
+   *    `completes` to finish typing from the items, `visible_items`,
+   *    `enabled`, `size`, `autofocus`, `on_changed`, `on_selected`,
+   *    `on_submitted`, `on_focus_changed` and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(items: list, options: ?dict) {
+    self.setup(
+      options, 'ComboBox',
+      {
+        placeholder: 'string',
+        completes: 'bool',
+        visible_items: 'number',
+        size: 'string',
+        on_selected: 'function',
+      },
+    )
+    self.items = items.map(@(item) => '${item}')
+  }
+
+  input_kind() {
+    return 'combo_box'
+  }
+
+  input_props() {
+    var o = self.options
+    return {
+      items: self.items,
+      placeholder: o.get('placeholder'),
+      completes: o.get('completes', false),
+      visible_items: o.get('visible_items', 8),
+      enabled: o.get('enabled', true),
+      control_size: o.get('size', 'regular'),
+    }
+  }
+
+  extra_handlers(controller) {
+    var on_selected = self.options.get('on_selected')
+    var on_submitted = self.options.get('on_submitted')
+    var on_changed = self.options.get('on_changed')
+    var driven = self.options.get('text') != nil
+
+    return {
+      selected: @(payload) {
+        var previous = controller.text()
+
+        if !driven {
+          controller.update_from_view(payload.text, nil)
+        }
+
+        if on_changed != nil and payload.text != previous {
+          on_changed(payload.text)
+        }
+
+        if on_selected != nil {
+          on_selected(payload.index, payload.text)
+        }
+      },
+      submitted: @(payload) => on_submitted == nil
+        ? nil
+        : on_submitted(controller.text()),
+    }
+  }
+}

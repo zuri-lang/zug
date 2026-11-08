@@ -1,0 +1,161 @@
+/**
+ * The top of the render tree: windows, and the sets that hold them.
+ */
+
+import ..foundation { Point, Size, Constraints, INFINITY, LayoutError }
+import .object { RenderObject }
+import .host { RenderHost }
+
+/**
+ * Holds windows, and sets of windows, with no geometry of its own. The
+ * root of every render tree is one.
+ */
+class RenderWindowSet < RenderObject {
+
+  setup_parent_data(child: RenderObject) {
+    if !instance_of(child, RenderWindow)
+      and !instance_of(child, RenderWindowSet) {
+      raise LayoutError(
+        'only windows can be placed at the top of an application, not ${typeof(child)}; '
+          + "build an App with windows, such as App({ windows: [Window('Title', content)] })",
+      )
+    }
+
+    parent.setup_parent_data(child)
+  }
+
+  perform_layout() {
+    for child in self.children {
+      child.layout(Constraints.UNBOUNDED, false)
+    }
+
+    self.size = Size.ZERO
+  }
+
+  /**
+   * Every window in this set and the sets inside it, in order.
+   *
+   * @returns list
+   */
+  windows() {
+    var found = []
+
+    for child in self.children {
+      if instance_of(child, RenderWindow) {
+        found.append(child)
+      } else {
+        found.extend(child.windows())
+      }
+    }
+
+    return found
+  }
+}
+
+/**
+ * A native window. Its child is the window's content, laid out to fill
+ * the content area, or, when the window is sized to its content, laid out
+ * loosely within the minimum and maximum sizes, with the window resized to
+ * fit.
+ */
+class RenderWindow < RenderHost {
+
+  /**
+   * Whether the window takes the size of its content.
+   *
+   * @type bool
+   */
+  var size_to_content = false
+
+  /**
+   * Whether the user has closed the window.
+   *
+   * @type bool
+   */
+  var closed = false
+
+  var _shown = false
+
+  /**
+   * @param dict props
+   * @param ?dict handlers
+   * @constructor
+   */
+  @new(props: dict, handlers: ?dict) {
+    parent('window', props, handlers)
+  }
+
+  create_view(backend) {
+    return backend.create_window(self.props.clone(), self._dispatch)
+  }
+
+  apply_frame(frame) {}
+
+  /**
+   * Changes whether the window takes the size of its content.
+   *
+   * @param bool value
+   */
+  set_size_to_content(value: bool) {
+    if value != self.size_to_content {
+      self.size_to_content = value
+      self.mark_needs_layout()
+    }
+  }
+
+  perform_layout() {
+    self.ensure_view()
+    self.flush_props()
+    var content = self.view.content_size()
+    var child = self.child()
+
+    if child != nil {
+      if self.size_to_content {
+        var low = self.props.get('min_size')
+        var high = self.props.get('max_size')
+        var limits = Constraints(
+          low == nil ? 0 : low.width,
+          high == nil ? INFINITY : high.width,
+          low == nil ? 0 : low.height,
+          high == nil ? INFINITY : high.height,
+        )
+        child.layout(limits, true)
+        content = child.size
+
+        if content != self.view.content_size() {
+          self.view.set_content_size_to(content)
+        }
+      } else {
+        child.layout(Constraints.tight(content), false)
+      }
+
+      self.place_child(child, Point.ZERO)
+    }
+
+    self.size = content
+  }
+
+  on_event(event: string, payload) {
+    if event == 'resized' {
+      self.mark_needs_layout()
+    } else if event == 'closed' {
+      self.closed = true
+    }
+  }
+
+  after_commit() {
+    if !self._shown and !self.closed and self.props.get('visible') {
+      self._shown = true
+      self.view.show()
+    }
+  }
+
+  /**
+   * Whether the window has been shown.
+   *
+   * @returns bool
+   */
+  is_shown() {
+    return self._shown and !self.closed
+  }
+}

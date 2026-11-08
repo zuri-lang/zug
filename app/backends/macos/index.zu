@@ -1,0 +1,490 @@
+/**
+ * The macOS backend: AppKit, driven through the Objective-C runtime with
+ * `ffi`.
+ *
+ * Every native view is a real AppKit control. The application runs in
+ * `[NSApp run]`; zug draws its frames from a run loop observer just before
+ * the loop waits, and handles events in the callbacks AppKit makes into
+ * the classes zug defines.
+ */
+
+import ffi
+import .. ..foundation {
+  Rect, Size, UnsupportedError, BackendError, report_error,
+}
+import .. ..backend { Backend, CAPABILITIES, kind_names }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_int, send_int, send_rect, typed, ns_string, zuri_string,
+  from_ns_array, ns_array, push_pool, pop_pool, retain, release, create,
+  CGPoint,
+}
+import ._classes {
+  ZugAppDelegate, set_application_host, host_for, registered_count,
+}
+import ._loop { on_before_waiting, wake, now, MacTimer }
+import ._cocoa { ns_font }
+import ._views { MacText, MacButton, MacBox }
+import ._controls {
+  MacCheckbox, MacRadio, MacSwitch, MacSlider, MacStepper, MacProgress,
+  MacSegmented, MacPopup, MacDatePicker, MacColorWell, MacLevel, MacSeparator,
+  MacGroupBox, MacImage,
+}
+import ._text_input { MacTextField, MacTextArea }
+import ._containers { MacScroll, MacTabs, MacSplit, MacTable, MacVisualEffect }
+import ._canvas { MacCanvas, MacPointer }
+import ._window { MacWindow }
+import ._menus { build_menu_bar, default_menus, role_action }
+import ._dialogs { show_alert, pick_files, save_file }
+
+var _FACTORIES = {
+  text: @(backend, props, dispatch) => MacText(backend, props, dispatch),
+  button: @(backend, props, dispatch) => MacButton(backend, props, dispatch),
+  box: @(backend, props, dispatch) => MacBox(backend, props, dispatch),
+  checkbox: @(backend, props, dispatch) => MacCheckbox(
+    backend, props, dispatch,
+  ),
+  radio: @(backend, props, dispatch) => MacRadio(backend, props, dispatch),
+  switch: @(backend, props, dispatch) => MacSwitch(backend, props, dispatch),
+  slider: @(backend, props, dispatch) => MacSlider(backend, props, dispatch),
+  stepper: @(backend, props, dispatch) => MacStepper(backend, props, dispatch),
+  progress: @(backend, props, dispatch) => MacProgress(
+    backend, 'progress', props, dispatch,
+  ),
+  spinner: @(backend, props, dispatch) => MacProgress(
+    backend, 'spinner', props, dispatch,
+  ),
+  segmented: @(backend, props, dispatch) => MacSegmented(
+    backend, props, dispatch,
+  ),
+  popup: @(backend, props, dispatch) => MacPopup(backend, props, dispatch),
+  date_picker: @(backend, props, dispatch) => MacDatePicker(
+    backend, props, dispatch,
+  ),
+  color_well: @(backend, props, dispatch) => MacColorWell(
+    backend, props, dispatch,
+  ),
+  level: @(backend, props, dispatch) => MacLevel(backend, props, dispatch),
+  separator: @(backend, props, dispatch) => MacSeparator(
+    backend, props, dispatch,
+  ),
+  group_box: @(backend, props, dispatch) => MacGroupBox(
+    backend, props, dispatch,
+  ),
+  image: @(backend, props, dispatch) => MacImage(backend, props, dispatch),
+  text_field: @(backend, props, dispatch) => MacTextField(
+    backend, 'text_field', props, dispatch,
+  ),
+  search_field: @(backend, props, dispatch) => MacTextField(
+    backend, 'search_field', props, dispatch,
+  ),
+  combo_box: @(backend, props, dispatch) => MacTextField(
+    backend, 'combo_box', props, dispatch,
+  ),
+  text_area: @(backend, props, dispatch) => MacTextArea(
+    backend, props, dispatch,
+  ),
+  scroll: @(backend, props, dispatch) => MacScroll(backend, props, dispatch),
+  tabs: @(backend, props, dispatch) => MacTabs(backend, props, dispatch),
+  split: @(backend, props, dispatch) => MacSplit(backend, props, dispatch),
+  table: @(backend, props, dispatch) => MacTable(backend, props, dispatch),
+  visual_effect: @(backend, props, dispatch) => MacVisualEffect(
+    backend, props, dispatch,
+  ),
+  canvas: @(backend, props, dispatch) => MacCanvas(backend, props, dispatch),
+  pointer: @(backend, props, dispatch) => MacPointer(backend, props, dispatch),
+}
+
+/**
+ * Makes `factory` the way views of `kind` are created.
+ *
+ * @internal
+ * @param string kind
+ * @param function factory: called with the backend, the props and the
+ *    dispatch function.
+ */
+def register_factory(kind: string, factory: function) {
+  _FACTORIES[kind] = factory
+}
+
+/**
+ * The macOS backend.
+ */
+class MacBackend < Backend {
+
+  /**
+   * @type ?BackendDelegate
+   */
+  var delegate
+
+  /**
+   * The shared `NSApplication`.
+   *
+   * @type Pointer
+   */
+  var app
+
+  /**
+   * The application's name, for its menu.
+   *
+   * @type string
+   */
+  var app_name = 'zug'
+
+  var _app_delegate
+  var _frame_requested = false
+  var _in_frame = false
+  var _menu_dispatch
+  var _menu_items = {}
+  var _launched = false
+
+  name() {
+    return 'macos'
+  }
+
+  capabilities() {
+    return CAPABILITIES.clone()
+  }
+
+  supports_kind(kind: string) {
+    return kind == 'window' or _FACTORIES.contains(kind)
+  }
+
+  start(delegate) {
+    self.delegate = delegate
+    var pool = push_pool()
+    self.app = send(cls('NSApplication'), 'sharedApplication')
+
+    # NSApplicationActivationPolicyRegular: a dock icon and a menu bar.
+    send_void_int(self.app, 'setActivationPolicy:', 0)
+    self._app_delegate = create('ZugAppDelegate')
+    set_application_host(self)
+    send_void_id(self.app, 'setDelegate:', self._app_delegate)
+    typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ulong, ffi.ptr])(
+      self.app, sel('addObserver:forKeyPath:options:context:'),
+      self._app_delegate, ns_string('effectiveAppearance'), 0, nil,
+    )
+    self.set_menu_bar(default_menus(self.app_name), @(event, payload) => nil)
+    on_before_waiting(@{
+      self._before_waiting()
+    })
+    pop_pool(pool)
+  }
+
+  run() {
+    send_void(self.app, 'run')
+  }
+
+  quit() {
+    send_void_id(self.app, 'stop:', nil)
+
+    # stop: takes effect once the loop handles another event, so post one.
+    var make = typed(
+      ffi.ptr,
+      [
+        ffi.ulong, CGPoint, ffi.ulong, ffi.double, ffi.long, ffi.ptr, ffi.short,
+        ffi.long, ffi.long,
+      ],
+    )
+    var event = make(
+      cls('NSEvent'),
+      sel('otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:'),
+      15, { x: 0, y: 0 }, 0, 0, 0, nil, 0, 0, 0,
+    )
+    typed(ffi.void, [ffi.ptr, ffi.bool])(
+      self.app, sel('postEvent:atStart:'), event, true,
+    )
+  }
+
+  request_frame() {
+    if !self._frame_requested {
+      self._frame_requested = true
+      wake()
+    }
+  }
+
+  _before_waiting() {
+    if self._frame_requested {
+      self._draw()
+    }
+  }
+
+  _draw() {
+    if self._in_frame {
+      return
+    }
+
+    self._frame_requested = false
+    self._in_frame = true
+
+    catch {
+      self.delegate.on_frame()
+    } as error {
+      report_error(error, 'drawing a frame')
+    }
+
+    self._in_frame = false
+  }
+
+  /**
+   * Draws now when a frame is waiting, so a window being resized follows
+   * the pointer.
+   *
+   * @internal
+   */
+  draw_now() {
+    if self._frame_requested {
+      var pool = push_pool()
+      self._draw()
+      pop_pool(pool)
+    }
+  }
+
+  /**
+   * Reports an event from a view, then lets zug finish handling it.
+   *
+   * @internal
+   * @param any view
+   * @param string event
+   * @param any payload
+   * @returns any
+   */
+  deliver(view, event: string, payload) {
+    var result = nil
+
+    catch {
+      result = view.dispatch(event, payload)
+      self.delegate.on_event_handled()
+    } as error {
+      report_error(
+        error, "handling the '${event}' event of a ${view.kind()} view",
+      )
+    }
+
+    return result
+  }
+
+  start_timer(seconds: number, repeats: bool, task: function) {
+    return MacTimer(seconds, repeats, task, @{
+      self.delegate.on_event_handled()
+    })
+  }
+
+  now() {
+    return now()
+  }
+
+  create_window(props: dict, dispatch: function) {
+    var pool = push_pool()
+    var window = MacWindow(self, props, dispatch)
+    pop_pool(pool)
+    return window
+  }
+
+  create_view(kind: string, props: dict, dispatch: function) {
+    var factory = _FACTORIES.get(kind)
+
+    if factory == nil {
+      raise UnsupportedError('macos', kind)
+    }
+
+    return factory(self, props, dispatch)
+  }
+
+  perform_role(role: string) {
+    var action = role_action(role)
+
+    if action == nil {
+      raise ValueError("'" + role + "' is not a menu role")
+    }
+
+    var send_action = typed(ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr])
+    return send_action(
+      self.app, sel('sendAction:to:from:'), sel(action), nil, nil,
+    )
+  }
+
+  set_menu_bar(menus: list, dispatch: function) {
+    self._menu_dispatch = dispatch
+    self._menu_items = {}
+    var bar = build_menu_bar(
+      menus, self.app_name, self._app_delegate, self._menu_items,
+    )
+    send_void_id(self.app, 'setMainMenu:', bar)
+    release(bar)
+  }
+
+  /**
+   * A menu item was chosen.
+   *
+   * @internal
+   * @param Pointer item
+   */
+  menu_action(item) {
+    var id = self._menu_items.get(item.address())
+
+    if id == '__quit' {
+      if self.delegate.on_quit_requested() {
+        self.quit()
+      }
+
+      return
+    }
+
+    if id != nil and self._menu_dispatch != nil {
+      catch {
+        self._menu_dispatch('selected', { id })
+        self.delegate.on_event_handled()
+      } as error {
+        report_error(error, 'handling a menu item')
+      }
+    }
+  }
+
+  # What the application delegate reports.
+
+  /**
+   * @internal
+   * @returns bool
+   */
+  should_terminate() {
+    return self.delegate == nil or self.delegate.on_quit_requested()
+  }
+
+  /**
+   * @internal
+   */
+  reopen() {
+    self.delegate.on_reopen()
+    self.delegate.on_event_handled()
+  }
+
+  /**
+   * @internal
+   */
+  did_finish_launching() {
+    self._launched = true
+    send_void_bool(self.app, 'activateIgnoringOtherApps:', true)
+  }
+
+  /**
+   * @internal
+   */
+  appearance_changed() {
+    self.delegate.on_appearance_changed(self.appearance())
+    self.delegate.on_event_handled()
+  }
+
+  show_alert(window, spec: dict, done: function) {
+    show_alert(self, window, spec, done)
+  }
+
+  pick_files(window, spec: dict, done: function) {
+    pick_files(self, window, spec, done)
+  }
+
+  save_file(window, spec: dict, done: function) {
+    save_file(self, window, spec, done)
+  }
+
+  /**
+   * Hands a dialog's answer to zug, then lets it finish handling it.
+   *
+   * @internal
+   * @param function done
+   * @param any answer
+   */
+  answer(done: function, answer) {
+    catch {
+      done(answer)
+      self.delegate.on_event_handled()
+    } as error {
+      report_error(error, 'handling the answer to a dialog')
+    }
+  }
+
+  read_clipboard() {
+    var board = send(cls('NSPasteboard'), 'generalPasteboard')
+    var type = ffi.open().symbol('NSPasteboardTypeString').read(ffi.ptr)
+    return zuri_string(send_id(board, 'stringForType:', type))
+  }
+
+  write_clipboard(text: string) {
+    var board = send(cls('NSPasteboard'), 'generalPasteboard')
+    var type = ffi.open().symbol('NSPasteboardTypeString').read(ffi.ptr)
+    send_int(board, 'clearContents')
+    typed(ffi.bool, [ffi.ptr, ffi.ptr])(
+      board, sel('setString:forType:'), ns_string(text), type,
+    )
+  }
+
+  appearance() {
+    var current = send(self.app, 'effectiveAppearance')
+    var aqua = ffi.open().symbol('NSAppearanceNameAqua').read(ffi.ptr)
+    var dark = ffi.open().symbol('NSAppearanceNameDarkAqua').read(ffi.ptr)
+    var best = send_id(
+      current, 'bestMatchFromAppearancesWithNames:', ns_array([aqua, dark]),
+    )
+    return best != nil and zuri_string(best) == zuri_string(dark)
+      ? 'dark'
+      : 'light'
+  }
+
+  screens() {
+    var found = []
+
+    for screen in from_ns_array(send(cls('NSScreen'), 'screens')) {
+      var frame = send_rect(screen, 'frame')
+      var visible = send_rect(screen, 'visibleFrame')
+      var height = frame.size.height
+      found.append({
+        frame: Rect(frame.origin.x, 0, frame.size.width, height),
+        visible_frame: Rect(
+          visible.origin.x, height - visible.origin.y - visible.size.height,
+          visible.size.width, visible.size.height,
+        ),
+        scale: typed(ffi.double, [])(screen, sel('backingScaleFactor')),
+      })
+    }
+
+    return found
+  }
+
+  measure_text(text: string, style: dict, max_width: ?number) {
+    raise UnsupportedError('macos', 'measure_text')
+  }
+
+  open_url(url: string) {
+    var address = send_id(cls('NSURL'), 'URLWithString:', ns_string(url))
+
+    if address == nil {
+      raise ValueError("'${url}' is not a URL")
+    }
+
+    typed(ffi.bool, [ffi.ptr])(
+      send(cls('NSWorkspace'), 'sharedWorkspace'), sel('openURL:'), address,
+    )
+  }
+
+  beep() {
+    ffi.open().function('NSBeep', ffi.void, [])()
+  }
+
+  /**
+   * How many native objects are registered, for leak checks.
+   *
+   * @returns number
+   */
+  live_objects() {
+    return registered_count()
+  }
+}
+
+/**
+ * Creates the macOS backend.
+ *
+ * @returns MacBackend
+ */
+def create() {
+  return MacBackend()
+}

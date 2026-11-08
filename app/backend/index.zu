@@ -1,0 +1,9 @@
+/**
+ * The backend contract, the kinds of native view, and the registry that
+ * picks the backend for the running platform.
+ */
+
+import @.contract { * }
+import @.kinds { * }
+import @.registry { * }
+import @.painter { * }

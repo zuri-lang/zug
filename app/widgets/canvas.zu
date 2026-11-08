@@ -1,0 +1,330 @@
+/**
+ * Drawing of the application's own, and pointer input on any part of
+ * the interface.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * var chart = Canvas(@(painter, size) {
+ *   painter.fill_rect(Rect(0, 0, size.width, size.height), Color.system('text_background'))
+ *   painter.line(Point(0, size.height), Point(size.width, 0), Paint({ color: Color.system('accent'), width: 2 }))
+ * }, { height: 120 })
+ *
+ * var card = PointerArea(Text('Click me'), {
+ *   cursor: Cursor.POINTING_HAND,
+ *   on_tap: @(event) { echo 'clicked at ${event.position.x}' },
+ * })
+ * ```
+ */
+
+import ..foundation { Key, Point, Size, check_options }
+import .framework { StatelessWidget, Widget }
+import .host { HostWidget, SingleChildHostWidget, host_options, common_props }
+import .basic { Box }
+import .menus { MenuItem, menu_spec }
+
+var _paints = 0
+
+/**
+ * The view behind a `Canvas`.
+ *
+ * @internal
+ */
+class CanvasView < HostWidget {
+  var paint
+  var token
+
+  @new(paint: function, token, common: dict) {
+    self.paint = paint
+    self.token = token
+    self.common = common
+  }
+
+  kind() {
+    return 'canvas'
+  }
+
+  props(context) {
+    return { repaint: self.token }
+  }
+
+  handlers() {
+    var paint = self.paint
+    return { paint: @(payload) => paint(payload.painter, payload.size) }
+  }
+}
+
+/**
+ * An area the application draws itself. `paint` is called with a
+ * `Painter` and the canvas's `Size` whenever the canvas must be drawn: when
+ * it first appears, when it changes size, and when `repaint` changes. With
+ * no `repaint`, it is drawn again after every build.
+ *
+ * It fills the space it is given, unless `width` or `height` fix it.
+ */
+class Canvas < StatelessWidget {
+  var paint
+  var options = {}
+
+  /**
+   * @param function paint
+   * @param ?dict options: `repaint`, any value whose change means the
+   *    drawing changed; `width`; `height`; and the options every host
+   *    widget takes.
+   * @constructor
+   */
+  @new(paint: function, options: ?dict) {
+    var o = check_options(
+      options, 'Canvas',
+      host_options({ repaint: 'any', width: 'number', height: 'number' }),
+    )
+    self.key = o.get('key')
+    self.paint = paint
+    self.options = o
+  }
+
+  build(context) {
+    var o = self.options
+    var token = o.get('repaint')
+
+    if token == nil {
+      _paints++
+      token = _paints
+    }
+
+    var view = CanvasView(self.paint, token, common_props(o))
+
+    if o.get('width') == nil and o.get('height') == nil {
+      return view
+    }
+
+    return Box({ width: o.get('width'), height: o.get('height'), child: view })
+  }
+}
+
+/**
+ * Mouse pointer shapes.
+ */
+class Cursor {
+  static var ARROW = 'arrow'
+  static var POINTING_HAND = 'pointing_hand'
+  static var TEXT = 'text'
+  static var CROSSHAIR = 'crosshair'
+  static var OPEN_HAND = 'open_hand'
+  static var CLOSED_HAND = 'closed_hand'
+  static var RESIZE_LEFT_RIGHT = 'resize_left_right'
+  static var RESIZE_UP_DOWN = 'resize_up_down'
+  static var NOT_ALLOWED = 'not_allowed'
+}
+
+/**
+ * What a pointer did, as `PointerArea`'s handlers receive it.
+ *
+ * @printable
+ */
+class PointerEvent {
+
+  /**
+   * Where it happened, from the area's top left.
+   *
+   * @type Point
+   */
+  var position
+
+  /**
+   * For a drag or a scroll, how far it moved since the last event.
+   *
+   * @type Point
+   */
+  var delta
+
+  /**
+   * For a drag, how far it has moved since it started.
+   *
+   * @type Point
+   */
+  var total
+
+  /**
+   * The number of clicks in quick succession.
+   *
+   * @type number
+   */
+  var clicks = 1
+
+  /**
+   * The modifier keys held: any of `cmd`, `shift`, `alt` and `ctrl`.
+   *
+   * @type list
+   */
+  var modifiers = []
+
+  /**
+   * @param dict data: what the backend reported.
+   * @constructor
+   */
+  @new(data: dict) {
+    self.position = Point(data.get('x', 0), data.get('y', 0))
+    self.delta = Point(data.get('dx', 0), data.get('dy', 0))
+    self.total = Point(data.get('tx', 0), data.get('ty', 0))
+    self.clicks = data.get('clicks', 1)
+    self.modifiers = data.get('modifiers', [])
+  }
+
+  /**
+   * Whether `key` was held.
+   *
+   * @param string key
+   * @returns bool
+   */
+  has_modifier(key: string) {
+    return self.modifiers.contains(key)
+  }
+
+  @to_string() {
+    return 'PointerEvent(${self.position.x}, ${self.position.y})'
+  }
+}
+
+var _POINTER_EVENTS = {
+  on_tap: 'tap',
+  on_double_tap: 'double_tap',
+  on_secondary_tap: 'secondary_tap',
+  on_drag_start: 'drag_start',
+  on_drag: 'drag',
+  on_drag_end: 'drag_end',
+  on_hover: 'hover',
+  on_scroll: 'scroll',
+}
+
+var _POINTER_OPTIONS = host_options({
+  on_tap: 'function',
+  on_double_tap: 'function',
+  on_secondary_tap: 'function',
+  on_drag_start: 'function',
+  on_drag: 'function',
+  on_drag_end: 'function',
+  on_enter: 'function',
+  on_exit: 'function',
+  on_hover: 'function',
+  on_scroll: 'function',
+  cursor: 'string',
+  menu: 'list',
+})
+
+/**
+ * Pointer input on its child: clicks, double clicks, secondary clicks,
+ * drags, scrolling, the pointer entering and leaving, and the cursor
+ * shape. Each handler but `on_enter` and `on_exit` is called with a
+ * `PointerEvent`. `menu`, a list of `MenuItem`s, opens on a secondary
+ * click.
+ *
+ * Native controls inside handle their own clicks; the area hears the
+ * clicks that land on the rest of it.
+ */
+class PointerArea < SingleChildHostWidget {
+  var options = {}
+
+  /**
+   * @param ?Widget child
+   * @param dict options: any of the handlers `on_tap`, `on_double_tap`,
+   *    `on_secondary_tap`, `on_drag_start`, `on_drag`, `on_drag_end`,
+   *    `on_enter`, `on_exit`, `on_hover` and `on_scroll`, `cursor` (see
+   *    `Cursor`), `menu`, and the options every host widget takes.
+   * @constructor
+   */
+  @new(child: ?Widget, options: dict) {
+    var o = check_options(options, 'PointerArea', _POINTER_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.child = child
+    self.options = o
+  }
+
+  kind() {
+    return 'pointer'
+  }
+
+  props(context) {
+    var o = self.options
+    var menu = o.get('menu')
+    return {
+      cursor: o.get('cursor'),
+      hover: o.get('on_enter') != nil
+        or o.get('on_exit') != nil
+        or o.get('on_hover') != nil,
+      scrolls: o.get('on_scroll') != nil,
+      menu: menu == nil ? nil : menu_spec(menu, {}, 'm'),
+    }
+  }
+
+  handlers() {
+    var o = self.options
+    var found = {}
+
+    for option, event in _POINTER_EVENTS {
+      var handler = o.get(option)
+
+      if handler != nil {
+        found[event] = _pointer_handler(handler)
+      }
+    }
+
+    var on_enter = o.get('on_enter')
+    var on_exit = o.get('on_exit')
+
+    if on_enter != nil {
+      found['enter'] = @(payload) => on_enter()
+    }
+
+    if on_exit != nil {
+      found['exit'] = @(payload) => on_exit()
+    }
+
+    var menu = o.get('menu')
+
+    if menu != nil {
+      var menu_handlers = {}
+      menu_spec(menu, menu_handlers, 'm')
+      found['menu_selected'] = @(payload) {
+        var handler = menu_handlers.get(payload.id)
+
+        if handler != nil {
+          handler()
+        }
+      }
+    }
+
+    return found
+  }
+}
+
+def _pointer_handler(handler: function) {
+  return @(payload) => handler(PointerEvent(payload == nil ? {} : payload))
+}
+
+/**
+ * Opens `items`, a list of `MenuItem`s, when its child is clicked with
+ * the secondary button.
+ */
+class ContextMenu < StatelessWidget {
+  var child
+  var items = []
+
+  /**
+   * @param Widget child
+   * @param list items
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(child: Widget, items: list, options: ?dict) {
+    var o = check_options(options, 'ContextMenu', { key: Key })
+    self.key = o.get('key')
+    self.child = child
+    self.items = items
+  }
+
+  build(context) {
+    return PointerArea(self.child, { menu: self.items })
+  }
+}

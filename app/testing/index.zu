@@ -1,0 +1,318 @@
+/**
+ * @module zug.testing
+ *
+ * Testing widgets without a display. A `WidgetTester` runs an application
+ * on the headless backend, where every native view is a record that can be
+ * found by its text, kind or accessibility identifier, and acted on as a
+ * user would.
+ *
+ * ```zuri,ignore
+ * import test { * }
+ * import zug { * }
+ * import zug.testing { WidgetTester }
+ *
+ * describe('Counter', @{
+ *   it('counts presses', @{
+ *     var tester = WidgetTester()
+ *     tester.pump_widget(Counter())
+ *     tester.tap('Press')
+ *     expect(tester.find_text('Pressed 1 times')).to_have_length(1)
+ *     tester.dispose()
+ *   })
+ * })
+ * ```
+ */
+
+import ..foundation { Size, Duration, ZugError }
+import ..backends.headless { HeadlessBackend }
+import ..widgets { Runtime, App, Window, Widget }
+
+/**
+ * Runs widgets on the headless backend and acts on them.
+ */
+class WidgetTester {
+
+  /**
+   * @type HeadlessBackend
+   */
+  var backend
+
+  /**
+   * @type Runtime
+   */
+  var runtime
+
+  @new() {
+    self.backend = HeadlessBackend()
+    self.runtime = Runtime(self.backend)
+    self.runtime.start()
+  }
+
+  /**
+   * Shows `widget` and draws it. An `App` is shown as it is; anything
+   * else is put in a window first.
+   *
+   * @param Widget widget
+   * @param ?dict options: `size` of that window, 800 by 600 when left out,
+   *    and `title`.
+   * @returns WidgetTester this same instance
+   */
+  pump_widget(widget, options: ?dict) {
+    if !instance_of(widget, Widget) {
+      raise TypeError('pump_widget() takes a widget, got ${typeof(widget)}')
+    }
+
+    var shown = widget
+
+    if !instance_of(widget, App) {
+      var size = options == nil ? nil : options.get('size')
+      var title = options == nil ? nil : options.get('title')
+      shown = App({
+        windows: [Window(
+          title == nil ? 'Test' : title, widget,
+          { size: size == nil ? Size(800, 600) : size },
+        )],
+      })
+    }
+
+    self.runtime.attach(shown)
+    self.pump()
+    return self
+  }
+
+  /**
+   * Shows `widget`, which must build an `App`, as the whole application,
+   * and draws it.
+   *
+   * @param Widget widget
+   * @returns WidgetTester this same instance
+   */
+  pump_app(widget) {
+    if !instance_of(widget, Widget) {
+      raise TypeError('pump_app() takes a widget, got ${typeof(widget)}')
+    }
+
+    self.runtime.attach(widget)
+    self.pump()
+    return self
+  }
+
+  /**
+   * Draws frames until nothing is waiting.
+   *
+   * @returns WidgetTester this same instance
+   */
+  pump() {
+    self.backend.pump()
+    return self
+  }
+
+  /**
+   * Moves time forward, firing timers as they fall due.
+   *
+   * @param Duration|number time: a `Duration`, or seconds.
+   * @returns WidgetTester this same instance
+   */
+  advance(time) {
+    var seconds = instance_of(time, Duration) ? time.in_seconds() : time
+    self.backend.advance(seconds)
+    return self
+  }
+
+  /**
+   * The window at `index` among those created, the first when left out.
+   *
+   * @param ?number index
+   * @returns HeadlessWindow
+   */
+  window(index: ?number) {
+    var windows = self.backend.windows
+
+    if windows.is_empty() {
+      raise ZugError('no window has been created')
+    }
+
+    return windows[index == nil ? 0 : index]
+  }
+
+  /**
+   * Every view in every open window that has not been destroyed, windows
+   * included.
+   *
+   * @returns list
+   */
+  views() {
+    var found = []
+
+    for window in self.backend.windows {
+      if !window.destroyed {
+        for view in window.descendants() {
+          if !view.destroyed {
+            found.append(view)
+          }
+        }
+      }
+    }
+
+    return found
+  }
+
+  /**
+   * The views showing exactly `text`.
+   *
+   * @param string text
+   * @returns list
+   */
+  find_text(text: string) {
+    return self.views().filter(@(view) => view.text() == text)
+  }
+
+  /**
+   * The views of `kind`.
+   *
+   * @param string kind
+   * @returns list
+   */
+  find_kind(kind: string) {
+    return self.views().filter(@(view) => view.kind() == kind)
+  }
+
+  /**
+   * The views with the accessibility identifier `identifier`.
+   *
+   * @param string identifier
+   * @returns list
+   */
+  find_identifier(identifier: string) {
+    return self
+      .views()
+      .filter(
+        @(view) => view.props.get('accessibility_identifier') == identifier,
+      )
+  }
+
+  /**
+   * The one view that `target` names: a view as it is, or the only view
+   * whose text or accessibility identifier is the string `target`.
+   *
+   * @param HeadlessView|string target
+   * @returns HeadlessView
+   * @throws ZugError When no view, or more than one, matches
+   */
+  one(target) {
+    if !is_string(target) {
+      return target
+    }
+
+    var found = self.find_identifier(target)
+
+    if found.is_empty() {
+      found = self.find_text(target)
+    }
+
+    if found.length() != 1 {
+      raise ZugError("expected one view named '${target}', found ${found.length()}")
+    }
+
+    return found[0]
+  }
+
+  /**
+   * Clicks a button: `target` is the view, or its title or identifier. A
+   * toggle button is clicked into its other state.
+   *
+   * @param HeadlessView|string target
+   * @returns any what the handler returned.
+   */
+  tap(target) {
+    var view = self.one(target)
+    var selected = view.props.get('selected')
+
+    if view.props.get('enabled') == false {
+      raise ZugError('${view} is disabled and cannot be clicked')
+    }
+
+    return view.fire('pressed', selected == nil ? nil : { selected: !selected })
+  }
+
+  /**
+   * Chooses an item from the menu bar, as the user would: the item
+   * titled `item` in the menu titled `menu`.
+   *
+   * @param string menu
+   * @param string item
+   * @throws ZugError When there is no such menu or item, or the item
+   *    calls nothing back
+   */
+  choose_menu(menu: string, item: string) {
+    var found = self.backend.menus.find(@(each) => each.get('title') == menu)
+
+    if found == nil {
+      raise ZugError("there is no menu titled '" + menu + "'")
+    }
+
+    var entry = found.items.find(@(each) => each.get('title') == item)
+
+    if entry == nil {
+      raise ZugError(
+        "the menu '" + menu + "' has no item titled '" + item + "'",
+      )
+    }
+
+    if entry.get('id') == nil {
+      raise ZugError(
+        "the item '" + item + "' plays a standard role and calls nothing back",
+      )
+    }
+
+    self.backend.choose_menu_item(entry.id)
+  }
+
+  /**
+   * Reports `event` with `payload` from the view `target` names.
+   *
+   * @param HeadlessView|string target
+   * @param string event
+   * @param any payload
+   * @returns any what the handler returned.
+   */
+  fire(target, event: string, payload) {
+    return self.one(target).fire(event, payload)
+  }
+
+  /**
+   * The state of the first stateful widget whose state is an instance of
+   * `type`, searching the element tree from the root.
+   *
+   * @param type type
+   * @returns ?State
+   */
+  state_of(type: type) {
+    if self.runtime.root == nil {
+      return nil
+    }
+
+    var found = nil
+    var pending = [self.runtime.root]
+
+    while !pending.is_empty() and found == nil {
+      var element = pending.shift()
+      var state = element.state_or_nil()
+
+      if state != nil and instance_of(state, type) {
+        found = state
+      }
+
+      element.visit_children(@(child) => pending.append(child))
+    }
+
+    return found
+  }
+
+  /**
+   * Takes the application down.
+   */
+  dispose() {
+    self.runtime.shutdown()
+  }
+}

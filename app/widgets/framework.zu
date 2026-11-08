@@ -1,0 +1,1718 @@
+/**
+ * Widgets, their state, and the element tree that keeps them.
+ *
+ * A widget is a description: cheap, immutable, made again on every build.
+ * An element is a widget's place in the tree. It survives rebuilds while
+ * the widget in its place keeps the same class and key, and it holds the
+ * `State` of a stateful widget and the render object of a render widget.
+ * A `Context` is how a widget's `build()` sees its element.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * class Counter < StatefulWidget {
+ *   create_state() {
+ *     return CounterState()
+ *   }
+ * }
+ *
+ * class CounterState < State {
+ *   var count = 0
+ *
+ *   build(context) {
+ *     return Button('Pressed ${self.count} times', {
+ *       on_pressed: @{ self.set_state(@{ self.count++ }) },
+ *     })
+ *   }
+ * }
+ * ```
+ */
+
+import zuri
+import ..foundation { Key, GlobalKey, LifecycleError, ZugError, report_error }
+import ..rendering { RenderObject }
+
+# Lifecycle stages of an element. A new element is 0 until mounted.
+var _ACTIVE = 1
+var _INACTIVE = 2
+var _DEFUNCT = 3
+
+var _error_builder = nil
+
+/**
+ * Sets what is built in place of a widget whose `build()` raised. The
+ * widgets library sets it to show the error.
+ *
+ * @internal
+ * @param function builder: called with the error, returns a widget.
+ */
+def set_error_widget_builder(builder: function) {
+  _error_builder = builder
+}
+
+/**
+ * The description of part of a user interface.
+ */
+class Widget {
+
+  /**
+   * Which widget in the next build takes this one's place. See `Key`.
+   *
+   * @type ?Key
+   */
+  var key
+
+  /**
+   * @param ?Key key
+   * @constructor
+   */
+  @new(key: ?Key) {
+    self.key = key
+  }
+
+  /**
+   * Makes the element that holds this widget in the tree.
+   *
+   * @returns Element
+   */
+  create_element() {
+    raise NotImplementedError('${typeof(self)} must define create_element()')
+  }
+
+  /**
+   * Whether `next` can take the place of `previous` in the same element:
+   * the same class and an equal key.
+   *
+   * @param Widget previous
+   * @param Widget next
+   * @returns bool
+   */
+  static can_update(previous: Widget, next: Widget) {
+    return zuri.reflect.class_of(previous) == zuri.reflect.class_of(next)
+      and previous.key == next.key
+  }
+
+  @to_string() {
+    if self.key != nil {
+      return '${typeof(self)}(key: ${self.key})'
+    }
+
+    return typeof(self)
+  }
+}
+
+/**
+ * A widget whose look depends only on its own fields and on inherited
+ * data. Subclasses implement `build()`.
+ */
+class StatelessWidget < Widget {
+
+  /**
+   * The widgets this one is made of.
+   *
+   * @param Context context
+   * @returns Widget
+   */
+  build(context) {
+    raise NotImplementedError('${typeof(self)} must define build()')
+  }
+
+  create_element() {
+    return StatelessElement(self)
+  }
+}
+
+/**
+ * A widget with state that outlives each build. Subclasses implement
+ * `create_state()`, and the `State` builds.
+ */
+class StatefulWidget < Widget {
+
+  /**
+   * Makes this widget's state. Called once for each place the widget
+   * takes in the tree.
+   *
+   * @returns State
+   */
+  create_state() {
+    raise NotImplementedError('${typeof(self)} must define create_state()')
+  }
+
+  create_element() {
+    return StatefulElement(self)
+  }
+}
+
+/**
+ * The state of a `StatefulWidget`, kept for as long as the widget keeps
+ * its place in the tree.
+ *
+ * Change fields inside `set_state()`, so the widget is rebuilt with them.
+ * The lifecycle runs `init_state()`, then `did_change_dependencies()`,
+ * then `build()` as often as needed, with `did_update_widget()` each time
+ * the parent rebuilds with a new widget, and `dispose()` at the end.
+ */
+class State {
+
+  /**
+   * The current widget.
+   *
+   * @type StatefulWidget
+   */
+  var widget
+
+  /**
+   * The element holding this state, or `nil` once disposed.
+   *
+   * @internal
+   * @type ?Element
+   */
+  var element
+
+  /**
+   * This state's context. Valid from `init_state()` until `dispose()`.
+   *
+   * @returns Context
+   */
+  context() {
+    if self.element == nil {
+      raise LifecycleError('the context of a ${typeof(self)} was used after it was disposed')
+    }
+
+    return self.element
+  }
+
+  /**
+   * Whether this state is in the tree.
+   *
+   * @returns bool
+   */
+  mounted() {
+    return self.element != nil
+  }
+
+  /**
+   * Called once, when the state is first put in the tree. Set up what
+   * the state needs here; inherited data is not available until
+   * `did_change_dependencies()`.
+   */
+  init_state() {}
+
+  /**
+   * Called after `init_state()`, and whenever inherited data this state
+   * read through `context.depend_on()` changes.
+   */
+  did_change_dependencies() {}
+
+  /**
+   * Called when the parent rebuilt with a new widget for this state.
+   *
+   * @param StatefulWidget previous: the widget before.
+   */
+  did_update_widget(previous) {}
+
+  /**
+   * The widgets this state shows.
+   *
+   * @param Context context
+   * @returns Widget
+   */
+  build(context) {
+    raise NotImplementedError('${typeof(self)} must define build()')
+  }
+
+  /**
+   * Called when the state is taken out of the tree, before `dispose()`.
+   */
+  deactivate() {}
+
+  /**
+   * Called once, when the state leaves the tree for good. Release what
+   * `init_state()` set up here.
+   */
+  dispose() {}
+
+  /**
+   * Runs `change`, then rebuilds the widget. Without `change`, only
+   * rebuilds it.
+   *
+   * @param ?function change
+   * @throws LifecycleError When the state is not in the tree
+   */
+  set_state(change: ?function) {
+    if self.element == nil {
+      raise LifecycleError('set_state() was called on a ${typeof(self)} that is not in the tree')
+    }
+
+    if change != nil {
+      change()
+    }
+
+    self.element.mark_needs_build()
+  }
+}
+
+/**
+ * A widget that makes data available to everything below it. Widgets
+ * below read it with `context.depend_on(TheClass)`, and are rebuilt when a
+ * new one replaces it and `update_should_notify()` says so.
+ *
+ * ```zuri
+ * import zug { Inherited }
+ *
+ * class Units < Inherited {
+ *   var metric
+ *
+ *   @new(metric, child) {
+ *     parent(child)
+ *     self.metric = metric
+ *   }
+ *
+ *   update_should_notify(previous) {
+ *     return previous.metric != self.metric
+ *   }
+ *
+ *   static of(context) {
+ *     return context.depend_on(Units)
+ *   }
+ * }
+ * ```
+ */
+class Inherited < Widget {
+
+  /**
+   * @type Widget
+   */
+  var child
+
+  /**
+   * @param Widget child
+   * @param ?Key key
+   * @constructor
+   */
+  @new(child: Widget, key: ?Key) {
+    self.child = child
+    self.key = key
+  }
+
+  /**
+   * Whether widgets that depend on `previous` must rebuild now that this
+   * widget replaced it. The default says yes.
+   *
+   * @param Inherited previous
+   * @returns bool
+   */
+  update_should_notify(previous) {
+    return true
+  }
+
+  create_element() {
+    return InheritedElement(self)
+  }
+}
+
+/**
+ * A widget that sets data its child's render object keeps for the layout
+ * above it, such as how much a child of a row expands.
+ */
+class ParentDataWidget < Widget {
+
+  /**
+   * @type Widget
+   */
+  var child
+
+  /**
+   * @param Widget child
+   * @param ?Key key
+   * @constructor
+   */
+  @new(child: Widget, key: ?Key) {
+    self.child = child
+    self.key = key
+  }
+
+  /**
+   * Stores this widget's data on `render_object`. When the stored data
+   * changed, mark the render object's parent as needing layout.
+   *
+   * @param RenderObject render_object
+   */
+  apply_parent_data(render_object) {
+    raise NotImplementedError('${typeof(self)} must define apply_parent_data()')
+  }
+
+  create_element() {
+    return ParentDataElement(self)
+  }
+}
+
+/**
+ * A widget with a render object.
+ */
+class RenderObjectWidget < Widget {
+
+  /**
+   * Makes the render object.
+   *
+   * @param Context context
+   * @returns RenderObject
+   */
+  create_render_object(context) {
+    raise NotImplementedError('${typeof(self)} must define create_render_object()')
+  }
+
+  /**
+   * Updates the render object this widget's element already has to match
+   * this widget.
+   *
+   * @param Context context
+   * @param RenderObject render_object
+   */
+  update_render_object(context, render_object) {}
+
+  /**
+   * Called when the render object leaves the tree for good.
+   *
+   * @param RenderObject render_object
+   */
+  did_unmount_render_object(render_object) {}
+}
+
+/**
+ * A render widget with no children.
+ */
+class LeafRenderObjectWidget < RenderObjectWidget {
+
+  create_element() {
+    return LeafRenderObjectElement(self)
+  }
+}
+
+/**
+ * A render widget with at most one child.
+ */
+class SingleChildRenderObjectWidget < RenderObjectWidget {
+
+  /**
+   * @type ?Widget
+   */
+  var child
+
+  create_element() {
+    return SingleChildRenderObjectElement(self)
+  }
+}
+
+/**
+ * A render widget with a list of children.
+ */
+class MultiChildRenderObjectWidget < RenderObjectWidget {
+
+  /**
+   * @type list
+   */
+  var children = []
+
+  create_element() {
+    return MultiChildRenderObjectElement(self)
+  }
+}
+
+/**
+ * A position among a list of children: its index and the element before
+ * it.
+ *
+ * @internal
+ */
+class IndexedSlot {
+  var index = 0
+  var previous
+
+  @new(index: number, previous) {
+    self.index = index
+    self.previous = previous
+  }
+
+  @eq(other) {
+    return instance_of(other, IndexedSlot)
+      and self.index == other.index
+      and self.previous == other.previous
+  }
+}
+
+/**
+ * Where a widget is in the tree, as its `build()` sees it.
+ *
+ * Every element is a `Context`. Look things up through it: inherited data
+ * with `depend_on()`, ancestors with `find_ancestor_widget()` and
+ * `find_ancestor_state()`, and the size the widget was given once it has
+ * been laid out with `size()`.
+ */
+class Context {
+
+  /**
+   * The widget in this place.
+   *
+   * @type Widget
+   */
+  var widget
+
+  /**
+   * The element above, or `nil` for the root.
+   *
+   * @internal
+   * @type ?Element
+   */
+  var parent_element
+
+  /**
+   * The build owner of the tree.
+   *
+   * @internal
+   * @type ?BuildOwner
+   */
+  var owner
+
+  /**
+   * How far from the root this element is.
+   *
+   * @type number
+   */
+  var depth = 0
+
+  /**
+   * @internal
+   * @type any
+   */
+  var slot
+
+  /**
+   * Inherited widget classes to the elements holding them, for this
+   * element and below.
+   *
+   * @internal
+   * @type ?dict
+   */
+  var inherited
+
+  /**
+   * The inherited elements this element read from.
+   *
+   * @internal
+   * @type list
+   */
+  var dependencies = []
+
+  /**
+   * The nearest `Inherited` widget of class `type` above, recording that
+   * this element depends on it, so it is rebuilt when that widget
+   * changes. `nil` when there is none.
+   *
+   * @param type type
+   * @returns ?Inherited
+   */
+  depend_on(type: type) {
+    var holder = self.inherited == nil ? nil : self.inherited.get(type)
+
+    if holder == nil {
+      return nil
+    }
+
+    if !self.dependencies.contains(holder) {
+      self.dependencies.append(holder)
+      holder.add_dependent(self)
+    }
+
+    return holder.widget
+  }
+
+  /**
+   * The nearest `Inherited` widget of class `type` above, without
+   * depending on it.
+   *
+   * @param type type
+   * @returns ?Inherited
+   */
+  get_inherited(type: type) {
+    var holder = self.inherited == nil ? nil : self.inherited.get(type)
+    return holder == nil ? nil : holder.widget
+  }
+
+  /**
+   * The nearest widget above that is an instance of `type`.
+   *
+   * @param type type
+   * @returns ?Widget
+   */
+  find_ancestor_widget(type: type) {
+    var element = self.parent_element
+
+    while element != nil {
+      if instance_of(element.widget, type) {
+        return element.widget
+      }
+
+      element = element.parent_element
+    }
+
+    return nil
+  }
+
+  /**
+   * The nearest `State` above that is an instance of `type`.
+   *
+   * @param type type
+   * @returns ?State
+   */
+  find_ancestor_state(type: type) {
+    var element = self.parent_element
+
+    while element != nil {
+      var state = element.state_or_nil()
+
+      if state != nil and instance_of(state, type) {
+        return state
+      }
+
+      element = element.parent_element
+    }
+
+    return nil
+  }
+
+  /**
+   * Calls `visitor` with each element above, nearest first, until it
+   * returns `false`.
+   *
+   * @param function visitor
+   */
+  visit_ancestors(visitor: function) {
+    var element = self.parent_element
+
+    while element != nil {
+      if visitor(element) == false {
+        return
+      }
+
+      element = element.parent_element
+    }
+  }
+
+  /**
+   * The render object of this widget, or of the first widget below it
+   * that has one.
+   *
+   * @returns ?RenderObject
+   */
+  find_render_object() {
+    var found = nil
+
+    self.visit_children(@(child) {
+      if found == nil {
+        found = child.find_render_object()
+      }
+    })
+
+    return found
+  }
+
+  /**
+   * The size this widget was given at the last layout, or `nil` before
+   * it has been laid out.
+   *
+   * @returns ?Size
+   */
+  size() {
+    var render_object = self.find_render_object()
+
+    if render_object == nil or render_object.constraints == nil {
+      return nil
+    }
+
+    return render_object.size
+  }
+
+  /**
+   * Whether this element is in the tree.
+   *
+   * @returns bool
+   */
+  mounted() {
+    return false
+  }
+
+  /**
+   * The state of a stateful widget's element, `nil` for any other.
+   *
+   * @internal
+   * @returns ?State
+   */
+  state_or_nil() {
+    return nil
+  }
+
+  /**
+   * Calls `visitor` with each child element.
+   *
+   * @internal
+   * @param function visitor
+   */
+  visit_children(visitor: function) {}
+
+  /**
+   * The services of the running application, such as its backend.
+   *
+   * @returns any
+   */
+  runtime() {
+    return self.owner == nil ? nil : self.owner.runtime
+  }
+}
+
+/**
+ * An element: a widget's place in the tree.
+ */
+class Element < Context {
+  var _lifecycle = 0
+
+  /**
+   * Whether the element is waiting to rebuild.
+   *
+   * @internal
+   * @type bool
+   */
+  var dirty = true
+
+  /**
+   * Whether the element is in the build owner's dirty list.
+   *
+   * @internal
+   * @type bool
+   */
+  var in_dirty_list = false
+
+  /**
+   * @param Widget widget
+   * @constructor
+   */
+  @new(widget: Widget) {
+    self.widget = widget
+  }
+
+  mounted() {
+    return self._lifecycle == _ACTIVE
+  }
+
+  /**
+   * Whether the element is active in the tree.
+   *
+   * @internal
+   * @returns bool
+   */
+  is_active() {
+    return self._lifecycle == _ACTIVE
+  }
+
+  /**
+   * Puts this element in the tree under `parent_element`, at `slot`.
+   *
+   * @internal
+   * @param ?Element parent_element
+   * @param any slot
+   */
+  mount(parent_element, slot) {
+    self.parent_element = parent_element
+    self.slot = slot
+    self._lifecycle = _ACTIVE
+
+    if parent_element != nil {
+      self.depth = parent_element.depth + 1
+      self.owner = parent_element.owner
+      self.inherited = parent_element.inherited
+    }
+
+    var key = self.widget.key
+
+    if key != nil and instance_of(key, GlobalKey) {
+      if key.element != nil and key.element != self {
+        raise ZugError('the ${key} is used by two widgets at once: ${key.element.widget} and ${self.widget}; a GlobalKey may be used once in the tree')
+      }
+
+      key.element = self
+    }
+  }
+
+  /**
+   * Replaces this element's widget with `next`, which `can_update()`
+   * accepted.
+   *
+   * @internal
+   * @param Widget next
+   */
+  update(next: Widget) {
+    self.widget = next
+  }
+
+  /**
+   * Moves this element to a new slot among its siblings.
+   *
+   * @internal
+   * @param any slot
+   */
+  update_slot(slot) {
+    self.slot = slot
+  }
+
+  /**
+   * Takes this element out of the tree, keeping it until the end of the
+   * frame.
+   *
+   * @internal
+   */
+  deactivate() {
+    for holder in self.dependencies {
+      holder.remove_dependent(self)
+    }
+
+    self.dependencies = []
+    self._lifecycle = _INACTIVE
+    self._release_global_key()
+  }
+
+  _release_global_key() {
+    var key = self.widget.key
+
+    if key != nil and instance_of(key, GlobalKey) and key.element == self {
+      key.element = nil
+    }
+  }
+
+  /**
+   * Releases this element for good.
+   *
+   * @internal
+   */
+  unmount() {
+    self._release_global_key()
+    self._lifecycle = _DEFUNCT
+  }
+
+  /**
+   * Marks this element to rebuild in the next frame.
+   */
+  mark_needs_build() {
+    if self._lifecycle != _ACTIVE or self.dirty {
+      return
+    }
+
+    self.dirty = true
+    self.owner.schedule_build_for(self)
+  }
+
+  /**
+   * Rebuilds this element when it is marked to.
+   *
+   * @internal
+   */
+  rebuild() {
+    if self._lifecycle != _ACTIVE or !self.dirty {
+      return
+    }
+
+    self.perform_rebuild()
+  }
+
+  /**
+   * Does the work of a rebuild. Subclasses override it.
+   *
+   * @internal
+   */
+  perform_rebuild() {
+    self.dirty = false
+  }
+
+  /**
+   * Called when inherited data this element depends on changed.
+   *
+   * @internal
+   */
+  did_change_dependencies() {
+    self.mark_needs_build()
+  }
+
+  # Children.
+
+  /**
+   * Makes `next` this element's child at `slot`, reusing `child` when it
+   * can. Returns the child element, or `nil` when `next` is `nil`.
+   *
+   * @internal
+   * @param ?Element child
+   * @param ?Widget next
+   * @param any slot
+   * @returns ?Element
+   */
+  update_child(child, next, slot) {
+    if next == nil {
+      if child != nil {
+        self.deactivate_child(child)
+      }
+
+      return nil
+    }
+
+    if child != nil {
+      if child.widget == next {
+        if child.slot != slot {
+          self.update_slot_for_child(child, slot)
+        }
+
+        return child
+      }
+
+      if Widget.can_update(child.widget, next) {
+        if child.slot != slot {
+          self.update_slot_for_child(child, slot)
+        }
+
+        child.update(next)
+        return child
+      }
+
+      self.deactivate_child(child)
+    }
+
+    return self.inflate_widget(next, slot)
+  }
+
+  /**
+   * Updates a list of child elements to match `widgets`, matching by key
+   * and otherwise by position, and returns the new list.
+   *
+   * @internal
+   * @param list old_children
+   * @param list widgets
+   * @returns list
+   */
+  update_children(old_children: list, widgets: list) {
+    var new_top = 0
+    var old_top = 0
+    var new_bottom = widgets.length() - 1
+    var old_bottom = old_children.length() - 1
+    var result = []
+
+    iter var i = 0; i < widgets.length(); i++ {
+      result.append(nil)
+    }
+
+    var previous = nil
+
+    # Matching children at the top.
+    while old_top <= old_bottom and new_top <= new_bottom {
+      var old_child = old_children[old_top]
+      var widget = widgets[new_top]
+
+      if !Widget.can_update(old_child.widget, widget) {
+        break
+      }
+
+      var child = self.update_child(
+        old_child, widget, IndexedSlot(new_top, previous),
+      )
+      result[new_top] = child
+      previous = child
+      new_top++
+      old_top++
+    }
+
+    # Matching children at the bottom, updated last so their slots see the
+    # final previous sibling.
+    while old_top <= old_bottom and new_top <= new_bottom {
+      if !Widget.can_update(
+        old_children[old_bottom].widget, widgets[new_bottom],
+      ) {
+        break
+      }
+
+      old_bottom--
+      new_bottom--
+    }
+
+    # Old children in the middle: keyed ones are kept for matching, the
+    # rest go.
+    var has_old = old_top <= old_bottom
+    var keyed = {}
+
+    if has_old {
+      while old_top <= old_bottom {
+        var old_child = old_children[old_top]
+        var key = old_child.widget.key
+
+        if key != nil {
+          keyed[key.map_key()] = old_child
+        } else {
+          self.deactivate_child(old_child)
+        }
+
+        old_top++
+      }
+    }
+
+    # The middle of the new list.
+    while new_top <= new_bottom {
+      var match = nil
+      var widget = widgets[new_top]
+
+      if has_old and widget.key != nil {
+        var map_key = widget.key.map_key()
+        var candidate = keyed.get(map_key)
+
+        if candidate != nil and Widget.can_update(candidate.widget, widget) {
+          keyed.remove(map_key)
+          match = candidate
+        }
+      }
+
+      var child = self.update_child(
+        match, widget, IndexedSlot(new_top, previous),
+      )
+      result[new_top] = child
+      previous = child
+      new_top++
+    }
+
+    new_bottom = widgets.length() - 1
+    old_bottom = old_children.length() - 1
+
+    # The matched bottom.
+    while old_top <= old_bottom and new_top <= new_bottom {
+      var child = self.update_child(
+        old_children[old_top], widgets[new_top], IndexedSlot(new_top, previous),
+      )
+      result[new_top] = child
+      previous = child
+      new_top++
+      old_top++
+    }
+
+    for map_key, old_child in keyed {
+      self.deactivate_child(old_child)
+    }
+
+    return result
+  }
+
+  /**
+   * Makes a new element for `widget` and mounts it as a child.
+   *
+   * @internal
+   * @param Widget widget
+   * @param any slot
+   * @returns Element
+   */
+  inflate_widget(widget: Widget, slot) {
+    var child = widget.create_element()
+    child.mount(self, slot)
+    return child
+  }
+
+  /**
+   * Takes `child` out of the tree. It is unmounted at the end of the
+   * frame.
+   *
+   * @internal
+   * @param Element child
+   */
+  deactivate_child(child) {
+    child.parent_element = nil
+    child.detach_render_object()
+    child.deactivate_recursively()
+    self.owner.inactive.append(child)
+  }
+
+  /**
+   * Deactivates this element and everything below it.
+   *
+   * @internal
+   */
+  deactivate_recursively() {
+    self.deactivate()
+    self.visit_children(@(child) => child.deactivate_recursively())
+  }
+
+  /**
+   * Unmounts this element and everything below it, children first.
+   *
+   * @internal
+   */
+  unmount_recursively() {
+    self.visit_children(@(child) => child.unmount_recursively())
+    self.unmount()
+  }
+
+  /**
+   * Moves `child` to `slot`, telling the render objects below.
+   *
+   * @internal
+   * @param Element child
+   * @param any slot
+   */
+  update_slot_for_child(child, slot) {
+    child.update_slot_recursively(slot)
+  }
+
+  /**
+   * Sets the slot of this element and of the elements below it down to the
+   * first render object.
+   *
+   * @internal
+   * @param any slot
+   */
+  update_slot_recursively(slot) {
+    self.update_slot(slot)
+    self.visit_children(@(child) => child.update_slot_recursively(slot))
+  }
+
+  /**
+   * Takes this element's render object, or the first below it, out of
+   * the render tree.
+   *
+   * @internal
+   */
+  detach_render_object() {
+    self.visit_children(@(child) => child.detach_render_object())
+    self.slot = nil
+  }
+
+  /**
+   * Puts this element's render object, or the first below it, into the
+   * render tree at `slot`.
+   *
+   * @internal
+   * @param any slot
+   */
+  attach_render_object(slot) {
+    self.visit_children(@(child) => child.attach_render_object(slot))
+    self.slot = slot
+  }
+
+  /**
+   * The nearest element above that has a render object.
+   *
+   * @internal
+   * @returns ?RenderObjectElement
+   */
+  ancestor_render_object_element() {
+    var element = self.parent_element
+
+    while element != nil and !instance_of(element, RenderObjectElement) {
+      element = element.parent_element
+    }
+
+    return element
+  }
+
+  @to_string() {
+    return '${typeof(self)}(${self.widget})'
+  }
+}
+
+/**
+ * An element that builds one child: the element of a stateless or
+ * stateful widget, or of an inherited one.
+ */
+class ComponentElement < Element {
+
+  /**
+   * @internal
+   * @type ?Element
+   */
+  var child
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+    self.first_build()
+  }
+
+  /**
+   * The first rebuild after mounting.
+   *
+   * @internal
+   */
+  first_build() {
+    self.rebuild()
+  }
+
+  /**
+   * The widget this element shows.
+   *
+   * @internal
+   * @returns Widget
+   */
+  build() {
+    raise NotImplementedError('${typeof(self)} must define build()')
+  }
+
+  perform_rebuild() {
+    var built = nil
+    var failed = false
+
+    catch {
+      built = self.build()
+    } as error {
+      failed = true
+      report_error(error, 'building ${self.widget}')
+      built = _error_builder == nil ? nil : _error_builder(error)
+    }
+
+    if !failed and built != nil and !instance_of(built, Widget) {
+      report_error(
+        ZugError('build() of ${self.widget} returned ${typeof(built)}, not a widget'),
+        'building ${self.widget}',
+      )
+      built = _error_builder == nil
+        ? nil
+        : _error_builder(ZugError('build() returned ${typeof(built)}'))
+    }
+
+    self.dirty = false
+    self.child = self.update_child(self.child, built, self.slot)
+  }
+
+  update(next: Widget) {
+    parent.update(next)
+    self.dirty = true
+    self.rebuild()
+  }
+
+  visit_children(visitor: function) {
+    if self.child != nil {
+      visitor(self.child)
+    }
+  }
+}
+
+/**
+ * The element of a `StatelessWidget`.
+ */
+class StatelessElement < ComponentElement {
+
+  build() {
+    return self.widget.build(self)
+  }
+}
+
+/**
+ * The element of a `StatefulWidget`, which holds its `State`.
+ */
+class StatefulElement < ComponentElement {
+
+  /**
+   * @internal
+   * @type State
+   */
+  var state
+
+  var _dependencies_changed = false
+
+  @new(widget: Widget) {
+    parent(widget)
+    var state = widget.create_state()
+
+    if !instance_of(state, State) {
+      raise ZugError('create_state() of ${widget} returned ${typeof(state)}, not a State')
+    }
+
+    self.state = state
+    state.element = self
+    state.widget = widget
+  }
+
+  state_or_nil() {
+    return self.state
+  }
+
+  first_build() {
+    catch {
+      self.state.init_state()
+      self.state.did_change_dependencies()
+    } as error {
+      report_error(error, 'starting the state of ${self.widget}')
+    }
+
+    parent.first_build()
+  }
+
+  build() {
+    if self._dependencies_changed {
+      self._dependencies_changed = false
+      self.state.did_change_dependencies()
+    }
+
+    return self.state.build(self)
+  }
+
+  update(next: Widget) {
+    var previous = self.state.widget
+    self.widget = next
+    self.state.widget = next
+
+    catch {
+      self.state.did_update_widget(previous)
+    } as error {
+      report_error(error, 'updating the state of ${next}')
+    }
+
+    self.dirty = true
+    self.rebuild()
+  }
+
+  did_change_dependencies() {
+    self._dependencies_changed = true
+    parent.did_change_dependencies()
+  }
+
+  deactivate() {
+    catch {
+      self.state.deactivate()
+    } as error {
+      report_error(error, 'deactivating the state of ${self.widget}')
+    }
+
+    parent.deactivate()
+  }
+
+  unmount() {
+    parent.unmount()
+
+    catch {
+      self.state.dispose()
+    } as error {
+      report_error(error, 'disposing the state of ${self.widget}')
+    }
+
+    self.state.element = nil
+  }
+}
+
+/**
+ * The element of an `Inherited` widget.
+ */
+class InheritedElement < ComponentElement {
+  var _dependents = []
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+  }
+
+  first_build() {
+    var inherited = self.inherited == nil ? {} : self.inherited.clone()
+    inherited[zuri.reflect.class_of(self.widget)] = self
+    self.inherited = inherited
+    parent.first_build()
+  }
+
+  build() {
+    return self.widget.child
+  }
+
+  /**
+   * @internal
+   * @param Element element
+   */
+  add_dependent(element) {
+    if !self._dependents.contains(element) {
+      self._dependents.append(element)
+    }
+  }
+
+  /**
+   * @internal
+   * @param Element element
+   */
+  remove_dependent(element) {
+    var index = self._dependents.index_of(element)
+
+    if index >= 0 {
+      self._dependents.remove_at(index)
+    }
+  }
+
+  update(next: Widget) {
+    var previous = self.widget
+    self.widget = next
+
+    if next.update_should_notify(previous) {
+      for dependent in self._dependents.clone() {
+        dependent.did_change_dependencies()
+      }
+    }
+
+    self.dirty = true
+    self.rebuild()
+  }
+}
+
+/**
+ * The element of a `ParentDataWidget`.
+ */
+class ParentDataElement < ComponentElement {
+
+  build() {
+    return self.widget.child
+  }
+
+  update(next: Widget) {
+    parent.update(next)
+    self.apply_to_child()
+  }
+
+  /**
+   * Applies the widget's data to the render objects directly below.
+   *
+   * @internal
+   */
+  apply_to_child() {
+    var render_object = self.find_render_object()
+
+    if render_object != nil {
+      self.widget.apply_parent_data(render_object)
+    }
+  }
+}
+
+/**
+ * The element of a widget with a render object.
+ */
+class RenderObjectElement < Element {
+
+  /**
+   * @type ?RenderObject
+   */
+  var render_object
+
+  var _ancestor
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+    self.render_object = self.widget.create_render_object(self)
+
+    if !instance_of(self.render_object, RenderObject) {
+      raise ZugError('create_render_object() of ${self.widget} returned ${typeof(self.render_object)}, not a RenderObject')
+    }
+
+    self.attach_render_object(slot)
+    self.dirty = false
+  }
+
+  update(next: Widget) {
+    parent.update(next)
+    self.widget.update_render_object(self, self.render_object)
+    self.dirty = false
+  }
+
+  perform_rebuild() {
+    self.widget.update_render_object(self, self.render_object)
+    self.dirty = false
+  }
+
+  find_render_object() {
+    return self.render_object
+  }
+
+  attach_render_object(slot) {
+    self.slot = slot
+    self._ancestor = self.ancestor_render_object_element()
+
+    if self._ancestor != nil {
+      self._ancestor.insert_render_object_child(self.render_object, slot)
+    }
+
+    var element = self.parent_element
+
+    while element != nil and !instance_of(element, RenderObjectElement) {
+      if instance_of(element, ParentDataElement) {
+        element.widget.apply_parent_data(self.render_object)
+      }
+
+      element = element.parent_element
+    }
+  }
+
+  detach_render_object() {
+    if self._ancestor != nil {
+      self._ancestor.remove_render_object_child(self.render_object, self.slot)
+      self._ancestor = nil
+    }
+
+    self.slot = nil
+  }
+
+  update_slot(slot) {
+    var previous = self.slot
+    self.slot = slot
+
+    if self._ancestor != nil {
+      self._ancestor.move_render_object_child(
+        self.render_object, previous, slot,
+      )
+    }
+  }
+
+  update_slot_recursively(slot) {
+    self.update_slot(slot)
+  }
+
+  unmount() {
+    parent.unmount()
+    self.widget.did_unmount_render_object(self.render_object)
+    self.render_object.dispose()
+  }
+
+  /**
+   * Adds a child's render object to this element's at `slot`.
+   *
+   * @internal
+   * @param RenderObject child
+   * @param any slot
+   */
+  insert_render_object_child(child, slot) {
+    raise ZugError('${self.widget} cannot have children')
+  }
+
+  /**
+   * Moves a child's render object from one slot to another.
+   *
+   * @internal
+   * @param RenderObject child
+   * @param any previous
+   * @param any slot
+   */
+  move_render_object_child(child, previous, slot) {}
+
+  /**
+   * Removes a child's render object.
+   *
+   * @internal
+   * @param RenderObject child
+   * @param any slot
+   */
+  remove_render_object_child(child, slot) {
+    self.render_object.remove_child(child)
+  }
+}
+
+/**
+ * The element of a render widget with no children.
+ */
+class LeafRenderObjectElement < RenderObjectElement {}
+
+/**
+ * The element of a render widget with at most one child.
+ */
+class SingleChildRenderObjectElement < RenderObjectElement {
+
+  /**
+   * @internal
+   * @type ?Element
+   */
+  var child
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+    self.child = self.update_child(nil, self.widget.child, nil)
+  }
+
+  update(next: Widget) {
+    parent.update(next)
+    self.child = self.update_child(self.child, self.widget.child, nil)
+  }
+
+  visit_children(visitor: function) {
+    if self.child != nil {
+      visitor(self.child)
+    }
+  }
+
+  insert_render_object_child(child, slot) {
+    self.render_object.set_child(child)
+  }
+
+  remove_render_object_child(child, slot) {
+    if self.render_object.child() == child {
+      self.render_object.set_child(nil)
+    }
+  }
+}
+
+/**
+ * The element of a render widget with a list of children.
+ */
+class MultiChildRenderObjectElement < RenderObjectElement {
+
+  /**
+   * @internal
+   * @type list
+   */
+  var children = []
+
+  mount(parent_element, slot) {
+    parent.mount(parent_element, slot)
+    var previous = nil
+    var made = []
+
+    iter var i = 0; i < self.widget.children.length(); i++ {
+      var child = self.inflate_widget(
+        self.widget.children[i], IndexedSlot(i, previous),
+      )
+      made.append(child)
+      previous = child
+    }
+
+    self.children = made
+  }
+
+  update(next: Widget) {
+    parent.update(next)
+    self.children = self.update_children(self.children, self.widget.children)
+  }
+
+  visit_children(visitor: function) {
+    for child in self.children {
+      visitor(child)
+    }
+  }
+
+  insert_render_object_child(child, slot) {
+    self.render_object.insert_child(child, self._render_after(slot))
+  }
+
+  move_render_object_child(child, previous, slot) {
+    self.render_object.move_child(child, self._render_after(slot))
+  }
+
+  remove_render_object_child(child, slot) {
+    self.render_object.remove_child(child)
+  }
+
+  _render_after(slot) {
+    if slot == nil or slot.previous == nil {
+      return nil
+    }
+
+    return slot.previous.find_render_object()
+  }
+}
+
+/**
+ * Keeps track of which elements need rebuilding, and unmounts those that
+ * left the tree once a frame is done.
+ */
+class BuildOwner {
+
+  /**
+   * Elements taken out of the tree during this frame.
+   *
+   * @internal
+   * @type list
+   */
+  var inactive = []
+
+  /**
+   * Called when the first element of a frame is marked dirty.
+   *
+   * @type ?function
+   */
+  var on_build_scheduled
+
+  /**
+   * The runtime this tree belongs to, for `Context.runtime()`.
+   *
+   * @type any
+   */
+  var runtime
+
+  var _dirty = []
+  var _building = false
+  var _needs_sort = false
+
+  /**
+   * Adds `element` to the elements to rebuild.
+   *
+   * @internal
+   * @param Element element
+   */
+  schedule_build_for(element) {
+    if element.in_dirty_list {
+      self._needs_sort = true
+      return
+    }
+
+    element.in_dirty_list = true
+    self._dirty.append(element)
+    self._needs_sort = true
+
+    if self._dirty.length() == 1
+      and !self._building
+      and self.on_build_scheduled != nil {
+      self.on_build_scheduled()
+    }
+  }
+
+  /**
+   * Whether any element is waiting to rebuild.
+   *
+   * @returns bool
+   */
+  has_dirty() {
+    return !self._dirty.is_empty()
+  }
+
+  /**
+   * Rebuilds every dirty element, shallowest first, including any that
+   * become dirty while this runs.
+   */
+  build_scope() {
+    if self._dirty.is_empty() {
+      return
+    }
+
+    self._building = true
+    var index = 0
+
+    while index < self._dirty.length() {
+      if self._needs_sort {
+        self._needs_sort = false
+        var rest = self._dirty[index, self._dirty.length()]
+        rest.sort(@(a, b) => a.depth - b.depth)
+        self._dirty = self._dirty[0, index] + rest
+      }
+
+      var element = self._dirty[index]
+      element.rebuild()
+      index++
+    }
+
+    for element in self._dirty {
+      element.in_dirty_list = false
+    }
+
+    self._dirty = []
+    self._building = false
+  }
+
+  /**
+   * Unmounts the elements that left the tree during this frame.
+   */
+  finalize_tree() {
+    while !self.inactive.is_empty() {
+      var elements = self.inactive
+      self.inactive = []
+
+      for element in elements {
+        element.unmount_recursively()
+      }
+    }
+  }
+}

@@ -1,0 +1,694 @@
+/**
+ * Render objects backed by native views.
+ *
+ * A host owns one `ViewHost`. It creates the view the first time it is
+ * needed, sends it only the props that changed, gives it a frame relative
+ * to the nearest host above, keeps its native children in tree order, and
+ * destroys it when the host leaves the tree.
+ *
+ * Props an event controls follow what the widget declares. When the user
+ * changes one, say by clicking a checkbox, the host records the value the
+ * view now shows and, at the next commit, sends the declared value back
+ * unless the widget has since declared the user's value itself.
+ */
+
+import ..foundation {
+  Point, Size, Rect, Constraints, EdgeInsets, INFINITY, values_equal,
+  report_error, BackendError,
+}
+import ..backend { kind_spec }
+import .object { RenderObject }
+
+/**
+ * A render object with a native view of one kind.
+ */
+class RenderHost < RenderObject {
+
+  /**
+   * The view kind.
+   *
+   * @type string
+   */
+  var kind
+
+  /**
+   * The kind's specification.
+   *
+   * @type KindSpec
+   */
+  var spec
+
+  /**
+   * The props as the widget last declared them.
+   *
+   * @type dict
+   */
+  var props = {}
+
+  /**
+   * Event names to the functions that handle them.
+   *
+   * @type dict
+   */
+  var handlers = {}
+
+  /**
+   * The native view, once created.
+   *
+   * @type ?ViewHost
+   */
+  var view
+
+  /**
+   * Whether the native children may be out of order.
+   *
+   * @internal
+   * @type bool
+   */
+  var structure_dirty = true
+
+  var _native_children = {}
+  var _pending = {}
+  var _props_dirty = false
+  var _stale = []
+  var _native = {}
+  var _frame
+  var _measured_for
+  var _measured
+  var _dispatch
+
+  /**
+   * @param string kind
+   * @param dict props: any of the kind's props; the rest take their
+   *    initial values.
+   * @param ?dict handlers: event names to functions.
+   * @throws ValueError When a prop is not one of the kind's
+   * @constructor
+   */
+  @new(kind: string, props: dict, handlers: ?dict) {
+    parent()
+    self.kind = kind
+    self.spec = kind_spec(kind)
+    self.props = self.spec.initial_props()
+
+    for name, value in props {
+      self._check_prop(name)
+      self.props[name] = value
+    }
+
+    self.handlers = handlers == nil ? {} : handlers
+    self._dispatch = @(event, payload) => self.handle_event(event, payload)
+  }
+
+  _check_prop(name: string) {
+    if !self.spec.props.contains(name) {
+      raise ValueError("the '${self.kind}' view kind has no prop '${name}'")
+    }
+  }
+
+  is_host() {
+    return true
+  }
+
+  describe() {
+    return '${typeof(self)}(${self.kind})'
+  }
+
+  /**
+   * Replaces the event handlers. Native wiring is not touched; events are
+   * routed to whatever handler is current when they arrive.
+   *
+   * @param dict handlers
+   */
+  set_handlers(handlers: dict) {
+    self.handlers = handlers
+  }
+
+  /**
+   * Declares new values for props. Only those that differ from the last
+   * declared values reach the view.
+   *
+   * @param dict props
+   */
+  set_props(props: dict) {
+    var changed = false
+    var layout = false
+
+    for name, value in props {
+      if !values_equal(self.props.get(name), value) {
+        self._check_prop(name)
+        self.props[name] = value
+        self._pending[name] = value
+        changed = true
+
+        if self.spec.affects_layout(name) {
+          layout = true
+        }
+      }
+    }
+
+    if changed {
+      self._props_dirty = true
+      self.mark_commit_path()
+    }
+
+    if layout {
+      self._measured_for = nil
+      self.mark_needs_layout()
+    }
+  }
+
+  /**
+   * Declares one prop's value.
+   *
+   * @param string name
+   * @param any value
+   */
+  set_prop(name: string, value) {
+    self.set_props({ (name): value })
+  }
+
+  /**
+   * Routes an event from the view to its handler, recording the value of
+   * any prop the event controls first.
+   *
+   * @internal
+   * @param string event
+   * @param any payload
+   * @returns any what the handler returned.
+   */
+  handle_event(event: string, payload) {
+    var controlled = self.spec.controlled_by(event)
+
+    if controlled != nil and is_dict(payload) and payload.contains(controlled) {
+      self._native[controlled] = payload[controlled]
+
+      if !self._stale.contains(controlled) {
+        self._stale.append(controlled)
+      }
+
+      self.mark_commit_path()
+
+      if self.spec.affects_layout(controlled) {
+        self._measured_for = nil
+        self.mark_needs_layout()
+      }
+    }
+
+    self.on_event(event, payload)
+    var handler = self.handlers.get(event)
+
+    if handler == nil or self.owner == nil {
+      return nil
+    }
+
+    return self.owner.run_handler(
+      handler, payload, "the '${event}' handler of a ${self.kind} view",
+    )
+  }
+
+  /**
+   * Called for every event before its handler, for subclasses that react
+   * to events themselves.
+   *
+   * @param string event
+   * @param any payload
+   */
+  on_event(event: string, payload) {}
+
+  /**
+   * The value the view last reported for a controlled prop, or the
+   * declared value when it has reported none.
+   *
+   * @param string name
+   * @returns any
+   */
+  native_value(name: string) {
+    return self._native.contains(name)
+      ? self._native[name]
+      : self.props.get(name)
+  }
+
+  # Views.
+
+  /**
+   * Creates the native view when it does not exist yet.
+   *
+   * @internal
+   */
+  ensure_view() {
+    if self.view != nil {
+      return
+    }
+
+    if self.owner == nil or self.owner.backend == nil {
+      raise BackendError("a '${self.kind}' view was needed while no backend was running")
+    }
+
+    self.view = self.create_view(self.owner.backend)
+    self._pending = {}
+    self._props_dirty = false
+    self._stale = []
+    self._native = {}
+    self._frame = nil
+    self._native_children = {}
+    self.structure_dirty = true
+    self.needs_commit = true
+  }
+
+  /**
+   * Makes the native view. Windows override it.
+   *
+   * @param Backend backend
+   * @returns ViewHost
+   */
+  create_view(backend) {
+    return backend.create_view(self.kind, self.props.clone(), self._dispatch)
+  }
+
+  /**
+   * Sends the view the props that changed, leaving out controlled props it
+   * already shows.
+   *
+   * @internal
+   */
+  flush_props() {
+    if self.view == nil or (!self._props_dirty and self._stale.is_empty()) {
+      return
+    }
+
+    var changes = {}
+
+    for name, value in self._pending {
+      if !(self._native.contains(name)
+        and values_equal(self._native[name], value)) {
+        changes[name] = value
+      }
+    }
+
+    for name in self._stale {
+      var value = self.props.get(name)
+
+      if !values_equal(self._native.get(name), value) {
+        changes[name] = value
+      }
+    }
+
+    for name in self._native.keys() {
+      if changes.contains(name) {
+        self._native[name] = changes[name]
+      }
+    }
+
+    self._pending = {}
+    self._props_dirty = false
+    self._stale = []
+
+    if !changes.is_empty() {
+      self.view.update(changes)
+    }
+  }
+
+  /**
+   * Destroys the native view, unless the host has been attached again.
+   *
+   * @internal
+   */
+  destroy_view() {
+    if self.view == nil or self.owner != nil {
+      return
+    }
+
+    var view = self.view
+    self.view = nil
+    self._native_children = {}
+    self._frame = nil
+    self.structure_dirty = true
+    self.needs_commit = true
+
+    catch {
+      view.destroy()
+    } as error {
+      report_error(error, "destroying a '${self.kind}' view")
+    }
+  }
+
+  detach() {
+    var owner = self.owner
+    parent.detach()
+
+    if self.view != nil and owner != nil {
+      owner.schedule_destroy(self)
+    }
+  }
+
+  /**
+   * Gives the view keyboard focus.
+   */
+  focus() {
+    self.ensure_view()
+    self.view.focus()
+  }
+
+  # Layout.
+
+  /**
+   * The size the view would like within `constraints`, cached until a
+   * prop that affects size changes.
+   *
+   * @param Constraints constraints
+   * @returns Size
+   */
+  measure(constraints: Constraints) {
+    if self._measured_for != nil and self._measured_for == constraints {
+      return self._measured
+    }
+
+    self.ensure_view()
+    self.flush_props()
+    var measured = self.view.measure(constraints)
+    self._measured_for = constraints
+    self._measured = measured
+    return measured
+  }
+
+  /**
+   * Lays out a view with no children: the measured size, widened to fill
+   * a bounded axis the kind fills.
+   */
+  perform_layout() {
+    var natural = self.measure(self.constraints)
+    var width = natural.width
+    var height = natural.height
+
+    if self.spec.width == 'fill' and self.constraints.has_bounded_width() {
+      width = self.constraints.max_width
+    }
+
+    if self.spec.height == 'fill' and self.constraints.has_bounded_height() {
+      height = self.constraints.max_height
+    }
+
+    self.size = self.constraints.constrain(Size(width, height))
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self.compute_max_intrinsic_width(height)
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self.measure(Constraints(0, INFINITY, 0, height)).width
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self.compute_max_intrinsic_height(width)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self.measure(Constraints(0, width, 0, INFINITY)).height
+  }
+
+  compute_baseline() {
+    self.ensure_view()
+    return self.view.baseline()
+  }
+
+  /**
+   * The space the view's own drawing takes around the children in
+   * `slot`.
+   *
+   * @param any slot
+   * @returns EdgeInsets
+   */
+  content_insets(slot) {
+    self.ensure_view()
+    self.flush_props()
+    return self.view.content_insets(slot)
+  }
+
+  /**
+   * The slot the child at `index` goes in. Most containers have one slot,
+   * `nil`.
+   *
+   * @param number index
+   * @returns any
+   */
+  slot_for_child(index: number) {
+    return nil
+  }
+
+  # Commit.
+
+  commit(origin: Point, host, forced: bool) {
+    if !forced
+      and !self.needs_commit
+      and !self.child_needs_commit
+      and !self._props_dirty
+      and self._stale.is_empty()
+      and !self.structure_dirty {
+      return
+    }
+
+    var position = self.parent_data == nil
+      ? origin
+      : origin + self.parent_data.offset
+    self.ensure_view()
+    self.flush_props()
+
+    if forced or self.needs_commit {
+      var frame = Rect(
+        position.x, position.y, self.size.width, self.size.height,
+      )
+
+      if frame != self._frame {
+        self._frame = frame
+        self.apply_frame(frame)
+      }
+    }
+
+    self.needs_commit = false
+
+    if self.structure_dirty {
+      self.sync_native_children()
+    }
+
+    self.child_needs_commit = false
+
+    for child in self.children {
+      child.commit(Point.ZERO, self, false)
+    }
+
+    self.after_commit()
+  }
+
+  /**
+   * Gives the view its frame. Windows, which have none, override it.
+   *
+   * @param Rect frame
+   */
+  apply_frame(frame: Rect) {
+    self.view.set_frame(frame)
+  }
+
+  /**
+   * Called at the end of each commit that reached this host.
+   */
+  after_commit() {}
+
+  /**
+   * Puts the native views of the nearest hosts below in the order of the
+   * tree, slot by slot.
+   *
+   * @internal
+   */
+  sync_native_children() {
+    var desired = []
+
+    iter var i = 0; i < self.children.length(); i++ {
+      var child = self.children[i]
+      var slot = self.slot_for_child(i)
+
+      if child.is_host() {
+        desired.append([child, slot])
+      } else {
+        child.collect_hosts(slot, desired)
+      }
+    }
+
+    var wanted = {}
+
+    for entry in desired {
+      wanted[id(entry[0])] = '${entry[1]}'
+    }
+
+    for slot_key, group in self._native_children {
+      var kept = []
+
+      for child in group.hosts {
+        if wanted.get(id(child)) == slot_key {
+          kept.append(child)
+        } else if child.view != nil {
+          self.view.remove_child(child.view)
+        }
+      }
+
+      group['hosts'] = kept
+    }
+
+    for entry in desired {
+      var child = entry[0]
+      var slot = entry[1]
+      var slot_key = '${slot}'
+      var group = self._native_children.get(slot_key)
+
+      if group == nil {
+        group = { slot, hosts: [], next: 0 }
+        self._native_children[slot_key] = group
+      }
+
+      child.ensure_view()
+      var index = group.next
+      group['next'] = index + 1
+
+      if index < group.hosts.length() and group.hosts[index] == child {
+        continue
+      }
+
+      var existing = group.hosts.index_of(child)
+
+      if existing >= 0 {
+        group.hosts.remove_at(existing)
+      }
+
+      group.hosts.insert(child, index)
+      self.view.insert_child(child.view, index, slot)
+    }
+
+    for slot_key, group in self._native_children {
+      group['next'] = 0
+    }
+
+    self.structure_dirty = false
+  }
+
+  /**
+   * The hosts whose views are currently native children of this one, in
+   * order, for `slot`.
+   *
+   * @param any slot
+   * @returns list
+   */
+  native_children(slot) {
+    var group = self._native_children.get('${slot}')
+    return group == nil ? [] : group.hosts.clone()
+  }
+}
+
+/**
+ * A host with one child that takes the host's whole size, such as a
+ * decorated box. Without a child it takes the smallest size allowed.
+ */
+class RenderHostProxy < RenderHost {
+
+  perform_layout() {
+    var child = self.child()
+
+    if child == nil {
+      self.size = self.constraints.smallest()
+      return
+    }
+
+    child.layout(self.constraints, true)
+    self.place_child(child, Point.ZERO)
+    self.size = child.size
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.min_intrinsic_width(height)
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_width(height)
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.min_intrinsic_height(width)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_height(width)
+  }
+
+  compute_baseline() {
+    var child = self.child()
+    return child == nil ? nil : child.baseline()
+  }
+}
+
+/**
+ * A host whose child sits inside an area the view draws around, such as
+ * a group box under its title. The child is laid out in the space left
+ * after `content_insets()`, and placed at the top left of that area.
+ */
+class RenderHostInset < RenderHost {
+
+  perform_layout() {
+    var insets = self.content_insets(nil)
+    var child = self.child()
+
+    if child == nil {
+      self.size = self.constraints.constrain(insets.inflate_size(Size.ZERO))
+      return
+    }
+
+    child.layout(self.constraints.deflate(insets), true)
+    self.place_child(child, Point.ZERO)
+    self.size = self.constraints.constrain(insets.inflate_size(child.size))
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var insets = self.content_insets(nil)
+    var child = self.child()
+    return insets.horizontal()
+      + (child == nil
+        ? 0
+        : child.min_intrinsic_width((height - insets.vertical()).max(0)))
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var insets = self.content_insets(nil)
+    var child = self.child()
+    return insets.horizontal()
+      + (child == nil
+        ? 0
+        : child.max_intrinsic_width((height - insets.vertical()).max(0)))
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    var insets = self.content_insets(nil)
+    var child = self.child()
+    return insets.vertical()
+      + (child == nil
+        ? 0
+        : child.min_intrinsic_height((width - insets.horizontal()).max(0)))
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var insets = self.content_insets(nil)
+    var child = self.child()
+    return insets.vertical()
+      + (child == nil
+        ? 0
+        : child.max_intrinsic_height((width - insets.horizontal()).max(0)))
+  }
+
+  compute_baseline() {
+    var child = self.child()
+    var line = child == nil ? nil : child.baseline()
+    return line == nil ? nil : line + self.content_insets(nil).top
+  }
+}

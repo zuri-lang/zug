@@ -1,0 +1,415 @@
+import test { * }
+
+import ..app.foundation { * }
+
+describe('Point', @{
+  it('adds, subtracts and negates', @{
+    expect(Point(1, 2) + Point(3, 4)).to_equal(Point(4, 6))
+    expect(Point(5, 5) - Point(1, 2)).to_equal(Point(4, 3))
+    expect(-Point(1, -2)).to_equal(Point(-1, 2))
+  })
+
+  it('compares by value', @{
+    expect(Point(1, 2) == Point(1, 2)).to_be_true()
+    expect(Point(1, 2) == Point(2, 1)).to_be_false()
+    expect(Point(1, 2) == nil).to_be_false()
+  })
+
+  it('measures distance', @{
+    expect(Point(0, 0).distance_to(Point(3, 4))).to_be(5)
+  })
+})
+
+describe('Size', @{
+  it('knows when it is empty or infinite', @{
+    expect(Size(0, 10).is_empty()).to_be_true()
+    expect(Size(1, 1).is_empty()).to_be_false()
+    expect(Size.INFINITE.is_finite()).to_be_false()
+    expect(Size(1, 2).is_finite()).to_be_true()
+  })
+
+  it('contains points from its top left, excluding the far edges', @{
+    var size = Size(10, 10)
+    expect(size.contains(Point(0, 0))).to_be_true()
+    expect(size.contains(Point(9.5, 9.5))).to_be_true()
+    expect(size.contains(Point(10, 5))).to_be_false()
+  })
+})
+
+describe('Rect', @{
+  it('reports its edges', @{
+    var rect = Rect(10, 20, 30, 40)
+    expect([
+      rect.left(), rect.top(), rect.right(), rect.bottom(),
+    ]).to_equal([10, 20, 40, 60])
+  })
+
+  it('intersects and unions', @{
+    var a = Rect(0, 0, 10, 10)
+    var b = Rect(5, 5, 10, 10)
+    expect(a.intersect(b)).to_equal(Rect(5, 5, 5, 5))
+    expect(a.union(b)).to_equal(Rect(0, 0, 15, 15))
+    expect(a.overlaps(Rect(10, 0, 5, 5))).to_be_false()
+    expect(a.intersect(Rect(20, 20, 1, 1)).is_empty()).to_be_true()
+  })
+
+  it('deflates by insets', @{
+    expect(Rect(
+      0, 0, 100, 50,
+    ).deflate(EdgeInsets.all(10))).to_equal(Rect(10, 10, 80, 30))
+  })
+})
+
+describe('EdgeInsets', @{
+  it('builds from factories', @{
+    expect(EdgeInsets.all(4)).to_equal(EdgeInsets(4, 4, 4, 4))
+    expect(EdgeInsets.symmetric({
+      horizontal: 8,
+      vertical: 2,
+    })).to_equal(EdgeInsets(8, 2, 8, 2))
+    expect(EdgeInsets.only({ top: 3 })).to_equal(EdgeInsets(0, 3, 0, 0))
+  })
+
+  it('sums its axes', @{
+    var insets = EdgeInsets(1, 2, 3, 4)
+    expect(insets.horizontal()).to_be(4)
+    expect(insets.vertical()).to_be(6)
+  })
+
+  it('refuses a side it does not know', @{
+    expect(@{
+      EdgeInsets.only({ lft: 3 })
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('refuses negative values', @{
+    expect(@{
+      EdgeInsets.all(-1)
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('Alignment', @{
+  it('places a child inside a box', @{
+    var child = Size(10, 10)
+    var box = Size(100, 50)
+    expect(Alignment.TOP_LEFT.offset_for(child, box)).to_equal(Point(0, 0))
+    expect(Alignment.CENTER.offset_for(child, box)).to_equal(Point(45, 20))
+    expect(Alignment.BOTTOM_RIGHT.offset_for(
+      child, box,
+    )).to_equal(Point(90, 40))
+  })
+})
+
+describe('Constraints', @{
+  it('constrains sizes into range', @{
+    var loose = Constraints.loose(Size(300, 200))
+    expect(loose.constrain(Size(500, 50))).to_equal(Size(300, 50))
+    expect(Constraints
+      .tight(Size(10, 20))
+      .constrain(Size(0, 0))).to_equal(Size(10, 20))
+  })
+
+  it('knows tight and bounded axes', @{
+    expect(Constraints.tight(Size(1, 1)).is_tight()).to_be_true()
+    expect(Constraints.UNBOUNDED.has_bounded_width()).to_be_false()
+    expect(Constraints.tight_for({ width: 50 }).has_tight_width()).to_be_true()
+    expect(Constraints
+      .tight_for({ width: 50 })
+      .has_bounded_height()).to_be_false()
+  })
+
+  it('deflates by insets without going negative', @{
+    var deflated = Constraints(10, 100, 0, 15).deflate(EdgeInsets.all(10))
+    expect(deflated).to_equal(Constraints(0, 80, 0, 0))
+  })
+
+  it('enforces another range', @{
+    var inner = Constraints(0, 1000, 0, 1000)
+    expect(inner.enforce(Constraints(
+      50, 100, 10, 20,
+    ))).to_equal(Constraints(50, 100, 10, 20))
+  })
+
+  it('tightens within its bounds', @{
+    expect(Constraints(
+      0, 100, 0, 100,
+    ).tighten({ width: 500 })).to_equal(Constraints(100, 100, 0, 100))
+  })
+
+  it('keeps aspect ratio where it can', @{
+    expect(Constraints
+      .loose(Size(100, 100))
+      .constrain_keeping_aspect(Size(200, 100))).to_equal(Size(100, 50))
+  })
+
+  it('refuses a minimum above its maximum', @{
+    expect(@{
+      Constraints(10, 5, 0, 0)
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
+describe('Color', @{
+  it('reads hexadecimal text', @{
+    expect(Color.hex('#0a84ff')).to_equal(Color(10, 132, 255, 1))
+    expect(Color.hex('f00')).to_equal(Color(255, 0, 0, 1))
+    expect(Color.hex('#ff000080').alpha).to_be_close_to(128 / 255)
+    expect(Color.hex('#0a84ff').to_hex()).to_be('#0a84ff')
+  })
+
+  it('refuses text that is not a colour', @{
+    expect(@{
+      Color.hex('#12')
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Color.hex('zzzzzz')
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('names system colours and refuses unknown ones', @{
+    var label = Color.system('label')
+    expect(label.is_system()).to_be_true()
+    expect(label == Color.system('label')).to_be_true()
+    expect(label == Color.system('separator')).to_be_false()
+    expect(@{
+      Color.system('lable')
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('changes alpha without changing the colour', @{
+    var faded = Color.RED.with_alpha(0.25)
+    expect(faded.red).to_be(Color.RED.red)
+    expect(faded.alpha).to_be(0.25)
+    expect(Color.system('label').with_alpha(0.5).system).to_be('label')
+  })
+
+  it('mixes fixed colours', @{
+    expect(Color.lerp(
+      Color.BLACK, Color.WHITE, 0.5,
+    )).to_equal(Color(127.5, 127.5, 127.5, 1))
+  })
+
+  it('refuses out of range components', @{
+    expect(@{
+      Color(256, 0, 0)
+    }).to_raise_instance_of(RangeError)
+    expect(@{
+      Color(0, 0, 0, 2)
+    }).to_raise_instance_of(RangeError)
+  })
+})
+
+describe('Duration', @{
+  it('converts between units', @{
+    expect(Duration.seconds(1.5).in_milliseconds()).to_be(1500)
+    expect(Duration.minutes(1)).to_equal(Duration.ms(60000))
+    expect((Duration.ms(250) + Duration.ms(750)).in_seconds()).to_be(1)
+  })
+
+  it('compares', @{
+    expect(Duration.ms(1) < Duration.ms(2)).to_be_true()
+    expect(Duration.ms(5) >= Duration.ms(5)).to_be_true()
+  })
+
+  it('never goes negative', @{
+    expect(Duration.ms(1) - Duration.ms(5)).to_equal(Duration.ZERO)
+    expect(@{
+      Duration(-1)
+    }).to_raise_instance_of(RangeError)
+  })
+})
+
+describe('keys', @{
+  it('compares value keys by class and value', @{
+    expect(ValueKey('a') == ValueKey('a')).to_be_true()
+    expect(ValueKey('a') == ValueKey('b')).to_be_false()
+    expect(ValueKey(1) == ValueKey('1')).to_be_false()
+    expect(ValueKey(1).map_key() == ValueKey('1').map_key()).to_be_false()
+    expect(ValueKey('a').map_key()).to_be(ValueKey('a').map_key())
+  })
+
+  it('compares object keys by identity', @{
+    var thing = [1]
+    expect(ObjectKey(thing) == ObjectKey(thing)).to_be_true()
+    expect(ObjectKey(thing) == ObjectKey([1])).to_be_false()
+  })
+
+  it('makes unique and global keys equal only to themselves', @{
+    var key = UniqueKey()
+    expect(key == key).to_be_true()
+    expect(key == UniqueKey()).to_be_false()
+    expect(GlobalKey().map_key() == GlobalKey().map_key()).to_be_false()
+  })
+
+  it('gives nothing from a global key that is not in use', @{
+    var key = GlobalKey()
+    expect(key.current_context()).to_be_nil()
+    expect(key.current_state()).to_be_nil()
+  })
+})
+
+describe('Observable', @{
+  it('calls listeners when notified', @{
+    var observable = Observable()
+    var listener = mock()
+    observable.add_listener(listener.fn)
+    observable.notify()
+    observable.notify()
+    expect(listener).to_have_been_called_times(2)
+  })
+
+  it('stops calling a removed listener', @{
+    var observable = Observable()
+    var listener = mock()
+    observable.add_listener(listener.fn)
+    observable.remove_listener(listener.fn)
+    observable.notify()
+    expect(listener).to_have_been_called_times(0)
+    expect(observable.has_listeners()).to_be_false()
+  })
+
+  it('skips a listener removed by an earlier one', @{
+    var observable = Observable()
+    var second = mock()
+    observable.add_listener(@{
+      observable.remove_listener(second.fn)
+    })
+    observable.add_listener(second.fn)
+    observable.notify()
+    expect(second).to_have_been_called_times(0)
+  })
+
+  it('keeps notifying when one listener raises', @{
+    var observable = Observable()
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.message)
+    })
+    var after = mock()
+    observable.add_listener(@{
+      raise ValueError('listener failed')
+    })
+    observable.add_listener(after.fn)
+    observable.notify()
+    set_error_handler(nil)
+    expect(reported).to_equal(['listener failed'])
+    expect(after).to_have_been_called_times(1)
+  })
+
+  it('refuses use after dispose', @{
+    var observable = Observable()
+    observable.dispose()
+    expect(@{
+      observable.notify()
+    }).to_raise_instance_of(LifecycleError)
+    expect(@{
+      observable.add_listener(@{})
+    }).to_raise_instance_of(LifecycleError)
+  })
+})
+
+describe('ObservableValue', @{
+  it('notifies only when the value changes', @{
+    var value = ObservableValue(1)
+    var listener = mock()
+    value.add_listener(listener.fn)
+    value.set(1)
+    value.set(2)
+    value.update(@(n) => n + 1)
+    expect(value.value()).to_be(3)
+    expect(listener).to_have_been_called_times(2)
+  })
+})
+
+describe('Observable.merge', @{
+  it('notifies when any source does, and only while listened to', @{
+    var a = Observable()
+    var b = ObservableValue(0)
+    var merged = Observable.merge([a, b])
+    var listener = mock()
+    merged.add_listener(listener.fn)
+    a.notify()
+    b.set(1)
+    expect(listener).to_have_been_called_times(2)
+    merged.remove_listener(listener.fn)
+    expect(a.has_listeners()).to_be_false()
+  })
+})
+
+describe('check_options', @{
+  var spec = {
+    label: 'string',
+    size: 'number',
+    on_pressed: 'function',
+    key: Key,
+    align: ['string', 'number'],
+  }
+
+  it('returns the options when they are valid', @{
+    var options = { label: 'ok', size: 3, key: ValueKey(1), align: 2 }
+    expect(check_options(options, 'Thing', spec)).to_be(options)
+  })
+
+  it('accepts nil for any option, and leaves it out', @{
+    var checked = check_options({ size: nil, label: 'x' }, 'Thing', spec)
+    expect(checked).to_equal({ label: 'x' })
+    expect(checked.get('size', 7)).to_be(7)
+    expect(check_options(nil, 'Thing', spec)).to_be_empty()
+  })
+
+  it('refuses unknown options and suggests the near miss', @{
+    expect(@{
+      check_options({ on_press: @{} }, 'Thing', spec)
+    }).to_raise_with_message("unknown option 'on_press' for Thing; did you mean 'on_pressed'? Known options: align, key, label, on_pressed, size")
+  })
+
+  it('refuses a value of the wrong type', @{
+    expect(@{
+      check_options({ size: 'big' }, 'Thing', spec)
+    }).to_raise_with_message("option 'size' of Thing must be a number, got string")
+    expect(@{
+      check_options({ key: 'k' }, 'Thing', spec)
+    }).to_raise_with_message("option 'key' of Thing must be a Key, got string")
+    expect(@{
+      check_options({ align: true }, 'Thing', spec)
+    }).to_raise_instance_of(OptionError)
+  })
+})
+
+describe('microtasks', @{
+  it('run in order, including ones scheduled while running', @{
+    var order = []
+    schedule_microtask(@{
+      order.append(1)
+      schedule_microtask(@{
+        order.append(3)
+      })
+    })
+    schedule_microtask(@{
+      order.append(2)
+    })
+    expect(has_microtasks()).to_be_true()
+    expect(run_microtasks()).to_be(3)
+    expect(order).to_equal([1, 2, 3])
+    expect(has_microtasks()).to_be_false()
+  })
+
+  it('report errors and keep going', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(context)
+    })
+    var ran = false
+    schedule_microtask(@{
+      raise ValueError('nope')
+    })
+    schedule_microtask(@{
+      ran = true
+    })
+    run_microtasks()
+    set_error_handler(nil)
+    expect(ran).to_be_true()
+    expect(reported).to_equal(['running a microtask'])
+  })
+})

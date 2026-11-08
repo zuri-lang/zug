@@ -1,0 +1,75 @@
+/**
+ * Work deferred until the current event has been handled.
+ *
+ * A microtask runs after the code that scheduled it has returned to the
+ * framework, before the next frame is drawn and before the platform
+ * delivers another event. Microtasks scheduled by a microtask run in the
+ * same pass.
+ */
+
+import .errors { report_error }
+
+var _queue = []
+var _waker = nil
+
+/**
+ * Runs `task` once the current event has been handled.
+ *
+ * @param function task: called with no arguments.
+ */
+def schedule_microtask(task: function) {
+  _queue.append(task)
+
+  if _queue.length() == 1 and _waker != nil {
+    _waker()
+  }
+}
+
+/**
+ * Runs every scheduled microtask, including any they schedule. Errors go
+ * to `report_error()`. The runtime calls this; applications do not need
+ * to.
+ *
+ * @returns number how many ran.
+ */
+def run_microtasks() {
+  var count = 0
+
+  while !_queue.is_empty() {
+    var batch = _queue
+    _queue = []
+
+    for task in batch {
+      count++
+
+      catch {
+        task()
+      } as error {
+        report_error(error, 'running a microtask')
+      }
+    }
+  }
+
+  return count
+}
+
+/**
+ * Whether any microtask is waiting.
+ *
+ * @returns bool
+ */
+def has_microtasks() {
+  return !_queue.is_empty()
+}
+
+/**
+ * Sets the function called when the first microtask is scheduled into an
+ * empty queue, so the runtime can arrange to run the queue soon. The
+ * runtime sets this.
+ *
+ * @internal
+ * @param ?function waker
+ */
+def set_microtask_waker(waker: ?function) {
+  _waker = waker
+}

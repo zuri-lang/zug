@@ -1,0 +1,522 @@
+/**
+ * Windows.
+ */
+
+import ffi
+import .. ..foundation { Size, Rect, EdgeInsets, Constraints, BackendError }
+import .. ..backend { WindowHost, kind_spec }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_int, send_void_uint, send_void_size, send_void_point, send_size,
+  send_rect, send_uint, typed, typed_super, super_of, define_class, ns_string,
+  zuri_string, retain, release, rect, create_with_frame, CGRect, CGSize,
+  CGPoint,
+}
+import ._classes { register, unregister, host_for, shared_window_delegate }
+import ._cocoa { ns_color, finite }
+
+# Key codes of keys that type no character.
+var _NAMED_KEYS = {
+  36: 'enter',
+  76: 'enter',
+  53: 'escape',
+  51: 'backspace',
+  117: 'delete',
+  48: 'tab',
+  49: 'space',
+  123: 'left',
+  124: 'right',
+  125: 'down',
+  126: 'up',
+  115: 'home',
+  119: 'end',
+  116: 'page_up',
+  121: 'page_down',
+  122: 'f1',
+  120: 'f2',
+  99: 'f3',
+  118: 'f4',
+  96: 'f5',
+  97: 'f6',
+  98: 'f7',
+  100: 'f8',
+  101: 'f9',
+  109: 'f10',
+  103: 'f11',
+  111: 'f12',
+}
+
+/**
+ * zug's windows: an `NSWindow` that offers keys no control used to its
+ * host before AppKit beeps at them.
+ *
+ * @type Pointer
+ */
+var ZugWindow = define_class('ZugWindow', 'NSWindow', {
+  'keyDown:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
+    var host = host_for(this)
+
+    if host == nil or !host.key_down(event) {
+      typed_super(
+        ffi.void, [ffi.ptr],
+      )(super_of(this, cls('NSWindow')), sel('keyDown:'), event)
+    }
+  }],
+})
+
+/**
+ * The description of a key event zug's `KeyEvent` is made from.
+ *
+ * @param Pointer event
+ * @returns dict
+ */
+def key_payload(event) {
+  var code = typed(ffi.ushort, [])(event, sel('keyCode'))
+  var flags = send_uint(event, 'modifierFlags')
+  var modifiers = []
+
+  if flags & (1 << 20) != 0 {
+    modifiers.append('cmd')
+  }
+
+  if flags & (1 << 17) != 0 {
+    modifiers.append('shift')
+  }
+
+  if flags & (1 << 19) != 0 {
+    modifiers.append('alt')
+  }
+
+  if flags & (1 << 18) != 0 {
+    modifiers.append('ctrl')
+  }
+
+  var named = _NAMED_KEYS.get(code)
+  var characters = named == nil ? zuri_string(send(event, 'characters')) : ''
+  var bare = zuri_string(send(event, 'charactersIgnoringModifiers'))
+  var key = named != nil ? named : (bare == nil ? '' : bare.lower())
+
+  return {
+    key,
+    characters: characters == nil ? '' : characters,
+    modifiers,
+    repeat: typed(ffi.bool, [])(event, sel('isARepeat')),
+  }
+}
+
+# NSWindowStyleMask bits.
+var _TITLED = 1
+var _CLOSABLE = 2
+var _MINIATURIZABLE = 4
+var _RESIZABLE = 8
+var _FULL_SIZE_CONTENT = 1 << 15
+
+/**
+ * A native window, with a flipped content view its children go into.
+ */
+class MacWindow < WindowHost {
+
+  /**
+   * @type MacBackend
+   */
+  var backend
+
+  /**
+   * @type Pointer
+   */
+  var native
+
+  /**
+   * The content view.
+   *
+   * @type Pointer
+   */
+  var content
+
+  /**
+   * @type function
+   */
+  var dispatch
+
+  /**
+   * @type dict
+   */
+  var props = {}
+
+  /**
+   * @type bool
+   */
+  var destroyed = false
+
+  /**
+   * @type bool
+   */
+  var closed = false
+
+  /**
+   * The child hosts in the content view, in order.
+   *
+   * @type list
+   */
+  var children = []
+
+  var _shown = false
+
+  /**
+   * @param MacBackend backend
+   * @param dict props
+   * @param function dispatch
+   * @constructor
+   */
+  @new(backend, props: dict, dispatch: function) {
+    self.backend = backend
+    self.dispatch = dispatch
+    self.props = kind_spec('window').initial_props()
+
+    for name, value in props {
+      self.props[name] = value
+    }
+
+    var size = self.props.get('size')
+    var init = typed(ffi.ptr, [CGRect, ffi.ulong, ffi.ulong, ffi.bool])
+    self.native = init(
+      send(ZugWindow, 'alloc'),
+      sel('initWithContentRect:styleMask:backing:defer:'),
+      rect(0, 0, size.width, size.height), self._style_mask(), 2, true,
+    )
+    send_void_bool(self.native, 'setReleasedWhenClosed:', false)
+    send_void_id(self.native, 'setDelegate:', shared_window_delegate())
+
+    self.content = create_with_frame(
+      'ZugView', rect(0, 0, size.width, size.height),
+    )
+    send_void_id(self.native, 'setContentView:', self.content)
+    register(self.native, self)
+
+    for name, value in self.props {
+      self.apply(name, value)
+    }
+
+    send_void(self.native, 'center')
+
+    if self.props.get('position') != nil {
+      self._place(self.props.get('position'))
+    }
+  }
+
+  _style_mask() {
+    var mask = _TITLED
+
+    if self.props.get('closable') {
+      mask = mask | _CLOSABLE
+    }
+
+    if self.props.get('minimizable') {
+      mask = mask | _MINIATURIZABLE
+    }
+
+    if self.props.get('resizable') {
+      mask = mask | _RESIZABLE
+    }
+
+    if self.props.get('title_bar') != 'normal' {
+      mask = mask | _FULL_SIZE_CONTENT
+    }
+
+    return mask
+  }
+
+  _place(position) {
+    var screen = send(self.native, 'screen')
+
+    if screen == nil {
+      screen = send(cls('NSScreen'), 'mainScreen')
+    }
+
+    var frame = send_rect(screen, 'frame')
+    send_void_point(
+      self.native, 'setFrameTopLeftPoint:',
+      { x: position.x, y: frame.size.height - position.y },
+    )
+  }
+
+  /**
+   * Applies one prop.
+   *
+   * @internal
+   * @param string name
+   * @param any value
+   */
+  apply(name: string, value) {
+    using name {
+      when 'title' {
+        send_void_id(
+          self.native, 'setTitle:', ns_string(value == nil ? '' : value),
+        )
+      }
+      when 'size' {
+        if value != nil {
+          send_void_size(
+            self.native, 'setContentSize:',
+            { width: value.width, height: value.height },
+          )
+        }
+      }
+      when 'min_size' {
+        var size = value == nil ? Size(1, 1) : value
+        send_void_size(
+          self.native, 'setContentMinSize:',
+          { width: size.width, height: size.height },
+        )
+      }
+      when 'max_size' {
+        var size = value == nil ? Size(100000, 100000) : value
+        send_void_size(
+          self.native, 'setContentMaxSize:',
+          { width: finite(size.width), height: finite(size.height) },
+        )
+      }
+      when 'resizable', 'closable', 'minimizable' {
+        send_void_uint(self.native, 'setStyleMask:', self._style_mask())
+      }
+      when 'title_bar' {
+        send_void_uint(self.native, 'setStyleMask:', self._style_mask())
+        send_void_bool(
+          self.native, 'setTitlebarAppearsTransparent:', value != 'normal',
+        )
+        send_void_int(
+          self.native, 'setTitleVisibility:', value == 'hidden' ? 1 : 0,
+        )
+      }
+      when 'background' {
+        send_void_id(
+          self.native, 'setBackgroundColor:',
+          value == nil
+            ? send(cls('NSColor'), 'windowBackgroundColor')
+            : ns_color(value),
+        )
+      }
+      when 'visible' {
+        if self._shown and !self.closed {
+          if value {
+            send_void_id(self.native, 'makeKeyAndOrderFront:', nil)
+          } else {
+            send_void_id(self.native, 'orderOut:', nil)
+          }
+        }
+      }
+      when 'position' {
+        if value != nil {
+          self._place(value)
+        }
+      }
+      when 'floating' {
+        send_void_int(self.native, 'setLevel:', value ? 3 : 0)
+      }
+    }
+  }
+
+  kind() {
+    return 'window'
+  }
+
+  update(changes: dict) {
+    if self.destroyed {
+      return
+    }
+
+    for name, value in changes {
+      self.props[name] = value
+      self.apply(name, value)
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return constraints.constrain(self.content_size())
+  }
+
+  baseline() {
+    return nil
+  }
+
+  content_insets(slot) {
+    return EdgeInsets.ZERO
+  }
+
+  set_frame(frame: Rect) {}
+
+  set_content_size(slot, size: Size) {}
+
+  slot_size(slot, size: Size) {
+    return size
+  }
+
+  insert_child(child, index: number, slot) {
+    if child.parent_host != nil and child.parent_host != self {
+      child.parent_host.remove_child(child)
+    }
+
+    var existing = self.children.index_of(child)
+
+    if existing >= 0 {
+      self.children.remove_at(existing)
+    }
+
+    var at = index.min(self.children.length())
+    var add = typed(ffi.void, [ffi.ptr, ffi.long, ffi.ptr])
+
+    if at == 0 {
+      add(
+        self.content, sel('addSubview:positioned:relativeTo:'), child.native,
+        -1, self.children.is_empty() ? nil : self.children[0].native,
+      )
+    } else {
+      add(
+        self.content, sel('addSubview:positioned:relativeTo:'), child.native, 1,
+        self.children[at - 1].native,
+      )
+    }
+
+    self.children.insert(child, at)
+    child.parent_host = self
+  }
+
+  remove_child(child) {
+    var index = self.children.index_of(child)
+
+    if index >= 0 {
+      self.children.remove_at(index)
+
+      if !child.destroyed {
+        send_void(child.native, 'removeFromSuperview')
+      }
+
+      child.parent_host = nil
+    }
+  }
+
+  focus() {
+    if !self.closed {
+      send_void_id(self.native, 'makeKeyAndOrderFront:', nil)
+    }
+  }
+
+  invalidate() {}
+
+  destroy() {
+    if self.destroyed {
+      return
+    }
+
+    self.close()
+    self.destroyed = true
+    send_void_id(self.native, 'setDelegate:', nil)
+    unregister(self.native)
+    release(self.content)
+    release(self.native)
+  }
+
+  content_size() {
+    var frame = send_rect(self.content, 'frame')
+    return Size(frame.size.width, frame.size.height)
+  }
+
+  set_content_size_to(size: Size) {
+    send_void_size(
+      self.native, 'setContentSize:',
+      { width: size.width, height: size.height },
+    )
+  }
+
+  show() {
+    if self.closed or self.destroyed {
+      return
+    }
+
+    self._shown = true
+
+    if self.props.get('visible') != false {
+      send_void_id(self.native, 'makeKeyAndOrderFront:', nil)
+    }
+
+    # AppKit would focus the first control; zug leaves that to autofocus.
+    self.clear_focus()
+  }
+
+  clear_focus() {
+    if !self.closed and !self.destroyed {
+      typed(ffi.bool, [ffi.ptr])(self.native, sel('makeFirstResponder:'), nil)
+    }
+  }
+
+  close() {
+    if self.closed {
+      return
+    }
+
+    self.closed = true
+    send_void(self.native, 'close')
+  }
+
+  /**
+   * A key no control used. Returns whether zug used it.
+   *
+   * @internal
+   * @param Pointer event
+   * @returns bool
+   */
+  key_down(event) {
+    if self.destroyed {
+      return false
+    }
+
+    return self.backend.deliver(self, 'key', key_payload(event)) == true
+  }
+
+  # What the delegate reports.
+
+  /**
+   * @internal
+   * @returns bool
+   */
+  should_close() {
+    return self.backend.deliver(self, 'close_requested', nil) != false
+  }
+
+  /**
+   * @internal
+   */
+  did_close() {
+    var was_closed = self.closed
+    self.closed = true
+
+    if !was_closed and !self.destroyed {
+      self.backend.deliver(self, 'closed', nil)
+    }
+  }
+
+  /**
+   * @internal
+   */
+  did_resize() {
+    if self.destroyed {
+      return
+    }
+
+    var size = self.content_size()
+    self.backend.deliver(
+      self, 'resized', { width: size.width, height: size.height },
+    )
+    self.backend.draw_now()
+  }
+
+  /**
+   * @internal
+   * @param bool focused
+   */
+  did_change_key(focused: bool) {
+    if !self.destroyed {
+      self.backend.deliver(self, 'focus_changed', { focused })
+    }
+  }
+}

@@ -1,0 +1,352 @@
+/**
+ * Keys the application handles itself.
+ *
+ * A window passes each key the focused control did not use, such as a
+ * digit typed while no text field has focus, to the `Shortcuts` and
+ * `KeyListener` widgets in it, the deepest first, until one handles it.
+ *
+ * ```zuri
+ * import zug { Shortcuts, KeyListener, Text }
+ *
+ * var body = Shortcuts({
+ *   'escape': @{ echo 'cleared' },
+ *   'cmd+backspace': @{ echo 'all cleared' },
+ *   '+': @{ echo 'plus' },
+ * }, KeyListener(Text('Type'), {
+ *   on_key: @(event) {
+ *     if event.characters.is_number() {
+ *       echo 'digit ${event.characters}'
+ *       return true
+ *     }
+ *
+ *     return false
+ *   },
+ * }))
+ * ```
+ */
+
+import ..foundation { Key, check_options }
+import .framework { StatefulWidget, State }
+
+/**
+ * The names of keys that do not type a character.
+ *
+ * @type list
+ */
+var NAMED_KEYS = [
+  'enter',
+  'escape',
+  'backspace',
+  'delete',
+  'tab',
+  'space',
+  'left',
+  'right',
+  'up',
+  'down',
+  'home',
+  'end',
+  'page_up',
+  'page_down',
+  'f1',
+  'f2',
+  'f3',
+  'f4',
+  'f5',
+  'f6',
+  'f7',
+  'f8',
+  'f9',
+  'f10',
+  'f11',
+  'f12',
+]
+
+var _MODIFIERS = ['cmd', 'shift', 'alt', 'ctrl']
+
+/**
+ * A key pressed.
+ *
+ * @printable
+ */
+class KeyEvent {
+
+  /**
+   * The key: one of `NAMED_KEYS`, or the character the key types without
+   * modifiers, in lower case.
+   *
+   * @type string
+   */
+  var key = ''
+
+  /**
+   * What the key types with the modifiers held, such as `+` for shift and
+   * `=`. Empty for a named key.
+   *
+   * @type string
+   */
+  var characters = ''
+
+  /**
+   * The modifier keys held: any of `cmd`, `shift`, `alt` and `ctrl`.
+   *
+   * @type list
+   */
+  var modifiers = []
+
+  /**
+   * Whether the key is repeating from being held down.
+   *
+   * @type bool
+   */
+  var repeat = false
+
+  /**
+   * @param dict data: `key`, `characters`, `modifiers` and `repeat`, as a
+   *    backend reports them.
+   * @constructor
+   */
+  @new(data: dict) {
+    self.key = data.get('key', '')
+    self.characters = data.get('characters', '')
+    self.modifiers = data.get('modifiers', [])
+    self.repeat = data.get('repeat', false)
+  }
+
+  /**
+   * Whether `modifier` was held.
+   *
+   * @param string modifier
+   * @returns bool
+   */
+  has_modifier(modifier: string) {
+    return self.modifiers.contains(modifier)
+  }
+
+  /**
+   * Whether this event is what `binding` names, such as `cmd+shift+k`,
+   * `escape` or `+`.
+   *
+   * A binding of one character with no modifiers matches what the key
+   * typed, so `+` matches however the keyboard makes a plus. Otherwise the
+   * key must match and exactly the modifiers named must be held.
+   *
+   * @param string binding
+   * @returns bool
+   */
+  matches(binding: string) {
+    var parsed = parse_binding(binding)
+    var key = parsed[0]
+    var modifiers = parsed[1]
+
+    if modifiers.is_empty()
+      and key.length() == 1
+      and !self.has_modifier('cmd')
+      and !self.has_modifier('ctrl') {
+      return self.characters == key
+        or (self.key == key and self.characters == '')
+    }
+
+    if self.key != key {
+      return false
+    }
+
+    for modifier in _MODIFIERS {
+      if modifiers.contains(modifier) != self.modifiers.contains(modifier) {
+        return false
+      }
+    }
+
+    return true
+  }
+
+  @to_string() {
+    var parts = self.modifiers.clone()
+    parts.append(self.key)
+    return 'KeyEvent(${"+".join(parts)})'
+  }
+}
+
+/**
+ * Splits a binding such as `cmd+shift+k` into its key and modifiers. A
+ * binding of `+` alone is the plus key.
+ *
+ * @param string binding
+ * @returns list `[key, modifiers]`
+ * @throws ValueError When a modifier is not one of `cmd`, `shift`, `alt`
+ *    and `ctrl`
+ */
+def parse_binding(binding: string) {
+  if binding.length() == 1 {
+    return [binding, []]
+  }
+
+  var text = binding.lower()
+  var key = text
+  var modifiers = []
+
+  if text.ends_with('++') {
+    key = '+'
+    text = text[0, text.length() - 2]
+  } else {
+    var at = text.last_index_of('+')
+
+    if at < 0 {
+      return [text, []]
+    }
+
+    key = text[at + 1, text.length()]
+    text = text[0, at]
+  }
+
+  for part in text.split('/\+/') {
+    var name = part
+
+    using part {
+      when 'command' {
+        name = 'cmd'
+      }
+      when 'option', 'opt' {
+        name = 'alt'
+      }
+      when 'control' {
+        name = 'ctrl'
+      }
+    }
+
+    if name == '' {
+      continue
+    }
+
+    if !_MODIFIERS.contains(name) {
+      raise ValueError("'${part}' in '${binding}' is not a modifier; use cmd, shift, alt or ctrl")
+    }
+
+    modifiers.append(name)
+  }
+
+  return [key, modifiers]
+}
+
+/**
+ * The base of widgets that handle keys.
+ *
+ * @internal
+ */
+class KeyHandlerWidget < StatefulWidget {
+  var child
+
+  /**
+   * Handles `event`, returning whether it was used.
+   *
+   * @param KeyEvent event
+   * @returns bool
+   */
+  handle_key(event) {
+    return false
+  }
+
+  create_state() {
+    return KeyHandlerState()
+  }
+}
+
+/**
+ * Registers its widget with the runtime while it is in the tree.
+ *
+ * @internal
+ */
+class KeyHandlerState < State {
+
+  init_state() {
+    var runtime = self.context().runtime()
+
+    if runtime != nil {
+      runtime.add_key_handler(self.context())
+    }
+  }
+
+  dispose() {
+    var runtime = self.context().runtime()
+
+    if runtime != nil {
+      runtime.remove_key_handler(self.context())
+    }
+  }
+
+  build(context) {
+    return self.widget.child
+  }
+}
+
+/**
+ * Calls functions for keys: `bindings` maps a key, such as `cmd+k`,
+ * `escape` or `*`, to the function to call.
+ */
+class Shortcuts < KeyHandlerWidget {
+  var bindings = {}
+
+  /**
+   * @param dict bindings
+   * @param Widget child
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(bindings: dict, child, options: ?dict) {
+    var o = check_options(options, 'Shortcuts', { key: Key })
+
+    for binding, action in bindings {
+      parse_binding(binding)
+
+      if !is_callable(action) {
+        raise TypeError("the shortcut '${binding}' must map to a function, got ${typeof(action)}")
+      }
+    }
+
+    self.key = o.get('key')
+    self.bindings = bindings
+    self.child = child
+  }
+
+  handle_key(event) {
+    for binding, action in self.bindings {
+      if event.matches(binding) {
+        action()
+        return true
+      }
+    }
+
+    return false
+  }
+}
+
+/**
+ * Calls `on_key` with every key it is offered; `on_key` returns `true`
+ * for a key it used, and anything else to let it go on.
+ */
+class KeyListener < KeyHandlerWidget {
+  var on_key
+
+  /**
+   * @param Widget child
+   * @param dict options: `on_key` (required) and `key`.
+   * @constructor
+   */
+  @new(child, options: dict) {
+    var o = check_options(
+      options, 'KeyListener', { key: Key, on_key: 'function' },
+    )
+
+    if o.get('on_key') == nil {
+      raise ValueError('a KeyListener needs on_key')
+    }
+
+    self.key = o.get('key')
+    self.on_key = o.get('on_key')
+    self.child = child
+  }
+
+  handle_key(event) {
+    return self.on_key(event) == true
+  }
+}

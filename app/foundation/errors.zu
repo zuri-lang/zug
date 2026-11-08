@@ -1,0 +1,222 @@
+/**
+ * The errors zug raises, and where errors from application callbacks go.
+ *
+ * Code that native events call into, such as a button's `on_pressed`
+ * handler, cannot let an error escape back into the platform's event loop.
+ * Those errors are passed to `report_error()`, whose handler by default
+ * prints the error and its stack trace to standard error and lets the
+ * application carry on. `set_error_handler()` replaces that handler, for
+ * logging or for failing tests.
+ */
+
+import io
+
+/**
+ * The base of every error zug raises.
+ */
+class ZugError < Error {
+
+  /**
+   * @param string message
+   * @constructor
+   */
+  @new(message: string) {
+    parent(message)
+    self.type = 'ZugError'
+  }
+}
+
+/**
+ * A widget or function was given an option it does not take, or an
+ * option of the wrong type.
+ */
+class OptionError < ZugError {
+
+  /**
+   * The widget or function the option was given to.
+   *
+   * @type string
+   */
+  var owner
+
+  /**
+   * The option's name.
+   *
+   * @type string
+   */
+  var option
+
+  /**
+   * @param string message
+   * @param string owner
+   * @param string option
+   * @constructor
+   */
+  @new(message: string, owner: string, option: string) {
+    parent(message)
+    self.type = 'OptionError'
+    self.owner = owner
+    self.option = option
+  }
+}
+
+/**
+ * Layout could not be carried out, such as a box asked to fill an
+ * unbounded axis.
+ */
+class LayoutError < ZugError {
+
+  /**
+   * @param string message
+   * @constructor
+   */
+  @new(message: string) {
+    parent(message)
+    self.type = 'LayoutError'
+  }
+}
+
+/**
+ * A framework object was used at a point in its life where that is not
+ * allowed, such as `set_state()` on a disposed `State`.
+ */
+class LifecycleError < ZugError {
+
+  /**
+   * @param string message
+   * @constructor
+   */
+  @new(message: string) {
+    parent(message)
+    self.type = 'LifecycleError'
+  }
+}
+
+/**
+ * A backend failed, or was asked for something it cannot do.
+ */
+class BackendError < ZugError {
+
+  /**
+   * @param string message
+   * @constructor
+   */
+  @new(message: string) {
+    parent(message)
+    self.type = 'BackendError'
+  }
+}
+
+/**
+ * The backend in use does not support a kind of view or a capability.
+ */
+class UnsupportedError < BackendError {
+
+  /**
+   * The backend's name.
+   *
+   * @type string
+   */
+  var backend
+
+  /**
+   * What was asked for: a view kind or a capability.
+   *
+   * @type string
+   */
+  var feature
+
+  /**
+   * @param string backend
+   * @param string feature
+   * @constructor
+   */
+  @new(backend: string, feature: string) {
+    parent("the ${backend} backend does not support '${feature}'")
+    self.type = 'UnsupportedError'
+    self.backend = backend
+    self.feature = feature
+  }
+}
+
+var _handler = nil
+
+/**
+ * Prints `error` and its stack trace to standard error, saying what was
+ * happening when it was raised. This is the handler `report_error()` uses
+ * until `set_error_handler()` replaces it.
+ *
+ * @param Error error
+ * @param string context: what was running, such as `building Counter`.
+ */
+def print_error(error, context: string) {
+  var lines = ['zug: error while ${context}']
+
+  if instance_of(error, Error) {
+    lines.append('  ${error.type}: ${error.message}')
+
+    for frame in error.stacktrace {
+      lines.append('    at ${frame}')
+    }
+  } else {
+    lines.append('  ${error}')
+  }
+
+  io.stderr.write('\n'.join(lines) + '\n')
+}
+
+/**
+ * Passes `error` to the current error handler. Errors raised by the
+ * handler itself are printed rather than passed on, so a faulty handler
+ * cannot lose the original error.
+ *
+ * @param Error error
+ * @param string context: what was running when the error was raised.
+ */
+def report_error(error, context: string) {
+  if _handler == nil {
+    print_error(error, context)
+    return
+  }
+
+  catch {
+    _handler(error, context)
+  } as failure {
+    print_error(error, context)
+    print_error(failure, 'reporting an error')
+  }
+}
+
+/**
+ * Replaces the handler `report_error()` passes errors to. `nil` restores
+ * the default, `print_error()`.
+ *
+ * @param ?function handler: called with the error and a description of
+ *    what was running.
+ */
+def set_error_handler(handler: ?function) {
+  _handler = handler
+}
+
+/**
+ * Runs `fn` with `args`, passing anything it raises to `report_error()`.
+ * Returns what `fn` returned, or `fallback` when it raised.
+ *
+ * @param function fn
+ * @param list args
+ * @param string context
+ * @param any fallback
+ * @returns any
+ */
+def guard(fn: function, args: list, context: string, fallback) {
+  var result = fallback
+
+  catch {
+    result = fn.apply(args)
+  } as error {
+    report_error(error, context)
+    return fallback
+  }
+
+  return result
+}

@@ -1,0 +1,128 @@
+/**
+ * Timers on the application's event loop.
+ *
+ * A timer's function runs on the user interface thread, like an event
+ * handler: what it changes is drawn at the next frame, and what it raises
+ * goes to `report_error()`.
+ *
+ * ```zuri,ignore
+ * var toast = Timer(Duration.seconds(2), @{ hide_toast() })
+ * var clock = Timer.periodic(Duration.seconds(1), @(timer) { tick() })
+ * clock.cancel()
+ * ```
+ */
+
+import ..foundation { Duration, Deferred, LifecycleError, report_error }
+import ..widgets { current_runtime }
+
+def _backend() {
+  var runtime = current_runtime()
+
+  if runtime == nil {
+    raise LifecycleError('timers need a running application')
+  }
+
+  return runtime.backend
+}
+
+/**
+ * A function run after a delay, once or repeatedly.
+ */
+class Timer {
+
+  /**
+   * Whether the timer repeats.
+   *
+   * @type bool
+   */
+  var periodic = false
+
+  /**
+   * How many times it has fired.
+   *
+   * @type number
+   */
+  var ticks = 0
+
+  var _handle
+
+  /**
+   * Runs `callback` once, after `duration`.
+   *
+   * @param Duration duration
+   * @param function callback: called with no arguments.
+   * @param ?bool repeats: used by `Timer.periodic()`.
+   * @throws LifecycleError When no application is running
+   * @constructor
+   */
+  @new(duration: Duration, callback: function, repeats: ?bool) {
+    self._start(duration, repeats == true, callback)
+  }
+
+  _start(duration, periodic: bool, callback: function) {
+    self.periodic = periodic
+    self._handle = _backend().start_timer(duration.in_seconds(), periodic, @{
+      self.ticks++
+
+      catch {
+        if periodic {
+          callback(self)
+        } else {
+          callback()
+        }
+      } as error {
+        report_error(error, 'running a timer')
+      }
+    })
+  }
+
+  /**
+   * Runs `callback` every `duration` until cancelled. It is called with
+   * the timer, so it can cancel it.
+   *
+   * @param Duration duration
+   * @param function callback
+   * @returns Timer
+   * @throws LifecycleError When no application is running
+   */
+  static periodic(duration: Duration, callback: function) {
+    if duration.is_zero() {
+      raise ValueError('a periodic timer needs a duration above zero')
+    }
+
+    return Timer(duration, callback, true)
+  }
+
+  /**
+   * Stops the timer. Does nothing once it has stopped.
+   */
+  cancel() {
+    if self._handle != nil {
+      self._handle.cancel()
+    }
+  }
+
+  /**
+   * Whether the timer will fire again.
+   *
+   * @returns bool
+   */
+  is_active() {
+    return self._handle != nil and self._handle.is_active()
+  }
+}
+
+/**
+ * A promise resolved with `value` after `duration`.
+ *
+ * @param Duration duration
+ * @param any value
+ * @returns Promise
+ */
+def delay(duration: Duration, value) {
+  var deferred = Deferred()
+  Timer(duration, @{
+    deferred.resolve(value)
+  })
+  return deferred.promise
+}

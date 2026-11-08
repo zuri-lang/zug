@@ -1,0 +1,70 @@
+import test { * }
+
+import os
+import json
+import zug { set_error_handler }
+import ..app.settings { Settings, load_state, save_state }
+
+describe('settings', @{
+  var dir = nil
+
+  before_each(@{
+    dir = os.create_temp_dir('calculator-settings-')
+  })
+
+  it('start from the defaults when there is no file', @{
+    var state = load_state(dir)
+    expect(state.settings.grouping).to_be_true()
+    expect(state.settings.angle).to_be('deg')
+    expect(state.history).to_be_empty()
+  })
+
+  it('come back as they were saved, with the history when kept', @{
+    var settings = Settings()
+    settings.places = 2
+    settings.angle = 'rad'
+    settings.keep_history = true
+    settings.recents = ['1+1']
+    save_state(dir, settings, [{ expression: '1 + 1', result: 2 }])
+    var state = load_state(dir)
+    expect(state.settings.places).to_be(2)
+    expect(state.settings.angle).to_be('rad')
+    expect(state.settings.recents).to_equal(['1+1'])
+    expect(state.history).to_equal([{ expression: '1 + 1', result: 2 }])
+  })
+
+  it('leave the history out when it is not kept', @{
+    save_state(dir, Settings(), [{ expression: '1 + 1', result: 2 }])
+    expect(load_state(dir).history).to_be_empty()
+  })
+
+  it('keep the default for values out of range', @{
+    var settings = Settings.from_dict({
+      places: 99,
+      significant: 2,
+      angle: 'grad',
+      mode: 'quantum',
+      grouping: 'yes',
+    })
+    expect(settings.places).to_be_nil()
+    expect(settings.significant).to_be(12)
+    expect(settings.angle).to_be('deg')
+    expect(settings.mode).to_be('basic')
+    expect(settings.grouping).to_be_true()
+  })
+
+  it('move an unreadable file aside rather than overwrite it', @{
+    var path = os.join_paths(dir, 'settings.json')
+    file(path, 'w').write('{ not json')
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(context)
+    })
+    var state = load_state(dir)
+    set_error_handler(nil)
+    expect(reported).to_equal(['reading ${path}'])
+    expect(state.settings.mode).to_be('basic')
+    expect(file(path + '.unreadable').exists()).to_be_true()
+    expect(file(path).exists()).to_be_false()
+  })
+})

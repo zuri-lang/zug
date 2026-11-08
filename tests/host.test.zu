@@ -1,0 +1,285 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+class Toggle < StatefulWidget {
+  var accept = true
+
+  @new(accept) {
+    self.accept = accept
+  }
+
+  create_state() {
+    return ToggleState()
+  }
+}
+
+class ToggleState < State {
+  var on = false
+  var presses = 0
+
+  build(context) {
+    return Button('Toggle', {
+      selected: self.on,
+      on_selected_changed: @(value) {
+        self.presses++
+
+        if self.widget.accept {
+          self.set_state(@{
+            self.on = value
+          })
+        }
+      },
+    })
+  }
+}
+
+class Listing < StatefulWidget {
+  create_state() {
+    return ListingState()
+  }
+}
+
+class ListingState < State {
+  var names = ['a', 'b', 'c']
+
+  build(context) {
+    return Column(self.names.map(
+      @(name) => Text(name, { key: ValueKey(name) }),
+    ))
+  }
+
+  show(names) {
+    self.set_state(@{
+      self.names = names
+    })
+  }
+}
+
+describe('host props', @{
+  it('sends a view only the props that changed', @{
+    var label = ObservableValue('one')
+    var t = WidgetTester()
+    t.pump_widget(Observer(
+      label, @(context) => Text(label.value(), { tooltip: 'tip' }),
+    ))
+    var view = t.one('one')
+    expect(view.updates).to_be_empty()
+    label.set('two')
+    t.pump()
+    expect(view.updates).to_equal([{ text: 'two' }])
+    label.set('two')
+    t.pump()
+    expect(view.updates).to_have_length(1)
+    t.dispose()
+  })
+
+  it('creates a view with every prop, initial values included', @{
+    var t = WidgetTester()
+    t.pump_widget(Text('hello'))
+    var view = t.one('hello')
+    expect(view.props.selectable).to_be_false()
+    expect(view.props.hidden).to_be_false()
+    t.dispose()
+  })
+
+  it('disables a button with nothing to call', @{
+    var t = WidgetTester()
+    t.pump_widget(Column([Button('Dead'), Button('Live', { on_pressed: @{} })]))
+    expect(t.one('Dead').props.enabled).to_be_false()
+    expect(t.one('Live').props.enabled).to_be_true()
+    expect(@{
+      t.tap('Dead')
+    }).to_raise_instance_of(ZugError)
+    t.dispose()
+  })
+})
+
+describe('controlled props', @{
+  it('follow the user when the application accepts the change', @{
+    var t = WidgetTester()
+    t.pump_widget(Toggle(true))
+    var view = t.one('Toggle')
+    t.tap(view)
+    expect(t.state_of(ToggleState).on).to_be_true()
+    expect(view.props.selected).to_be_true()
+    t.dispose()
+  })
+
+  it('are put back when the application does not accept the change', @{
+    var t = WidgetTester()
+    t.pump_widget(Toggle(false))
+    var view = t.one('Toggle')
+    view.fire('pressed', { selected: true })
+    expect(t.state_of(ToggleState).presses).to_be(1)
+    expect(view.props.selected).to_be_false()
+    expect(view.updates[-1]).to_equal({ selected: false })
+    t.dispose()
+  })
+})
+
+describe('native children', @{
+  it('follow the order of the tree', @{
+    var t = WidgetTester()
+    t.pump_widget(Listing())
+    var window = t.window()
+    expect(window
+      .all_children()
+      .map(@(view) => view.text())).to_equal(['a', 'b', 'c'])
+    var before = t.one('b')
+    t.state_of(ListingState).show(['c', 'a', 'b'])
+    t.pump()
+    expect(window
+      .all_children()
+      .map(@(view) => view.text())).to_equal(['c', 'a', 'b'])
+    expect(t.one('b')).to_be(before)
+    t.dispose()
+  })
+
+  it('are destroyed when their widgets leave the tree', @{
+    var t = WidgetTester()
+    t.pump_widget(Listing())
+    var b = t.one('b')
+    t.state_of(ListingState).show(['a', 'c'])
+    t.pump()
+    expect(b.destroyed).to_be_true()
+    expect(t
+      .window()
+      .all_children()
+      .map(@(view) => view.text())).to_equal(['a', 'c'])
+    t.dispose()
+  })
+
+  it('nest inside decorated boxes, positioned relative to them', @{
+    var t = WidgetTester()
+    t.pump_widget(Padding(
+      EdgeInsets.all(20),
+      Box({
+        color: Color.GRAY,
+        padding: EdgeInsets.all(5),
+        accessibility_identifier: 'card',
+        child: Text('inside'),
+      }),
+    ))
+    var card = t.one('card')
+    var inside = t.one('inside')
+    expect(inside.parent_view).to_be(card)
+    expect(inside.frame.origin()).to_equal(Point(5, 5))
+    expect(card.frame.origin()).to_equal(Point(20, 20))
+    t.dispose()
+  })
+})
+
+describe('event handlers', @{
+  it('report what they raise and keep the application running', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(context)
+    })
+    var t = WidgetTester()
+    t.pump_widget(Button('Bad', { on_pressed: @{
+      raise ValueError('handler failed')
+    } }))
+    t.tap('Bad')
+    set_error_handler(nil)
+    expect(reported).to_have_length(1)
+    expect(reported[0]).to_contain('pressed')
+    t.dispose()
+  })
+
+  it('run microtasks the handler scheduled before the next frame', @{
+    var order = []
+    var t = WidgetTester()
+    t.pump_widget(Button('Go', { on_pressed: @{
+      order.append('handler')
+      schedule_microtask(@{
+        order.append('microtask')
+      })
+    } }))
+    t.tap('Go')
+    expect(order).to_equal(['handler', 'microtask'])
+    t.dispose()
+  })
+})
+
+describe('windows', @{
+  it('are shown after their first commit', @{
+    var t = WidgetTester()
+    t.pump_widget(Text('x'))
+    expect(t.window().shown).to_be_true()
+    t.dispose()
+  })
+
+  it('stay open when on_close_request refuses', @{
+    var t = WidgetTester()
+    t.pump_widget(App({
+      windows: [Window('Keep', Text('x'), { on_close_request: @() => false })],
+    }))
+    expect(t.window().click_close()).to_be_false()
+    expect(t.window().shown).to_be_true()
+    t.dispose()
+  })
+
+  it('quit the application when the last one closes', @{
+    var closed = []
+    var t = WidgetTester()
+    t.pump_widget(App({ windows: [Window('Only', Text('x'), { on_closed: @{
+      closed.append(true)
+    } })] }))
+    expect(t.window().click_close()).to_be_true()
+    expect(closed).to_equal([true])
+    expect(t.backend.quits).to_be(1)
+    t.dispose()
+  })
+
+  it('open and close as the list of windows changes', @{
+    var many = ObservableValue(false)
+    var t = WidgetTester()
+    t.pump_app(Observer(many, @(context) {
+      var windows = [Window('Main', Text('main'), { key: ValueKey('main') })]
+
+      if many.value() {
+        windows.append(Window(
+          'Second', Text('second'), { key: ValueKey('second') },
+        ))
+      }
+
+      return App({ windows })
+    }))
+    expect(t.backend.windows).to_have_length(1)
+    many.set(true)
+    t.pump()
+    expect(t.backend.windows).to_have_length(2)
+    expect(t.window(1).shown).to_be_true()
+    many.set(false)
+    t.pump()
+    expect(t.window(1).closed).to_be_true()
+    expect(t.window(0).closed).to_be_false()
+    t.dispose()
+  })
+
+  it('close when the application shuts down', @{
+    var t = WidgetTester()
+    t.pump_widget(Text('x'))
+    var window = t.window()
+    t.dispose()
+    expect(window.closed).to_be_true()
+  })
+})
+
+describe('the root', @{
+  it('must build windows', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.message)
+    })
+    var t = WidgetTester()
+    t.runtime.attach(Text('no window'))
+    t.pump()
+    set_error_handler(nil)
+    expect(reported).to_have_length(1)
+    expect(reported[0]).to_contain('only windows can be placed at the top')
+    t.dispose()
+  })
+})

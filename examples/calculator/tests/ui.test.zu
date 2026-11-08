@@ -1,0 +1,147 @@
+import test { * }
+
+import os
+import zug { * }
+import zug.testing { WidgetTester }
+import ..app { CalculatorApp, CalculatorState }
+
+def start(dir) {
+  var tester = WidgetTester()
+  tester.pump_app(CalculatorApp(dir))
+  return tester
+}
+
+def display(tester) {
+  return tester.one('display').text()
+}
+
+def tap_keys(tester, keys: list) {
+  for key in keys {
+    tester.tap('key ${key}')
+  }
+}
+
+describe('the calculator window', @{
+  var dir = nil
+  var t = nil
+
+  before_each(@{
+    dir = os.create_temp_dir('calculator-ui-')
+    t = start(dir)
+  })
+
+  after_each(@{
+    t.dispose()
+  })
+
+  it('starts at zero', @{
+    expect(display(t)).to_be('0')
+    expect(t.window().props.title).to_be('Calculator')
+  })
+
+  it('calculates from its keys', @{
+    tap_keys(t, ['2', '+', '3', '*', '4', '='])
+    expect(display(t)).to_be('14')
+    expect(t.one('expression').text()).to_be('2 + 3 × 4 =')
+  })
+
+  it('labels its clear key by what it will clear', @{
+    tap_keys(t, ['5'])
+    expect(t.one('key clear').text()).to_be('C')
+    tap_keys(t, ['clear'])
+    expect(t.one('key clear').text()).to_be('AC')
+  })
+
+  it('takes keys typed on the keyboard', @{
+    var window = t.window()
+    window.press_key('7')
+    window.press_key('shift+8', '*')
+    window.press_key('6')
+    window.press_key('enter')
+    expect(display(t)).to_be('42')
+    window.press_key('escape')
+    expect(display(t)).to_be('0')
+  })
+
+  it('calculates a typed expression and remembers it', @{
+    var input = t.one('expression input')
+    input.fire('changed', { text: '2 * (3 + 4)^2' })
+    input.fire('submitted', nil)
+    expect(display(t)).to_be('98')
+    expect(t.one('expression input').props.items).to_equal(['2 * (3 + 4)^2'])
+    expect(t.one('expression input').props.text).to_be('')
+  })
+
+  it('says why a typed expression cannot be calculated', @{
+    var input = t.one('expression input')
+    input.fire('changed', { text: '2 +' })
+    input.fire('submitted', nil)
+    expect(t.one('input error').text()).to_be('the expression ends too soon')
+    expect(t.backend.beeps).to_be(1)
+  })
+
+  it('switches to the scientific keys', @{
+    expect(t.find_identifier('key sin')).to_be_empty()
+    t.one('mode').fire('changed', { selected: [1] })
+    expect(t.find_identifier('key sin')).to_have_length(1)
+    tap_keys(t, ['9', '0', 'sin'])
+    expect(display(t)).to_be('1')
+  })
+
+  it('shows past results on the tape and recalls them', @{
+    tap_keys(t, ['6', '*', '7', '='])
+    tap_keys(t, ['clear'])
+    t.tap('show tape')
+    var tape = t.one('tape')
+    expect(tape.props.row_count).to_be(1)
+    expect(tape.fire('cell', { row: 0, column: 'expression' })).to_be('6 × 7')
+    expect(tape.fire('cell', { row: 0, column: 'result' })).to_be('42')
+    tape.fire('activated', { row: 0 })
+    expect(display(t)).to_be('42')
+  })
+
+  it('copies the result when nothing focused can copy', @{
+    tap_keys(t, ['1', '2', '3', '4', '='])
+    t.choose_menu('Edit', 'Copy')
+    expect(t.backend.performed_roles).to_equal(['copy'])
+    expect(Clipboard.read_text()).to_be('1234')
+  })
+
+  it('pastes a number from the clipboard', @{
+    Clipboard.write_text('2,500')
+    t.choose_menu('Edit', 'Paste')
+    expect(display(t)).to_be('2,500')
+  })
+
+  it('opens Settings from the menu, and applies what changes there', @{
+    t.choose_menu('Calculator', 'Settings…')
+    expect(t.backend.windows
+      .filter(@(window) => !window.closed)
+      .length()).to_be(2)
+    tap_keys(t, ['1', '2', '3', '4', '='])
+    expect(display(t)).to_be('1,234')
+    t.one('grouping').fire('changed', { value: false })
+    expect(display(t)).to_be('1234')
+    t.one('places').fire('changed', { selected: 4 })
+    expect(display(t)).to_be('1234.00')
+  })
+})
+
+describe('keeping the tape', @{
+  it('restores the tape at the next launch when asked to keep it', @{
+    var dir = os.create_temp_dir('calculator-keep-')
+    var first = start(dir)
+    first.state_of(CalculatorState).change_settings(@(settings) {
+      settings.keep_history = true
+    })
+    tap_keys(first, ['8', '*', '8', '='])
+    first.dispose()
+
+    var second = start(dir)
+    second.tap('show tape')
+    var tape = second.one('tape')
+    expect(tape.props.row_count).to_be(1)
+    expect(tape.fire('cell', { row: 0, column: 'result' })).to_be('64')
+    second.dispose()
+  })
+})

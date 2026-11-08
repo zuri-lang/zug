@@ -1,0 +1,1075 @@
+/**
+ * Controls that choose a value: checkboxes, radio buttons, switches,
+ * sliders, steppers, segmented controls, dropdowns, date pickers, colour
+ * wells and level indicators, and indicators of progress.
+ *
+ * Every control here is controlled: it shows the value it is given, and
+ * reports what the user chose through `on_changed`. The application
+ * decides whether to accept the choice, by building again with the new
+ * value; a choice it does not accept is undone. A control with no
+ * `on_changed` is disabled.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * class Settings < StatefulWidget {
+ *   create_state() {
+ *     return SettingsState()
+ *   }
+ * }
+ *
+ * class SettingsState < State {
+ *   var grouping = true
+ *   var places = 2
+ *
+ *   build(context) {
+ *     return Column([
+ *       Checkbox(self.grouping, { label: 'Thousands separators', on_changed: @(value) { self.set_state(@{ self.grouping = value }) } }),
+ *       Stepper(self.places, { min: 0, max: 10, on_changed: @(value) { self.set_state(@{ self.places = value }) } }),
+ *     ])
+ *   }
+ * }
+ * ```
+ */
+
+import date
+import ..foundation { Key, Color, check_options }
+import .framework { StatelessWidget }
+import .host { HostWidget, host_options, common_props }
+import .basic { Row, Column, Box }
+import .button { check_control_size }
+
+def _size_of(o, owner) {
+  var size = o.get('size', 'regular')
+  check_control_size(size, owner)
+  return size
+}
+
+var _CHECKBOX_OPTIONS = host_options({
+  label: 'string',
+  on_changed: 'function',
+  tristate: 'bool',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * A checkbox with an optional label. With `tristate`, its value may also
+ * be `nil`, shown as a dash, for a choice that is partly made.
+ */
+class Checkbox < HostWidget {
+  var value = false
+  var label = ''
+  var on_changed
+  var tristate = false
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param ?bool value
+   * @param ?dict options: `label`, `on_changed` (called with the new
+   *    value), `tristate`, `enabled`, `size` and the options every host
+   *    widget takes.
+   * @constructor
+   */
+  @new(value: ?bool, options: ?dict) {
+    var o = check_options(options, 'Checkbox', _CHECKBOX_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.label = o.get('label', '')
+    self.on_changed = o.get('on_changed')
+    self.tristate = o.get('tristate', false)
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Checkbox')
+
+    if value == nil and !self.tristate {
+      raise ValueError('a Checkbox value may be nil only when it is tristate')
+    }
+  }
+
+  kind() {
+    return 'checkbox'
+  }
+
+  props(context) {
+    return {
+      title: self.label,
+      value: self.value,
+      tristate: self.tristate,
+      enabled: self.enabled and self.on_changed != nil,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+    }
+  }
+}
+
+var _RADIO_OPTIONS = host_options({
+  label: 'string',
+  on_changed: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * One choice among several: selected when its `value` equals the
+ * `group_value`. Choosing it calls `on_changed` with its value.
+ */
+class Radio < HostWidget {
+  var value
+  var group_value
+  var label = ''
+  var on_changed
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param any value: what this choice stands for.
+   * @param any group_value: the value currently chosen.
+   * @param ?dict options: `label`, `on_changed`, `enabled`, `size` and the
+   *    options every host widget takes.
+   * @constructor
+   */
+  @new(value, group_value, options: ?dict) {
+    var o = check_options(options, 'Radio', _RADIO_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.group_value = group_value
+    self.label = o.get('label', '')
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Radio')
+  }
+
+  kind() {
+    return 'radio'
+  }
+
+  props(context) {
+    return {
+      title: self.label,
+      selected: self.value == self.group_value,
+      enabled: self.enabled and self.on_changed != nil,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    var value = self.value
+    return {
+      changed: @(payload) {
+        if on_changed != nil and payload.selected {
+          on_changed(value)
+        }
+      },
+    }
+  }
+}
+
+/**
+ * A set of radio buttons for one choice, laid out in a column or a row.
+ *
+ * ```zuri
+ * import zug { RadioGroup }
+ *
+ * var unit = RadioGroup({ deg: 'Degrees', rad: 'Radians' }, 'deg', { on_changed: @(value) { echo value } })
+ * ```
+ */
+class RadioGroup < StatelessWidget {
+  var items = []
+  var value
+  var on_changed
+  var axis = 'vertical'
+  var spacing = 6
+  var enabled = true
+
+  /**
+   * @param dict|list items: values to labels, or a list of strings that
+   *    are both.
+   * @param any value: the value chosen.
+   * @param ?dict options: `on_changed`, `axis` (vertical when left out),
+   *    `spacing`, `enabled` and `key`.
+   * @constructor
+   */
+  @new(items: dict|list, value, options: ?dict) {
+    var o = check_options(
+      options, 'RadioGroup',
+      {
+        key: Key,
+        on_changed: 'function',
+        axis: 'string',
+        spacing: 'number',
+        enabled: 'bool',
+      },
+    )
+    self.key = o.get('key')
+    self.items = is_dict(items)
+      ? items.keys().map(@(item) => [item, items[item]])
+      : items.map(@(item) => [item, '${item}'])
+    self.value = value
+    self.on_changed = o.get('on_changed')
+    self.axis = o.get('axis', 'vertical')
+    self.spacing = o.get('spacing', self.axis == 'vertical' ? 6 : 16)
+    self.enabled = o.get('enabled', true)
+  }
+
+  build(context) {
+    var radios = self.items.map(@(item) => Radio(item[0], self.value, {
+      label: item[1],
+      on_changed: self.on_changed,
+      enabled: self.enabled,
+    }))
+
+    if self.axis == 'horizontal' {
+      return Row(radios, { spacing: self.spacing, shrink_wrap: true })
+    }
+
+    return Column(
+      radios,
+      { spacing: self.spacing, shrink_wrap: true, align_items: 'start' },
+    )
+  }
+}
+
+var _SWITCH_OPTIONS = host_options({
+  on_changed: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * An on and off switch.
+ */
+class Switch < HostWidget {
+  var value = false
+  var on_changed
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param bool value
+   * @param ?dict options: `on_changed`, `enabled`, `size` and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(value: bool, options: ?dict) {
+    var o = check_options(options, 'Switch', _SWITCH_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Switch')
+  }
+
+  kind() {
+    return 'switch'
+  }
+
+  props(context) {
+    return {
+      value: self.value,
+      enabled: self.enabled and self.on_changed != nil,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+    }
+  }
+}
+
+var _SLIDER_OPTIONS = host_options({
+  min: 'number',
+  max: 'number',
+  divisions: 'number',
+  vertical: 'bool',
+  on_changed: 'function',
+  on_change_end: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * A slider choosing a number between `min` and `max`. With `divisions`,
+ * it snaps to that many equal steps.
+ */
+class Slider < HostWidget {
+  var value = 0
+  var min = 0
+  var max = 1
+  var divisions = 0
+  var vertical = false
+  var on_changed
+  var on_change_end
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param number value
+   * @param ?dict options: `min` (0), `max` (1), `divisions`, `vertical`,
+   *    `on_changed` (called while dragging), `on_change_end` (called when
+   *    the drag ends), `enabled`, `size` and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(value: number, options: ?dict) {
+    var o = check_options(options, 'Slider', _SLIDER_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.min = o.get('min', 0)
+    self.max = o.get('max', 1)
+    self.divisions = o.get('divisions', 0)
+    self.vertical = o.get('vertical', false)
+    self.on_changed = o.get('on_changed')
+    self.on_change_end = o.get('on_change_end')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Slider')
+
+    if !(self.max > self.min) {
+      raise ValueError('a Slider needs max above min, got ${self.min} to ${self.max}')
+    }
+
+    if !is_int(self.divisions) or self.divisions < 0 {
+      raise ValueError('divisions of a Slider must be a whole number, got ${self.divisions}')
+    }
+  }
+
+  kind() {
+    return 'slider'
+  }
+
+  props(context) {
+    return {
+      value: self.value.max(self.min).min(self.max),
+      min: self.min,
+      max: self.max,
+      divisions: self.divisions,
+      vertical: self.vertical,
+      enabled: self.enabled
+        and (self.on_changed != nil or self.on_change_end != nil),
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    var on_change_end = self.on_change_end
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+      change_end: @(payload) => on_change_end == nil
+        ? nil
+        : on_change_end(payload.value),
+    }
+  }
+}
+
+var _STEPPER_OPTIONS = host_options({
+  min: 'number',
+  max: 'number',
+  step: 'number',
+  wraps: 'bool',
+  on_changed: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * Up and down arrows that step a number between `min` and `max`.
+ */
+class Stepper < HostWidget {
+  var value = 0
+  var min = 0
+  var max = 100
+  var step = 1
+  var wraps = false
+  var on_changed
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param number value
+   * @param ?dict options: `min` (0), `max` (100), `step` (1), `wraps`
+   *    from one end to the other, `on_changed`, `enabled`, `size` and the
+   *    options every host widget takes.
+   * @constructor
+   */
+  @new(value: number, options: ?dict) {
+    var o = check_options(options, 'Stepper', _STEPPER_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.min = o.get('min', 0)
+    self.max = o.get('max', 100)
+    self.step = o.get('step', 1)
+    self.wraps = o.get('wraps', false)
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Stepper')
+
+    if !(self.max > self.min) or !(self.step > 0) {
+      raise ValueError('a Stepper needs max above min and a step above zero')
+    }
+  }
+
+  kind() {
+    return 'stepper'
+  }
+
+  props(context) {
+    return {
+      value: self.value.max(self.min).min(self.max),
+      min: self.min,
+      max: self.max,
+      step: self.step,
+      wraps: self.wraps,
+      enabled: self.enabled and self.on_changed != nil,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+    }
+  }
+}
+
+/**
+ * A bar showing how far something has got. With no `value` it shows that
+ * something is happening without saying how far it is.
+ */
+class ProgressBar < HostWidget {
+  var value
+  var min = 0
+  var max = 1
+
+  /**
+   * @param ?dict options: `value` (`nil` for indeterminate), `min` (0),
+   *    `max` (1) and the options every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'ProgressBar',
+      host_options({ value: 'number', min: 'number', max: 'number' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = o.get('value')
+    self.min = o.get('min', 0)
+    self.max = o.get('max', 1)
+  }
+
+  kind() {
+    return 'progress'
+  }
+
+  props(context) {
+    return { value: self.value, min: self.min, max: self.max }
+  }
+}
+
+/**
+ * A spinning indicator that something is happening.
+ */
+class Spinner < HostWidget {
+  var animating = true
+  var size = 'regular'
+
+  /**
+   * @param ?dict options: `animating` (true), `size` and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'Spinner', host_options({ animating: 'bool', size: 'string' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.animating = o.get('animating', true)
+    self.size = _size_of(o, 'Spinner')
+  }
+
+  kind() {
+    return 'spinner'
+  }
+
+  props(context) {
+    return { animating: self.animating, control_size: self.size }
+  }
+}
+
+/**
+ * How a segmented control chooses.
+ */
+class SegmentMode {
+
+  /**
+   * One segment at a time.
+   */
+  static var ONE = 'one'
+
+  /**
+   * Any number of segments.
+   */
+  static var ANY = 'any'
+
+  /**
+   * None stays chosen; each click is reported, as buttons would be.
+   */
+  static var MOMENTARY = 'momentary'
+}
+
+/**
+ * One segment of a `SegmentedControl`.
+ */
+class Segment {
+  var label = ''
+  var tooltip
+  var enabled = true
+
+  /**
+   * @param string label
+   * @param ?dict options: `tooltip` and `enabled`.
+   * @constructor
+   */
+  @new(label: string, options: ?dict) {
+    var o = check_options(
+      options, 'Segment', { tooltip: 'string', enabled: 'bool' },
+    )
+    self.label = label
+    self.tooltip = o.get('tooltip')
+    self.enabled = o.get('enabled', true)
+  }
+
+  /**
+   * The segment as plain data.
+   *
+   * @returns dict
+   */
+  to_data() {
+    return { label: self.label, tooltip: self.tooltip, enabled: self.enabled }
+  }
+}
+
+var _MODES = ['one', 'any', 'momentary']
+var _SEGMENTED_OPTIONS = host_options({
+  mode: 'string',
+  on_changed: 'function',
+  on_pressed: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * A row of segments. In `ONE` mode `selected` is an index, or `nil` for
+ * none, and `on_changed` gets an index. In `ANY` mode `selected` is a list
+ * of indices, and so is what `on_changed` gets. In `MOMENTARY` mode
+ * `on_pressed` gets the index clicked.
+ */
+class SegmentedControl < HostWidget {
+  var segments = []
+  var selected
+  var mode = 'one'
+  var on_changed
+  var on_pressed
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param list segments: strings or `Segment`s.
+   * @param any selected
+   * @param ?dict options: `mode` (see `SegmentMode`), `on_changed`,
+   *    `on_pressed`, `enabled`, `size` and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(segments: list, selected, options: ?dict) {
+    var o = check_options(options, 'SegmentedControl', _SEGMENTED_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.segments = segments.map(
+      @(segment) => is_string(segment) ? Segment(segment) : segment,
+    )
+    self.selected = selected
+    self.mode = o.get('mode', 'one')
+    self.on_changed = o.get('on_changed')
+    self.on_pressed = o.get('on_pressed')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'SegmentedControl')
+
+    if !_MODES.contains(self.mode) {
+      raise ValueError("mode of SegmentedControl must be one of SegmentMode's values, got '${self.mode}'")
+    }
+  }
+
+  _selection() {
+    if self.mode == 'momentary' or self.selected == nil {
+      return []
+    }
+
+    return is_list(self.selected) ? self.selected : [self.selected]
+  }
+
+  kind() {
+    return 'segmented'
+  }
+
+  props(context) {
+    var handled = self.mode == 'momentary'
+      ? self.on_pressed != nil
+      : self.on_changed != nil
+    return {
+      segments: self.segments.map(@(segment) => segment.to_data()),
+      mode: self.mode,
+      selected: self._selection(),
+      enabled: self.enabled and handled,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    var on_pressed = self.on_pressed
+    var mode = self.mode
+    return {
+      changed: @(payload) {
+        if on_changed == nil {
+          return
+        }
+
+        if mode == 'one' {
+          on_changed(payload.selected.is_empty() ? nil : payload.selected[0])
+        } else {
+          on_changed(payload.selected)
+        }
+      },
+      pressed: @(payload) => on_pressed == nil
+        ? nil
+        : on_pressed(payload.index),
+    }
+  }
+}
+
+/**
+ * One entry of a `Dropdown`: a value and the label shown for it.
+ */
+class DropdownItem {
+  var value
+  var label = ''
+  var enabled = true
+  var is_separator = false
+
+  /**
+   * @param any value
+   * @param ?string label: `value` as text when left out.
+   * @param ?dict options: `enabled`.
+   * @constructor
+   */
+  @new(value, label: ?string, options: ?dict) {
+    var o = check_options(options, 'DropdownItem', { enabled: 'bool' })
+    self.value = value
+    self.label = label == nil ? '${value}' : label
+    self.enabled = o.get('enabled', true)
+  }
+
+  /**
+   * A line between groups of entries.
+   *
+   * @returns DropdownItem
+   */
+  static separator() {
+    var item = DropdownItem(nil, '')
+    item.is_separator = true
+    return item
+  }
+}
+
+var _DROPDOWN_OPTIONS = host_options({
+  on_changed: 'function',
+  enabled: 'bool',
+  size: 'string',
+})
+
+/**
+ * A button that shows the value chosen and opens a menu of the others.
+ */
+class Dropdown < HostWidget {
+  var items = []
+  var value
+  var on_changed
+  var enabled = true
+  var size = 'regular'
+
+  /**
+   * @param list items: `DropdownItem`s, or strings that are both value
+   *    and label.
+   * @param any value: the value chosen.
+   * @param ?dict options: `on_changed` (called with the value chosen),
+   *    `enabled`, `size` and the options every host widget takes.
+   * @constructor
+   */
+  @new(items: list, value, options: ?dict) {
+    var o = check_options(options, 'Dropdown', _DROPDOWN_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.items = items.map(
+      @(item) => instance_of(item, DropdownItem)
+        ? item
+        : DropdownItem(item, '${item}'),
+    )
+    self.value = value
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+    self.size = _size_of(o, 'Dropdown')
+  }
+
+  _index_of_value() {
+    iter var i = 0; i < self.items.length(); i++ {
+      var item = self.items[i]
+
+      if !item.is_separator and item.value == self.value {
+        return i
+      }
+    }
+
+    return -1
+  }
+
+  kind() {
+    return 'popup'
+  }
+
+  props(context) {
+    return {
+      items: self.items.map(
+        @(item) => item.is_separator
+          ? { separator: true }
+          : { title: item.label, enabled: item.enabled },
+      ),
+      selected: self._index_of_value(),
+      enabled: self.enabled and self.on_changed != nil,
+      control_size: self.size,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    var items = self.items
+    return {
+      changed: @(payload) {
+        var index = payload.selected
+
+        if on_changed != nil and index >= 0 and index < items.length() {
+          on_changed(items[index].value)
+        }
+      },
+    }
+  }
+}
+
+/**
+ * What a `DatePicker` lets the user pick.
+ */
+class DateMode {
+  static var DATE = 'date'
+  static var TIME = 'time'
+  static var DATE_TIME = 'date_time'
+}
+
+/**
+ * How a `DatePicker` looks.
+ */
+class DateStyle {
+
+  /**
+   * A field with steppers.
+   */
+  static var FIELD = 'field'
+
+  /**
+   * A field without steppers.
+   */
+  static var COMPACT = 'compact'
+
+  /**
+   * A calendar, or a clock for times.
+   */
+  static var GRAPHICAL = 'graphical'
+}
+
+var _DATE_OPTIONS = host_options({
+  min: date.Date,
+  max: date.Date,
+  mode: 'string',
+  style: 'string',
+  on_changed: 'function',
+  enabled: 'bool',
+})
+
+def _seconds(value) {
+  return value == nil ? nil : value.to_time()
+}
+
+/**
+ * Picks a date, a time, or both.
+ */
+class DatePicker < HostWidget {
+  var value
+  var min
+  var max
+  var mode = 'date'
+  var style = 'field'
+  var on_changed
+  var enabled = true
+
+  /**
+   * @param date.Date value
+   * @param ?dict options: `min`, `max`, `mode` (see `DateMode`), `style`
+   *    (see `DateStyle`), `on_changed` (called with a `date.Date`),
+   *    `enabled` and the options every host widget takes.
+   * @constructor
+   */
+  @new(value, options: ?dict) {
+    if !instance_of(value, date.Date) {
+      raise TypeError('a DatePicker takes a date.Date, got ' + typeof(value))
+    }
+
+    var o = check_options(options, 'DatePicker', _DATE_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.min = o.get('min')
+    self.max = o.get('max')
+    self.mode = o.get('mode', 'date')
+    self.style = o.get('style', 'field')
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+  }
+
+  kind() {
+    return 'date_picker'
+  }
+
+  props(context) {
+    return {
+      value: _seconds(self.value),
+      min: _seconds(self.min),
+      max: _seconds(self.max),
+      mode: self.mode,
+      style: self.style,
+      enabled: self.enabled and self.on_changed != nil,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(date.from_time(payload.value)),
+    }
+  }
+}
+
+/**
+ * A swatch of a colour that opens the colour picker.
+ */
+class ColorWell < HostWidget {
+  var value
+  var on_changed
+  var enabled = true
+
+  /**
+   * @param Color value
+   * @param ?dict options: `on_changed` (called with a `Color`), `enabled`
+   *    and the options every host widget takes.
+   * @constructor
+   */
+  @new(value: Color, options: ?dict) {
+    var o = check_options(
+      options, 'ColorWell',
+      host_options({ on_changed: 'function', enabled: 'bool' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.on_changed = o.get('on_changed')
+    self.enabled = o.get('enabled', true)
+  }
+
+  kind() {
+    return 'color_well'
+  }
+
+  props(context) {
+    return {
+      value: self.value,
+      enabled: self.enabled and self.on_changed != nil,
+      style: 'default',
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+    }
+  }
+}
+
+/**
+ * How a `LevelIndicator` draws its level.
+ */
+class LevelStyle {
+  static var CONTINUOUS = 'continuous'
+  static var DISCRETE = 'discrete'
+  static var RELEVANCY = 'relevancy'
+  static var RATING = 'rating'
+}
+
+/**
+ * A level within a range, such as a capacity or a star rating. A rating
+ * the user may change takes `on_changed`.
+ */
+class LevelIndicator < HostWidget {
+  var value = 0
+  var min = 0
+  var max = 5
+  var warning
+  var critical
+  var style = 'continuous'
+  var on_changed
+
+  /**
+   * @param number value
+   * @param ?dict options: `min` (0), `max` (5), `warning` and `critical`
+   *    levels, `style` (see `LevelStyle`), `on_changed` and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(value: number, options: ?dict) {
+    var o = check_options(
+      options, 'LevelIndicator',
+      host_options({
+        min: 'number',
+        max: 'number',
+        warning: 'number',
+        critical: 'number',
+        style: 'string',
+        on_changed: 'function',
+      }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.value = value
+    self.min = o.get('min', 0)
+    self.max = o.get('max', 5)
+    self.warning = o.get('warning')
+    self.critical = o.get('critical')
+    self.style = o.get('style', 'continuous')
+    self.on_changed = o.get('on_changed')
+  }
+
+  kind() {
+    return 'level'
+  }
+
+  props(context) {
+    return {
+      value: self.value,
+      min: self.min,
+      max: self.max,
+      warning: self.warning,
+      critical: self.critical,
+      style: self.style,
+      editable: self.on_changed != nil,
+    }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.value),
+    }
+  }
+}
+
+/**
+ * The line itself.
+ *
+ * @internal
+ */
+class SeparatorLine < HostWidget {
+
+  @new(common: dict) {
+    self.common = common
+  }
+
+  kind() {
+    return 'separator'
+  }
+}
+
+/**
+ * A thin line between groups of content. In a column it runs across, in a
+ * row it runs down; `axis` fixes its direction elsewhere.
+ */
+class Separator < StatelessWidget {
+  var axis
+  var common = {}
+
+  /**
+   * @param ?dict options: `axis` and the options every host widget takes.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'Separator', host_options({ axis: 'string' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.axis = o.get('axis')
+  }
+
+  build(context) {
+    var line = SeparatorLine(self.common)
+
+    if self.axis == 'horizontal' {
+      return Box({ height: 1, child: line })
+    }
+
+    if self.axis == 'vertical' {
+      return Box({ width: 1, child: line })
+    }
+
+    return line
+  }
+}

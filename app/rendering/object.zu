@@ -1,0 +1,909 @@
+/**
+ * The render tree: objects that lay themselves out, and the pipeline that
+ * lays them out and commits the result to native views.
+ *
+ * Layout follows the box protocol. A parent hands each child
+ * `Constraints`, the child picks a `size` within them, and the parent sets
+ * the child's offset. A child laid out by a parent that does not use its
+ * size, or with tight constraints, is a relayout boundary: when it changes,
+ * layout restarts from it rather than from the root.
+ *
+ * Most render objects only do layout. Those backed by a native view are
+ * hosts (see `host.zu`). The commit phase walks the tree after layout and
+ * gives every host whose geometry changed its new frame, relative to the
+ * nearest host above it.
+ */
+
+import ..foundation { Point, Size, Constraints, INFINITY, LayoutError }
+
+/**
+ * What a parent stores on each child: at least the child's offset from
+ * the parent's top left. Layouts that need more per child extend it.
+ */
+class ParentData {
+
+  /**
+   * @type Point
+   */
+  var offset
+
+  @new() {
+    self.offset = Point.ZERO
+  }
+}
+
+/**
+ * Drives layout and commit for one tree of render objects.
+ */
+class PipelineOwner {
+
+  /**
+   * The backend views are created with.
+   *
+   * @type ?Backend
+   */
+  var backend
+
+  /**
+   * Called when a frame is needed.
+   *
+   * @type ?function
+   */
+  var on_need_frame
+
+  /**
+   * Called with a handler, its payload and a description, to run an event
+   * handler. The runtime sets it so handler errors are reported and
+   * deferred work runs.
+   *
+   * @type ?function
+   */
+  var on_handler
+
+  /**
+   * The render objects attached at the top of the tree.
+   *
+   * @type list
+   */
+  var roots = []
+
+  var _needs_layout = []
+  var _pending_destroy = []
+  var _laying_out = false
+  var _committing = false
+
+  /**
+   * Asks for a frame.
+   */
+  request_frame() {
+    if self.on_need_frame != nil {
+      self.on_need_frame()
+    }
+  }
+
+  /**
+   * Makes `root` the top of a tree this pipeline lays out.
+   *
+   * @param RenderObject root
+   */
+  add_root(root: RenderObject) {
+    self.roots.append(root)
+    root.attach(self)
+    root.needs_layout = true
+    self.schedule_layout(root)
+  }
+
+  /**
+   * Stops laying out `root`, detaching it.
+   *
+   * @param RenderObject root
+   */
+  remove_root(root: RenderObject) {
+    var index = self.roots.index_of(root)
+
+    if index >= 0 {
+      self.roots.remove_at(index)
+      root.detach()
+    }
+  }
+
+  /**
+   * Queues a relayout boundary for layout.
+   *
+   * @internal
+   * @param RenderObject node
+   */
+  schedule_layout(node: RenderObject) {
+    self._needs_layout.append(node)
+
+    if !self._laying_out {
+      self.request_frame()
+    }
+  }
+
+  /**
+   * Queues a host whose native view must be destroyed.
+   *
+   * @internal
+   * @param RenderObject host
+   */
+  schedule_destroy(host) {
+    self._pending_destroy.append(host)
+    self.request_frame()
+  }
+
+  /**
+   * Whether anything is waiting to be laid out.
+   *
+   * @returns bool
+   */
+  needs_layout() {
+    return !self._needs_layout.is_empty()
+  }
+
+  /**
+   * Lays out every queued relayout boundary, shallowest first.
+   */
+  flush_layout() {
+    self._laying_out = true
+
+    while !self._needs_layout.is_empty() {
+      var dirty = self._needs_layout
+      self._needs_layout = []
+      dirty.sort(@(a, b) => a.depth - b.depth)
+
+      for node in dirty {
+        if node.needs_layout and node.owner == self {
+          node.layout_again()
+        }
+      }
+    }
+
+    self._laying_out = false
+  }
+
+  /**
+   * Commits layout and prop changes to native views, then destroys the
+   * views of hosts that left the tree.
+   */
+  flush_commit() {
+    self._committing = true
+
+    for root in self.roots {
+      root.commit(Point.ZERO, nil, false)
+    }
+
+    if !self._pending_destroy.is_empty() {
+      var hosts = self._pending_destroy
+      self._pending_destroy = []
+      hosts.sort(@(a, b) => b.depth - a.depth)
+
+      for host in hosts {
+        host.destroy_view()
+      }
+    }
+
+    self._committing = false
+  }
+
+  /**
+   * Runs an event handler through the runtime's hook.
+   *
+   * @internal
+   * @param function handler
+   * @param any payload
+   * @param string context
+   * @returns any
+   */
+  run_handler(handler: function, payload, context: string) {
+    if self.on_handler != nil {
+      return self.on_handler(handler, payload, context)
+    }
+
+    return handler.arity() == 0 ? handler() : handler(payload)
+  }
+}
+
+/**
+ * A node of the render tree.
+ *
+ * Subclasses implement `perform_layout()`, which sets `self.size` from
+ * `self.constraints` and lays out and places the children, and the
+ * `compute_*` intrinsic methods when their size depends on their content.
+ */
+class RenderObject {
+
+  /**
+   * The render object this one is a child of.
+   *
+   * @type ?RenderObject
+   */
+  var render_parent
+
+  /**
+   * The pipeline this object is attached to, or `nil` when detached.
+   *
+   * @type ?PipelineOwner
+   */
+  var owner
+
+  /**
+   * How far from the root this object is.
+   *
+   * @type number
+   */
+  var depth = 0
+
+  /**
+   * What the parent stores on this object, including its offset.
+   *
+   * @type ?ParentData
+   */
+  var parent_data
+
+  /**
+   * @type list
+   */
+  var children = []
+
+  /**
+   * The constraints of the last layout.
+   *
+   * @type ?Constraints
+   */
+  var constraints
+
+  /**
+   * The size the last layout chose.
+   *
+   * @type Size
+   */
+  var size
+
+  /**
+   * @type bool
+   */
+  var needs_layout = true
+
+  /**
+   * Whether this object is a relayout boundary. `nil` until first laid
+   * out.
+   *
+   * @type ?bool
+   */
+  var is_boundary
+
+  /**
+   * Whether this object's geometry changed since the last commit.
+   *
+   * @type bool
+   */
+  var needs_commit = true
+
+  /**
+   * Whether something below this object needs committing.
+   *
+   * @type bool
+   */
+  var child_needs_commit = true
+
+  var _intrinsics
+  var _baseline_known = false
+  var _baseline
+
+  @new() {
+    self.size = Size.ZERO
+  }
+
+  # Tree.
+
+  /**
+   * Gives `child` the kind of parent data this object stores. Layouts
+   * that need more than an offset override it.
+   *
+   * @param RenderObject child
+   */
+  setup_parent_data(child: RenderObject) {
+    if child.parent_data == nil {
+      child.parent_data = ParentData()
+    }
+  }
+
+  /**
+   * The only child, or `nil`.
+   *
+   * @returns ?RenderObject
+   */
+  child() {
+    return self.children.is_empty() ? nil : self.children[0]
+  }
+
+  /**
+   * Replaces every child with `child`, or with none when it is `nil`.
+   *
+   * @param ?RenderObject child
+   */
+  set_child(child: ?RenderObject) {
+    var current = self.child()
+
+    if current == child {
+      return
+    }
+
+    if current != nil {
+      self.remove_child(current)
+    }
+
+    if child != nil {
+      self.insert_child(child, nil)
+    }
+  }
+
+  /**
+   * Adds `child` after `after`, or first when `after` is `nil`.
+   *
+   * @param RenderObject child
+   * @param ?RenderObject after
+   * @throws LayoutError When the child already has a parent
+   */
+  insert_child(child: RenderObject, after: ?RenderObject) {
+    if child.render_parent != nil {
+      raise LayoutError('${typeof(child)} already has a parent, ${typeof(child.render_parent)}')
+    }
+
+    self.setup_parent_data(child)
+    var index = after == nil ? 0 : self.children.index_of(after) + 1
+    self.children.insert(child, index)
+    self._adopt(child)
+  }
+
+  /**
+   * Moves `child` so it comes after `after`, or first when `after` is
+   * `nil`.
+   *
+   * @param RenderObject child
+   * @param ?RenderObject after
+   */
+  move_child(child: RenderObject, after: ?RenderObject) {
+    var from = self.children.index_of(child)
+
+    if from < 0 {
+      return
+    }
+
+    self.children.remove_at(from)
+    var index = after == nil ? 0 : self.children.index_of(after) + 1
+    self.children.insert(child, index)
+    self.mark_needs_layout()
+    self.mark_host_structure_dirty()
+  }
+
+  /**
+   * Removes `child`, detaching it.
+   *
+   * @param RenderObject child
+   */
+  remove_child(child: RenderObject) {
+    var index = self.children.index_of(child)
+
+    if index < 0 {
+      return
+    }
+
+    self.children.remove_at(index)
+    child.render_parent = nil
+
+    if self.owner != nil {
+      child.detach()
+    }
+
+    self.mark_needs_layout()
+    self.mark_host_structure_dirty()
+  }
+
+  _adopt(child: RenderObject) {
+    self.setup_parent_data(child)
+    child.render_parent = self
+    child.redepth(self.depth + 1)
+
+    if self.owner != nil {
+      child.attach(self.owner)
+    }
+
+    # Everything in a new subtree still has to be committed, and the walk
+    # only reaches it through ancestors marked as having something below.
+    child.mark_commit_path()
+    self.mark_needs_layout()
+    self.mark_host_structure_dirty()
+  }
+
+  /**
+   * Sets this object's depth, and its descendants' below it.
+   *
+   * @internal
+   * @param number depth
+   */
+  redepth(depth: number) {
+    if self.depth == depth {
+      return
+    }
+
+    self.depth = depth
+
+    for child in self.children {
+      child.redepth(depth + 1)
+    }
+  }
+
+  /**
+   * Attaches this object and its descendants to `owner`.
+   *
+   * @param PipelineOwner owner
+   */
+  attach(owner: PipelineOwner) {
+    self.owner = owner
+
+    if self.needs_layout and self.is_boundary == true {
+      self.needs_layout = false
+      self.mark_needs_layout()
+    }
+
+    for child in self.children {
+      child.attach(owner)
+    }
+  }
+
+  /**
+   * Detaches this object and its descendants from their pipeline.
+   */
+  detach() {
+    for child in self.children {
+      child.detach()
+    }
+
+    self.owner = nil
+  }
+
+  /**
+   * Whether this object is attached to a pipeline.
+   *
+   * @returns bool
+   */
+  is_attached() {
+    return self.owner != nil
+  }
+
+  /**
+   * Releases what this object holds. Called when the element that made it
+   * is unmounted.
+   */
+  dispose() {}
+
+  # Layout.
+
+  /**
+   * Marks this object as needing layout, and its ancestors up to the
+   * nearest relayout boundary.
+   */
+  mark_needs_layout() {
+    self._baseline_known = false
+
+    # A parent may have read this object's intrinsic sizes, which are now
+    # stale, so the parent has to lay out again even across a boundary.
+    if self._intrinsics != nil {
+      self._intrinsics = nil
+
+      if self.render_parent != nil {
+        self.needs_layout = true
+        self.render_parent.mark_needs_layout()
+        return
+      }
+    }
+
+    if self.needs_layout {
+      return
+    }
+
+    self.needs_layout = true
+
+    if self.is_boundary != true and self.render_parent != nil {
+      self.render_parent.mark_needs_layout()
+    } else if self.owner != nil {
+      self.owner.schedule_layout(self)
+    }
+  }
+
+  /**
+   * Lays this object out within `constraints`. A parent that reads the
+   * child's size afterwards passes `parent_uses_size` as true.
+   *
+   * @param Constraints constraints
+   * @param bool parent_uses_size
+   */
+  layout(constraints: Constraints, parent_uses_size: bool) {
+    if !constraints.is_normalized() {
+      raise LayoutError('${typeof(self)} was laid out with ${constraints}, whose minimums are infinite; such constraints can only be enforced on others')
+    }
+
+    var boundary = !parent_uses_size
+      or constraints.is_tight()
+      or self.render_parent == nil
+
+    if !self.needs_layout
+      and self.constraints != nil
+      and constraints == self.constraints {
+      self.is_boundary = boundary
+      return
+    }
+
+    self.constraints = constraints
+    self.is_boundary = boundary
+    self._run_layout()
+  }
+
+  /**
+   * Lays a relayout boundary out again with its last constraints.
+   *
+   * @internal
+   */
+  layout_again() {
+    if self.constraints == nil {
+      self.constraints = Constraints.UNBOUNDED
+      self.is_boundary = true
+    }
+
+    self._run_layout()
+  }
+
+  _run_layout() {
+    var old = self.size
+    self._baseline_known = false
+    self.perform_layout()
+    self.needs_layout = false
+
+    if self.size == nil {
+      raise LayoutError('${typeof(self)}.perform_layout() did not set a size')
+    }
+
+    if self.size.width == INFINITY or self.size.height == INFINITY {
+      raise LayoutError('${typeof(self)} was given ${self.constraints} and chose the infinite size ${self.size}; a box cannot fill an unbounded axis')
+    }
+
+    if old != self.size {
+      self.mark_needs_commit()
+    }
+  }
+
+  /**
+   * Sets `self.size` and lays out the children. The default takes the
+   * smallest size allowed and lays nothing out.
+   */
+  perform_layout() {
+    self.size = self.constraints.smallest()
+  }
+
+  /**
+   * Puts `child` at `offset` from this object's top left.
+   *
+   * @param RenderObject child
+   * @param Point offset
+   */
+  place_child(child: RenderObject, offset: Point) {
+    if child.parent_data.offset != offset {
+      child.parent_data.offset = offset
+      child.mark_needs_commit()
+    }
+  }
+
+  # Intrinsic sizes.
+
+  _intrinsic(name: string, extent: number, compute: function) {
+    if self._intrinsics == nil {
+      self._intrinsics = {}
+    }
+
+    var key = '${name}:${extent}'
+    var cached = self._intrinsics.get(key)
+
+    if cached != nil {
+      return cached
+    }
+
+    var value = compute(extent)
+    self._intrinsics[key] = value
+    return value
+  }
+
+  /**
+   * The narrowest this object can be without its content failing to fit
+   * at `height`.
+   *
+   * @param number height
+   * @returns number
+   */
+  min_intrinsic_width(height: number) {
+    return self._intrinsic(
+      'min_w', height, @(h) => self.compute_min_intrinsic_width(h),
+    )
+  }
+
+  /**
+   * The width beyond which more width would not make this object any
+   * smaller in height, at `height`.
+   *
+   * @param number height
+   * @returns number
+   */
+  max_intrinsic_width(height: number) {
+    return self._intrinsic(
+      'max_w', height, @(h) => self.compute_max_intrinsic_width(h),
+    )
+  }
+
+  /**
+   * The least height this object needs at `width`.
+   *
+   * @param number width
+   * @returns number
+   */
+  min_intrinsic_height(width: number) {
+    return self._intrinsic(
+      'min_h', width, @(w) => self.compute_min_intrinsic_height(w),
+    )
+  }
+
+  /**
+   * The height beyond which more height would not help, at `width`.
+   *
+   * @param number width
+   * @returns number
+   */
+  max_intrinsic_height(width: number) {
+    return self._intrinsic(
+      'max_h', width, @(w) => self.compute_max_intrinsic_height(w),
+    )
+  }
+
+  /**
+   * @param number height
+   * @returns number
+   */
+  compute_min_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.min_intrinsic_width(height)
+  }
+
+  /**
+   * @param number height
+   * @returns number
+   */
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_width(height)
+  }
+
+  /**
+   * @param number width
+   * @returns number
+   */
+  compute_min_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.min_intrinsic_height(width)
+  }
+
+  /**
+   * @param number width
+   * @returns number
+   */
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_height(width)
+  }
+
+  /**
+   * The distance from this object's top to the baseline of its first line
+   * of text, or `nil` when it has none. Valid after layout.
+   *
+   * @returns ?number
+   */
+  baseline() {
+    if !self._baseline_known {
+      self._baseline = self.compute_baseline()
+      self._baseline_known = true
+    }
+
+    return self._baseline
+  }
+
+  /**
+   * Works out `baseline()`. The default is the first child's baseline,
+   * moved by that child's offset.
+   *
+   * @returns ?number
+   */
+  compute_baseline() {
+    for child in self.children {
+      var line = child.baseline()
+
+      if line != nil {
+        return line + child.parent_data.offset.y
+      }
+    }
+
+    return nil
+  }
+
+  # Commit.
+
+  /**
+   * Whether this object has a native view.
+   *
+   * @returns bool
+   */
+  is_host() {
+    return false
+  }
+
+  /**
+   * Marks this object's geometry as changed, so the hosts within it are
+   * given new frames at the next commit.
+   */
+  mark_needs_commit() {
+    if self.needs_commit {
+      return
+    }
+
+    self.needs_commit = true
+    self.mark_commit_path()
+  }
+
+  /**
+   * Marks every ancestor as having something below it to commit.
+   *
+   * @internal
+   */
+  mark_commit_path() {
+    var node = self.render_parent
+
+    while node != nil and !node.child_needs_commit {
+      node.child_needs_commit = true
+      node = node.render_parent
+    }
+
+    if self.owner != nil {
+      self.owner.request_frame()
+    }
+  }
+
+  /**
+   * The nearest host at or above this object, or `nil`.
+   *
+   * @returns ?RenderObject
+   */
+  nearest_host() {
+    var node = self
+
+    while node != nil {
+      if node.is_host() {
+        return node
+      }
+
+      node = node.render_parent
+    }
+
+    return nil
+  }
+
+  /**
+   * Notes that the set or order of native views under the nearest host
+   * may have changed.
+   *
+   * @internal
+   */
+  mark_host_structure_dirty() {
+    var host = self.nearest_host()
+
+    if host != nil {
+      host.structure_dirty = true
+
+      if !host.child_needs_commit {
+        host.child_needs_commit = true
+        host.mark_commit_path()
+      }
+    }
+  }
+
+  /**
+   * Commits this subtree. `origin` is where this object's parent sits in
+   * the content area of `host`, the nearest host above. A subtree whose
+   * position changed is forced, so every host in it gets a frame.
+   *
+   * @internal
+   * @param Point origin
+   * @param ?RenderObject host
+   * @param bool forced
+   */
+  commit(origin: Point, host, forced: bool) {
+    if !forced and !self.needs_commit and !self.child_needs_commit {
+      return
+    }
+
+    var position = self.parent_data == nil
+      ? origin
+      : origin + self.parent_data.offset
+    var force_children = forced or self.needs_commit
+    self.needs_commit = false
+    self.child_needs_commit = false
+
+    for child in self.children {
+      child.commit(position, host, force_children)
+    }
+  }
+
+  /**
+   * Appends to `out` the nearest hosts below this object, in tree order,
+   * each paired with `slot`, without looking inside them.
+   *
+   * @internal
+   * @param any slot
+   * @param list out
+   */
+  collect_hosts(slot, out: list) {
+    for child in self.children {
+      if child.is_host() {
+        out.append([child, slot])
+      } else {
+        child.collect_hosts(slot, out)
+      }
+    }
+  }
+
+  /**
+   * Calls `fn` with this object and every descendant, parents first.
+   *
+   * @param function fn
+   */
+  visit(fn: function) {
+    fn(self)
+
+    for child in self.children {
+      child.visit(fn)
+    }
+  }
+
+  /**
+   * A description of this subtree, one object per line, for debugging.
+   *
+   * @returns string
+   */
+  describe_tree() {
+    var lines = []
+    self.describe_into(lines, '')
+    return '\n'.join(lines)
+  }
+
+  /**
+   * Appends this subtree's description to `lines`.
+   *
+   * @internal
+   * @param list lines
+   * @param string indent
+   */
+  describe_into(lines: list, indent: string) {
+    var offset = self.parent_data == nil ? Point.ZERO : self.parent_data.offset
+    lines.append('${indent}${self.describe()} at (${offset.x}, ${offset.y}) size ${self.size.width} x ${self.size.height}')
+
+    for child in self.children {
+      child.describe_into(lines, indent + '  ')
+    }
+  }
+
+  /**
+   * A one-line description of this object, for `describe_tree()`.
+   *
+   * @returns string
+   */
+  describe() {
+    return typeof(self)
+  }
+}

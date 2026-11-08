@@ -1,0 +1,1298 @@
+/**
+ * A backend with no display: views are kept in memory, text is measured
+ * by a fixed rule, and time moves only when told to.
+ *
+ * It is what zug's own tests and an application's UI tests run on, through
+ * `zug.testing`, and the reference for writing a backend: everything the
+ * contract asks for is here, in the plainest form.
+ *
+ * Text is measured as if every character were six tenths of the font size
+ * wide, with lines the font size plus four points tall; the font size is
+ * 13 unless a style says otherwise.
+ */
+
+import .. ..backend {
+  Backend, ViewHost, WindowHost, TimerHandle, Painter, CAPABILITIES, kind_spec,
+  kind_names,
+}
+import .. ..foundation {
+  Size, Rect, Point, EdgeInsets, Constraints, INFINITY, UnsupportedError,
+  BackendError,
+}
+
+/**
+ * The text size rule, shared by every view that shows text.
+ *
+ * @param string text
+ * @param dict style: a `TextStyle`'s data.
+ * @param ?number max_width
+ * @param ?number max_lines
+ * @returns Size
+ */
+def measure_text_rule(
+  text: string, style: dict, max_width: ?number, max_lines: ?number,
+) {
+  var size = style.get('size', 13)
+  var char_width = size * 0.6
+  var line_height = size + 4
+  var lines = text.split('\n')
+  var count = 0
+  var widest = 0
+
+  for line in lines {
+    var width = line.length() * char_width
+
+    if max_width != nil
+      and max_width != INFINITY
+      and width > max_width
+      and max_width > 0 {
+      var wrapped = (width / max_width).ceil()
+      count += wrapped
+      widest = widest.max(max_width)
+    } else {
+      count += 1
+      widest = widest.max(width)
+    }
+  }
+
+  if max_lines != nil and max_lines > 0 {
+    count = count.min(max_lines)
+  }
+
+  return Size(widest.ceil(), count * line_height)
+}
+
+/**
+ * A view kept in memory.
+ */
+class HeadlessView < ViewHost {
+
+  /**
+   * @type string
+   */
+  var kind_name
+
+  /**
+   * Every prop's current value.
+   *
+   * @type dict
+   */
+  var props = {}
+
+  /**
+   * @type function
+   */
+  var dispatch
+
+  /**
+   * The frame last set, relative to the parent's slot.
+   *
+   * @type Rect
+   */
+  var frame
+
+  /**
+   * The view this one is a child of.
+   *
+   * @type ?HeadlessView
+   */
+  var parent_view
+
+  /**
+   * The slot this view is in within its parent.
+   *
+   * @type any
+   */
+  var parent_slot
+
+  /**
+   * Slot keys to lists of child views, in order.
+   *
+   * @type dict
+   */
+  var slots = {}
+
+  /**
+   * Slot keys to content sizes set for them.
+   *
+   * @type dict
+   */
+  var content_sizes = {}
+
+  /**
+   * Every set of changes `update()` received, oldest first.
+   *
+   * @type list
+   */
+  var updates = []
+
+  /**
+   * How many times `invalidate()` was called.
+   *
+   * @type number
+   */
+  var invalidations = 0
+
+  /**
+   * @type bool
+   */
+  var destroyed = false
+
+  /**
+   * @type HeadlessBackend
+   */
+  var backend
+
+  /**
+   * @param HeadlessBackend backend
+   * @param string kind
+   * @param dict props
+   * @param function dispatch
+   * @constructor
+   */
+  @new(backend, kind: string, props: dict, dispatch: function) {
+    self.backend = backend
+    self.kind_name = kind
+    self.props = kind_spec(kind).initial_props()
+
+    for name, value in props {
+      self.props[name] = value
+    }
+
+    self.dispatch = dispatch
+    self.frame = Rect.ZERO
+  }
+
+  _check() {
+    if self.destroyed {
+      raise BackendError("a destroyed '${self.kind_name}' view was used")
+    }
+  }
+
+  kind() {
+    return self.kind_name
+  }
+
+  update(changes: dict) {
+    self._check()
+    self.updates.append(changes)
+
+    for name, value in changes {
+      self.props[name] = value
+    }
+  }
+
+  measure(constraints: Constraints) {
+    self._check()
+    return self.backend.natural_size(self, constraints)
+  }
+
+  baseline() {
+    var style = self.props.get('style')
+
+    if self.kind_name == 'text' or self.kind_name == 'button' {
+      var size = is_dict(style) ? style.get('size', 13) : 13
+      return self.kind_name == 'button' ? size + 2 : size
+    }
+
+    return nil
+  }
+
+  content_insets(slot) {
+    return self.backend.insets_for(self, slot)
+  }
+
+  set_frame(rect: Rect) {
+    self._check()
+    self.frame = rect
+  }
+
+  set_content_size(slot, size: Size) {
+    self._check()
+    self.content_sizes['${slot}'] = size
+  }
+
+  slot_size(slot, size: Size) {
+    return self.backend.slot_size_for(self, slot, size)
+  }
+
+  /**
+   * Draws a canvas as the platform would: calls its paint handler with a
+   * recording painter, and returns what was drawn.
+   *
+   * @returns list
+   */
+  paint() {
+    var painter = RecordingPainter(self.frame.size())
+    self.dispatch('paint', { painter, size: self.frame.size() })
+    self.backend.event_handled()
+    return painter.calls
+  }
+
+  insert_child(child: ViewHost, index: number, slot) {
+    self._check()
+
+    if child.parent_view != nil {
+      child.parent_view.remove_child(child)
+    }
+
+    var key = '${slot}'
+    var list = self.slots.get(key)
+
+    if list == nil {
+      list = []
+      self.slots[key] = list
+    }
+
+    list.insert(child, index.min(list.length()))
+    child.parent_view = self
+    child.parent_slot = slot
+  }
+
+  remove_child(child: ViewHost) {
+    for key, list in self.slots {
+      var index = list.index_of(child)
+
+      if index >= 0 {
+        list.remove_at(index)
+        child.parent_view = nil
+        child.parent_slot = nil
+        return
+      }
+    }
+  }
+
+  focus() {
+    self._check()
+    var previous = self.backend.focused
+    self.backend.focused = self
+
+    if previous != nil and previous != self and !previous.destroyed {
+      previous.dispatch('focus_changed', { focused: false })
+    }
+
+    self.dispatch('focus_changed', { focused: true })
+  }
+
+  invalidate() {
+    self.invalidations++
+  }
+
+  destroy() {
+    if self.destroyed {
+      return
+    }
+
+    if self.parent_view != nil {
+      self.parent_view.remove_child(self)
+    }
+
+    self.destroyed = true
+
+    if self.backend.focused == self {
+      self.backend.focused = nil
+    }
+  }
+
+  # What tests use.
+
+  /**
+   * The child views in `slot`, in order.
+   *
+   * @param any slot
+   * @returns list
+   */
+  children(slot) {
+    var list = self.slots.get('${slot}')
+    return list == nil ? [] : list.clone()
+  }
+
+  /**
+   * Every child view in every slot.
+   *
+   * @returns list
+   */
+  all_children() {
+    var all = []
+
+    for key, list in self.slots {
+      all.extend(list)
+    }
+
+    return all
+  }
+
+  /**
+   * This view and every view below it, parents first.
+   *
+   * @returns list
+   */
+  descendants() {
+    var found = [self]
+
+    for child in self.all_children() {
+      found.extend(child.descendants())
+    }
+
+    return found
+  }
+
+  /**
+   * The frame relative to the window's content area.
+   *
+   * @returns Rect
+   */
+  window_frame() {
+    var x = self.frame.x
+    var y = self.frame.y
+    var view = self.parent_view
+
+    while view != nil and !instance_of(view, HeadlessWindow) {
+      x += view.frame.x
+      y += view.frame.y
+      view = view.parent_view
+    }
+
+    return Rect(x, y, self.frame.width, self.frame.height)
+  }
+
+  /**
+   * The text the view shows: its `text`, or else its `title`.
+   *
+   * @returns ?string
+   */
+  text() {
+    var text = self.props.get('text')
+    return text != nil ? text : self.props.get('title')
+  }
+
+  /**
+   * Reports `event` as the view would, then lets the runtime finish
+   * handling it. Returns what the handler returned.
+   *
+   * @param string event
+   * @param any payload
+   * @returns any
+   */
+  fire(event: string, payload) {
+    self._check()
+
+    var spec = kind_spec(self.kind_name)
+
+    if !spec.events.contains(event) {
+      raise ValueError("the '${self.kind_name}' view kind has no event '${event}'")
+    }
+
+    # A native control changes itself before it reports the change.
+    var controlled = spec.controlled_by(event)
+
+    if controlled != nil and is_dict(payload) and payload.contains(controlled) {
+      self.props[controlled] = payload[controlled]
+    }
+
+    var result = self.dispatch(event, payload)
+    self.backend.event_handled()
+    return result
+  }
+
+  @to_string() {
+    var text = self.text()
+    return text == nil
+      ? 'HeadlessView(${self.kind_name})'
+      : 'HeadlessView(${self.kind_name}: ${text})'
+  }
+}
+
+/**
+ * A window kept in memory.
+ */
+class HeadlessWindow < WindowHost {
+  var kind_name = 'window'
+  var props = {}
+  var dispatch
+  var frame
+  var parent_view
+  var parent_slot
+  var slots = {}
+  var content_sizes = {}
+  var updates = []
+  var invalidations = 0
+  var destroyed = false
+  var backend
+
+  /**
+   * The content area's size.
+   *
+   * @type Size
+   */
+  var content
+
+  /**
+   * Whether `show()` was called and the window has not closed since.
+   *
+   * @type bool
+   */
+  var shown = false
+
+  /**
+   * @type bool
+   */
+  var closed = false
+
+  /**
+   * @param HeadlessBackend backend
+   * @param dict props
+   * @param function dispatch
+   * @constructor
+   */
+  @new(backend, props: dict, dispatch: function) {
+    self.backend = backend
+    self.props = kind_spec('window').initial_props()
+
+    for name, value in props {
+      self.props[name] = value
+    }
+
+    self.dispatch = dispatch
+    self.frame = Rect.ZERO
+    self.content = self.props.get('size')
+  }
+
+  kind() {
+    return 'window'
+  }
+
+  update(changes: dict) {
+    self.updates.append(changes)
+
+    for name, value in changes {
+      self.props[name] = value
+    }
+
+    if changes.contains('size')
+      and changes.size != nil
+      and changes.size != self.content {
+      self.content = changes.size
+      self.dispatch(
+        'resized', { width: self.content.width, height: self.content.height },
+      )
+    }
+
+    if changes.contains('visible')
+      and self.shown != changes.visible
+      and !self.closed {
+      self.shown = changes.visible
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return constraints.constrain(self.content)
+  }
+
+  baseline() {
+    return nil
+  }
+
+  content_insets(slot) {
+    return EdgeInsets.ZERO
+  }
+
+  set_frame(rect: Rect) {}
+
+  set_content_size(slot, size: Size) {}
+
+  slot_size(slot, size: Size) {
+    return size
+  }
+
+  insert_child(child: ViewHost, index: number, slot) {
+    if child.parent_view != nil {
+      child.parent_view.remove_child(child)
+    }
+
+    var list = self.slots.get('nil')
+
+    if list == nil {
+      list = []
+      self.slots['nil'] = list
+    }
+
+    list.insert(child, index.min(list.length()))
+    child.parent_view = self
+    child.parent_slot = slot
+  }
+
+  remove_child(child: ViewHost) {
+    var list = self.slots.get('nil')
+
+    if list != nil {
+      var index = list.index_of(child)
+
+      if index >= 0 {
+        list.remove_at(index)
+        child.parent_view = nil
+      }
+    }
+  }
+
+  focus() {}
+
+  invalidate() {}
+
+  destroy() {
+    self.close()
+    self.destroyed = true
+  }
+
+  content_size() {
+    return self.content
+  }
+
+  set_content_size_to(size: Size) {
+    self.content = size
+  }
+
+  show() {
+    if !self.closed {
+      self.shown = true
+    }
+  }
+
+  close() {
+    self.shown = false
+    self.closed = true
+  }
+
+  clear_focus() {
+    var focused = self.backend.focused
+
+    if focused != nil {
+      self.backend.focused = nil
+
+      if !focused.destroyed {
+        focused.dispatch('focus_changed', { focused: false })
+      }
+    }
+  }
+
+  # What tests use.
+
+  /**
+   * Resizes the content area as the user would by dragging an edge.
+   *
+   * @param Size size
+   */
+  resize(size: Size) {
+    self.content = size
+    self.dispatch('resized', { width: size.width, height: size.height })
+    self.backend.event_handled()
+  }
+
+  /**
+   * Clicks the close button: asks the application, and closes the window
+   * when it agrees. Returns whether the window closed.
+   *
+   * @returns bool
+   */
+  click_close() {
+    var allowed = self.dispatch('close_requested', nil)
+    self.backend.event_handled()
+
+    if allowed == false {
+      return false
+    }
+
+    self.close()
+    self.dispatch('closed', nil)
+    self.backend.event_handled()
+    return true
+  }
+
+  /**
+   * Presses a key as the user would with no control using it, such as
+   * `cmd+k` or `7`. Returns whether the application used it.
+   *
+   * @param string binding
+   * @param ?string characters: what the key types, the key itself for a
+   *    single character when left out.
+   * @returns bool
+   */
+  press_key(binding: string, characters: ?string) {
+    var parts = binding.length() == 1 ? [binding] : binding.split('/\\+/')
+    var key = parts[-1]
+    var modifiers = parts[0, parts.length() - 1]
+
+    if binding.ends_with('++') {
+      key = '+'
+    }
+
+    var typed = characters
+
+    if typed == nil {
+      typed = key.length() == 1 ? key : ''
+    }
+
+    var used = self.dispatch(
+      'key', { key, characters: typed, modifiers, repeat: false },
+    )
+    self.backend.event_handled()
+    return used == true
+  }
+
+  /**
+   * Every child view of the content area.
+   *
+   * @returns list
+   */
+  all_children() {
+    var list = self.slots.get('nil')
+    return list == nil ? [] : list.clone()
+  }
+
+  /**
+   * Every view in the window, the window first.
+   *
+   * @returns list
+   */
+  descendants() {
+    var found = [self]
+
+    for child in self.all_children() {
+      found.extend(child.descendants())
+    }
+
+    return found
+  }
+
+  /**
+   * @returns string
+   */
+  text() {
+    return self.props.get('title')
+  }
+
+  @to_string() {
+    return 'HeadlessWindow(${self.props.get("title")})'
+  }
+}
+
+/**
+ * A timer on the headless clock.
+ */
+class HeadlessTimer < TimerHandle {
+  var due = 0
+  var interval = 0
+  var repeats = false
+  var task
+  var active = true
+
+  @new(due: number, interval: number, repeats: bool, task: function) {
+    self.due = due
+    self.interval = interval
+    self.repeats = repeats
+    self.task = task
+  }
+
+  cancel() {
+    self.active = false
+  }
+
+  is_active() {
+    return self.active
+  }
+}
+
+# Natural sizes of the kinds whose size does not depend on their text.
+var _FIXED_SIZES = {
+  switch: Size(38, 22),
+  text_field: Size(160, 22),
+  text_area: Size(200, 100),
+  search_field: Size(160, 22),
+  combo_box: Size(160, 25),
+  stepper: Size(19, 28),
+  progress: Size(160, 20),
+  spinner: Size(32, 32),
+  color_well: Size(44, 24),
+  level: Size(100, 18),
+  separator: Size(1, 1),
+}
+
+/**
+ * A painter that records what is drawn, as lists of the method name and
+ * its arguments.
+ */
+class RecordingPainter < Painter {
+
+  /**
+   * @type list
+   */
+  var calls = []
+
+  var _size
+
+  /**
+   * @param Size size
+   * @constructor
+   */
+  @new(size: Size) {
+    self._size = size
+  }
+
+  size() {
+    return self._size
+  }
+
+  save() {
+    self.calls.append(['save'])
+  }
+
+  restore() {
+    self.calls.append(['restore'])
+  }
+
+  translate(dx: number, dy: number) {
+    self.calls.append(['translate', dx, dy])
+  }
+
+  scale(sx: number, sy: number) {
+    self.calls.append(['scale', sx, sy])
+  }
+
+  rotate(radians: number) {
+    self.calls.append(['rotate', radians])
+  }
+
+  clip_rect(rect: Rect) {
+    self.calls.append(['clip_rect', rect])
+  }
+
+  fill_rect(rect: Rect, color) {
+    self.calls.append(['fill_rect', rect, color])
+  }
+
+  stroke_rect(rect: Rect, paint) {
+    self.calls.append(['stroke_rect', rect, paint])
+  }
+
+  fill_rounded_rect(rect: Rect, radius: number, color) {
+    self.calls.append(['fill_rounded_rect', rect, radius, color])
+  }
+
+  stroke_rounded_rect(rect: Rect, radius: number, paint) {
+    self.calls.append(['stroke_rounded_rect', rect, radius, paint])
+  }
+
+  fill_oval(rect: Rect, color) {
+    self.calls.append(['fill_oval', rect, color])
+  }
+
+  stroke_oval(rect: Rect, paint) {
+    self.calls.append(['stroke_oval', rect, paint])
+  }
+
+  line(from: Point, to: Point, paint) {
+    self.calls.append(['line', from, to, paint])
+  }
+
+  fill_path(path, color) {
+    self.calls.append(['fill_path', path, color])
+  }
+
+  stroke_path(path, paint) {
+    self.calls.append(['stroke_path', path, paint])
+  }
+
+  text(text: string, at: Point, style) {
+    self.calls.append(['text', text, at])
+  }
+
+  measure_text(text: string, style) {
+    return measure_text_rule(
+      text, style == nil ? {} : style.to_data(), nil, nil,
+    )
+  }
+
+  image(source, rect: Rect) {
+    self.calls.append(['image', rect])
+  }
+}
+
+/**
+ * The headless backend.
+ */
+class HeadlessBackend < Backend {
+
+  /**
+   * @type ?BackendDelegate
+   */
+  var delegate
+
+  /**
+   * Every window created, open or closed.
+   *
+   * @type list
+   */
+  var windows = []
+
+  /**
+   * Every view created, destroyed ones included.
+   *
+   * @type list
+   */
+  var views = []
+
+  /**
+   * The view with keyboard focus.
+   *
+   * @type ?HeadlessView
+   */
+  var focused
+
+  /**
+   * The menus last set.
+   *
+   * @type list
+   */
+  var menus = []
+
+  /**
+   * The dispatch function of the menu bar.
+   *
+   * @type ?function
+   */
+  var menu_dispatch
+
+  /**
+   * Alerts, file pickers and save panels waiting for an answer, oldest
+   * first, each `{ type, window, spec, done }`.
+   *
+   * @type list
+   */
+  var dialogs = []
+
+  /**
+   * URLs `open_url()` was given.
+   *
+   * @type list
+   */
+  var opened_urls = []
+
+  /**
+   * How many times `beep()` was called.
+   *
+   * @type number
+   */
+  var beeps = 0
+
+  /**
+   * The roles `perform_role()` was asked for. Nothing headless has focus
+   * that could carry one out, so each is refused.
+   *
+   * @type list
+   */
+  var performed_roles = []
+
+  /**
+   * How many times `quit()` was called.
+   *
+   * @type number
+   */
+  var quits = 0
+
+  var _clipboard
+  var _appearance = 'light'
+  var _frame_requested = false
+  var _running = false
+  var _clock = 0
+  var _timers = []
+
+  name() {
+    return 'headless'
+  }
+
+  capabilities() {
+    return CAPABILITIES.clone()
+  }
+
+  supports_kind(kind: string) {
+    return kind_names().contains(kind)
+  }
+
+  start(delegate) {
+    self.delegate = delegate
+  }
+
+  /**
+   * Draws frames and fires due timers until there is nothing to do, or
+   * until `quit()`.
+   */
+  run() {
+    self._running = true
+
+    while self._running {
+      if self.pump() == 0 {
+        break
+      }
+    }
+
+    self._running = false
+  }
+
+  quit() {
+    self.quits++
+    self._running = false
+  }
+
+  request_frame() {
+    self._frame_requested = true
+  }
+
+  /**
+   * Whether a frame has been asked for and not drawn.
+   *
+   * @returns bool
+   */
+  frame_requested() {
+    return self._frame_requested
+  }
+
+  /**
+   * Draws frames until none is asked for. Returns how many were drawn.
+   *
+   * @returns number
+   * @throws BackendError When frames keep asking for more frames
+   */
+  pump() {
+    var count = 0
+
+    while self._frame_requested {
+      self._frame_requested = false
+      count++
+
+      if count > 1000 {
+        raise BackendError('frames kept asking for another frame 1000 times over; something marks itself dirty on every frame')
+      }
+
+      self.delegate.on_frame()
+    }
+
+    return count
+  }
+
+  /**
+   * Tells the delegate an event was handled, then draws what it changed.
+   *
+   * @internal
+   */
+  event_handled() {
+    self.delegate.on_event_handled()
+    self.pump()
+  }
+
+  start_timer(seconds: number, repeats: bool, task: function) {
+    var timer = HeadlessTimer(self._clock + seconds, seconds, repeats, task)
+    self._timers.append(timer)
+    return timer
+  }
+
+  now() {
+    return self._clock
+  }
+
+  /**
+   * Moves the clock forward by `seconds`, firing each timer that falls due
+   * at its time, and drawing frames after each.
+   *
+   * @param number seconds
+   */
+  advance(seconds: number) {
+    var target = self._clock + seconds
+
+    while true {
+      var next = nil
+
+      for timer in self._timers {
+        if timer.active
+          and timer.due <= target
+          and (next == nil or timer.due < next.due) {
+          next = timer
+        }
+      }
+
+      if next == nil {
+        break
+      }
+
+      self._clock = next.due
+
+      if next.repeats {
+        next.due += next.interval.max(0.001)
+      } else {
+        next.active = false
+      }
+
+      next.task()
+      self.event_handled()
+    }
+
+    self._timers = self._timers.filter(@(timer) => timer.active)
+    self._clock = target
+    self.pump()
+  }
+
+  create_window(props: dict, dispatch: function) {
+    var window = HeadlessWindow(self, props, dispatch)
+    self.windows.append(window)
+    return window
+  }
+
+  create_view(kind: string, props: dict, dispatch: function) {
+    if !self.supports_kind(kind) or kind == 'window' {
+      raise UnsupportedError('headless', kind)
+    }
+
+    var view = HeadlessView(self, kind, props, dispatch)
+    self.views.append(view)
+    return view
+  }
+
+  /**
+   * The natural size of `view` within `constraints`.
+   *
+   * @internal
+   * @param HeadlessView view
+   * @param Constraints constraints
+   * @returns Size
+   */
+  natural_size(view, constraints) {
+    var props = view.props
+
+    if view.kind_name == 'text' {
+      return measure_text_rule(
+        props.get('text', ''), props.get('style', {}), constraints.max_width,
+        props.get('max_lines'),
+      )
+    }
+
+    if view.kind_name == 'button' {
+      var text = measure_text_rule(
+        props.get('title', ''), props.get('style', {}), nil, 1,
+      )
+      return Size(text.width + 24, 21)
+    }
+
+    if view.kind_name == 'checkbox' or view.kind_name == 'radio' {
+      var label = measure_text_rule(props.get('title', ''), {}, nil, 1)
+      return Size(label.width + 22, 18)
+    }
+
+    if view.kind_name == 'popup' {
+      var widest = 0
+
+      for item in props.get('items', []) {
+        widest = widest.max(measure_text_rule(
+          item.get('title', ''), {}, nil, 1,
+        ).width)
+      }
+
+      return Size(widest + 40, 21)
+    }
+
+    if view.kind_name == 'segmented' {
+      var total = 0
+
+      for segment in props.get('segments', []) {
+        total += measure_text_rule(segment.get('label', ''), {}, nil, 1).width
+          + 20
+      }
+
+      return Size(total, 24)
+    }
+
+    if view.kind_name == 'slider' {
+      return props.get('vertical') ? Size(20, 160) : Size(160, 20)
+    }
+
+    if view.kind_name == 'date_picker' {
+      return props.get('style') == 'graphical' ? Size(276, 148) : Size(120, 22)
+    }
+
+    if view.kind_name == 'image' {
+      var source = props.get('source')
+
+      if is_dict(source) and source.contains('symbol') {
+        var size = source.get('size', 13)
+        return Size(size, size)
+      }
+
+      return Size(32, 32)
+    }
+
+    var fixed = _FIXED_SIZES.get(view.kind_name)
+    return fixed == nil ? Size.ZERO : fixed
+  }
+
+  /**
+   * The insets around the children of `view` in `slot`.
+   *
+   * @internal
+   * @param HeadlessView view
+   * @param any slot
+   * @returns EdgeInsets
+   */
+  /**
+   * The size of `slot`'s area of `view` when the view is `size`.
+   *
+   * @internal
+   * @param HeadlessView view
+   * @param any slot
+   * @param Size size
+   * @returns Size
+   */
+  slot_size_for(view, slot, size) {
+    if view.kind_name == 'split' {
+      var count = view.props.get('panes', 1).max(1)
+      var horizontal = view.props.get('axis', 'horizontal') == 'horizontal'
+      var along = horizontal ? size.width : size.height
+      var share = (along - (count - 1)) / count
+      var initial = view.props.get('initial')
+
+      if initial != nil and slot < initial.length() and slot < count - 1 {
+        share = initial[slot]
+      } else if initial != nil and slot == count - 1 {
+        var used = 0
+
+        for value in initial[0, (count - 1).min(initial.length())] {
+          used += value
+        }
+
+        share = (along - (count - 1) - used).max(0)
+      }
+
+      return horizontal ? Size(share, size.height) : Size(size.width, share)
+    }
+
+    return self.insets_for(view, slot).deflate_size(size)
+  }
+
+  insets_for(view, slot) {
+    if view.kind_name == 'tabs' {
+      return EdgeInsets(8, 30, 8, 8)
+    }
+
+    if view.kind_name == 'group_box' {
+      return EdgeInsets(8, view.props.get('title') == nil ? 8 : 22, 8, 8)
+    }
+
+    return EdgeInsets.ZERO
+  }
+
+  perform_role(role: string) {
+    self.performed_roles.append(role)
+    return false
+  }
+
+  /**
+   * Chooses the menu item with `id`, as the user would, then draws what
+   * it changed.
+   *
+   * @param string id
+   * @throws BackendError When no menu bar has been set
+   */
+  choose_menu_item(id: string) {
+    if self.menu_dispatch == nil {
+      raise BackendError('no menu bar has been set')
+    }
+
+    self.menu_dispatch('selected', { id })
+    self.event_handled()
+  }
+
+  set_menu_bar(menus: list, dispatch: function) {
+    self.menus = menus
+    self.menu_dispatch = dispatch
+  }
+
+  show_alert(window, spec: dict, done: function) {
+    self.dialogs.append({ type: 'alert', window, spec, done })
+  }
+
+  pick_files(window, spec: dict, done: function) {
+    self.dialogs.append({ type: 'pick_files', window, spec, done })
+  }
+
+  save_file(window, spec: dict, done: function) {
+    self.dialogs.append({ type: 'save_file', window, spec, done })
+  }
+
+  /**
+   * Answers the oldest waiting dialog with `answer`, as the user would.
+   *
+   * @param any answer
+   * @throws BackendError When no dialog is waiting
+   */
+  answer_dialog(answer) {
+    if self.dialogs.is_empty() {
+      raise BackendError('no dialog is waiting for an answer')
+    }
+
+    var dialog = self.dialogs.shift()
+    dialog['done'](answer)
+    self.event_handled()
+  }
+
+  read_clipboard() {
+    return self._clipboard
+  }
+
+  write_clipboard(text: string) {
+    self._clipboard = text
+  }
+
+  appearance() {
+    return self._appearance
+  }
+
+  /**
+   * Switches the appearance, as the user would in the system settings.
+   *
+   * @param string appearance: `light` or `dark`.
+   */
+  set_appearance(appearance: string) {
+    self._appearance = appearance
+
+    if self.delegate != nil {
+      self.delegate.on_appearance_changed(appearance)
+      self.event_handled()
+    }
+  }
+
+  screens() {
+    return [{
+      frame: Rect(0, 0, 1440, 900),
+      visible_frame: Rect(0, 25, 1440, 875),
+      scale: 2,
+    }]
+  }
+
+  measure_text(text: string, style: dict, max_width: ?number) {
+    return measure_text_rule(text, style, max_width, nil)
+  }
+
+  open_url(url: string) {
+    self.opened_urls.append(url)
+  }
+
+  beep() {
+    self.beeps++
+  }
+}
+
+/**
+ * Creates a headless backend.
+ *
+ * @returns HeadlessBackend
+ */
+def create() {
+  return HeadlessBackend()
+}

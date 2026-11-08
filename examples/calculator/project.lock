@@ -1,0 +1,10 @@
+# Written by zuri: the exact packages this project was resolved to.
+# Change project.toml and run `zuri install` rather than editing this file.
+
+version = 1
+
+[[package]]
+name = "zug"
+version = "0.1.0"
+source = "path+../.."
+dependencies = []

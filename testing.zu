@@ -1,0 +1,6 @@
+/**
+ * zug.testing: widgets tested without a display. See the module in
+ * `app/testing`.
+ */
+
+import @.app.testing { * }

@@ -1,0 +1,190 @@
+/**
+ * Keys, which tell the framework which widget in a new build corresponds
+ * to which in the last one.
+ *
+ * Without keys, children are matched by position and type. A key matches
+ * a child wherever it moves among its siblings, so its state and its
+ * native view move with it.
+ *
+ * ```zuri
+ * import zug { ValueKey, Text }
+ *
+ * var rows = ['a', 'b'].map(@(name) => Text(name, { key: ValueKey(name) }))
+ * ```
+ */
+
+import zuri
+
+/**
+ * The base of every key.
+ */
+class Key {
+
+  /**
+   * A string that is the same for two keys that are equal, used to find
+   * keyed children quickly. Keys that are equal must give the same
+   * string; keys that are not should give different ones.
+   *
+   * @returns string
+   */
+  map_key() {
+    raise NotImplementedError('${typeof(self)} must define map_key()')
+  }
+}
+
+/**
+ * A key equal to any other `ValueKey` of the same class holding an equal
+ * value. Numbers, strings and bools make the best values.
+ *
+ * @printable
+ */
+class ValueKey < Key {
+
+  /**
+   * @type any
+   */
+  var value
+
+  /**
+   * @param any value
+   * @constructor
+   */
+  @new(value) {
+    self.value = value
+  }
+
+  map_key() {
+    var value = self.value
+
+    if is_string(value) or is_number(value) or is_bool(value) or value == nil {
+      return 'v:${typeof(self)}:${typeof(value)}:${value}'
+    }
+
+    return 'v:${typeof(self)}:${typeof(value)}:${id(value)}'
+  }
+
+  @eq(other) {
+    return instance_of(other, ValueKey)
+      and zuri.reflect.class_of(other) == zuri.reflect.class_of(self)
+      and other.value == self.value
+  }
+
+  @to_string() {
+    return 'ValueKey(${self.value})'
+  }
+}
+
+/**
+ * A key equal to any other `ObjectKey` holding the very same object.
+ *
+ * @printable
+ */
+class ObjectKey < Key {
+
+  /**
+   * @type any
+   */
+  var object
+
+  /**
+   * @param any object
+   * @constructor
+   */
+  @new(object) {
+    self.object = object
+  }
+
+  map_key() {
+    return 'o:${id(self.object)}'
+  }
+
+  @eq(other) {
+    return instance_of(other, ObjectKey) and id(other.object) == id(self.object)
+  }
+
+  @to_string() {
+    return 'ObjectKey(${typeof(self.object)})'
+  }
+}
+
+/**
+ * A key equal only to itself.
+ *
+ * @printable
+ */
+class UniqueKey < Key {
+
+  map_key() {
+    return 'u:${id(self)}'
+  }
+
+  @to_string() {
+    return 'UniqueKey(${id(self)})'
+  }
+}
+
+/**
+ * A key equal only to itself that also gives access to the element, the
+ * widget and, for a stateful widget, the state it is attached to.
+ *
+ * A global key may be used by only one widget in the tree at a time.
+ *
+ * ```zuri,ignore
+ * var form = GlobalKey()
+ * Form(fields, { key: form })
+ * form.current_state().validate()
+ * ```
+ *
+ * @printable
+ */
+class GlobalKey < Key {
+
+  /**
+   * The element this key is attached to, or `nil`. Set by the framework.
+   *
+   * @internal
+   * @type ?Context
+   */
+  var element
+
+  map_key() {
+    return 'g:${id(self)}'
+  }
+
+  /**
+   * The context of the widget using this key, or `nil` when no widget in
+   * the tree uses it.
+   *
+   * @returns ?Context
+   */
+  current_context() {
+    return self.element
+  }
+
+  /**
+   * The widget using this key, or `nil`.
+   *
+   * @returns ?Widget
+   */
+  current_widget() {
+    return self.element == nil ? nil : self.element.widget
+  }
+
+  /**
+   * The state of the stateful widget using this key, or `nil` when there
+   * is none.
+   *
+   * @returns ?State
+   */
+  current_state() {
+    if self.element == nil {
+      return nil
+    }
+
+    return self.element.state_or_nil()
+  }
+
+  @to_string() {
+    return 'GlobalKey(${id(self)})'
+  }
+}

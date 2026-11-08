@@ -1,0 +1,14 @@
+[project]
+name = "calculator"
+version = "0.1.0"
+description = "A calculator built with zug"
+authors = []
+license = "MIT"
+exclude = ["tests/**", "tmp/**"]
+
+[dependencies]
+zug = { path = "../.." }
+
+[bundle]
+name = "Calculator"
+identifier = "dev.zug.calculator"

@@ -1,0 +1,504 @@
+/**
+ * Rows and columns: children laid out one after another along an axis,
+ * with spare space shared among the flexible ones.
+ */
+
+import io
+import ..foundation { Point, Size, Constraints, INFINITY, LayoutError }
+import .object { RenderObject, ParentData }
+
+/**
+ * What a row or column stores on each child.
+ */
+class FlexParentData < ParentData {
+
+  /**
+   * The child's share of the spare space, or 0 for a child that takes
+   * its own size.
+   *
+   * @type number
+   */
+  var flex = 0
+
+  /**
+   * Whether a flexible child must fill its share (`tight`) or may be
+   * smaller (`loose`).
+   *
+   * @type string
+   */
+  var fit = 'tight'
+}
+
+/**
+ * Lays its children out along `axis`.
+ */
+class RenderFlex < RenderObject {
+
+  /**
+   * @type string
+   */
+  var axis = 'horizontal'
+
+  /**
+   * @type string
+   */
+  var justify = 'start'
+
+  /**
+   * @type string
+   */
+  var align_items = 'center'
+
+  /**
+   * Whether to take only the main-axis space the children need, rather
+   * than all that is offered.
+   *
+   * @type bool
+   */
+  var shrink_wrap = false
+
+  /**
+   * The gap between neighbouring children.
+   *
+   * @type number
+   */
+  var spacing = 0
+
+  var _overflow_reported = false
+
+  /**
+   * @param string axis
+   * @constructor
+   */
+  @new(axis: string) {
+    parent()
+    self.axis = axis
+  }
+
+  /**
+   * Sets every layout property at once, laying out again when any changed.
+   *
+   * @param string axis
+   * @param string justify
+   * @param string align_items
+   * @param bool shrink_wrap
+   * @param number spacing
+   */
+  configure(
+    axis: string, justify: string, align_items: string, shrink_wrap: bool,
+    spacing: number,
+  ) {
+    if axis != self.axis
+      or justify != self.justify
+      or align_items != self.align_items
+      or shrink_wrap != self.shrink_wrap
+      or spacing != self.spacing {
+      self.axis = axis
+      self.justify = justify
+      self.align_items = align_items
+      self.shrink_wrap = shrink_wrap
+      self.spacing = spacing
+      self.mark_needs_layout()
+    }
+  }
+
+  setup_parent_data(child: RenderObject) {
+    if !instance_of(child.parent_data, FlexParentData) {
+      child.parent_data = FlexParentData()
+    }
+  }
+
+  _main(size) {
+    return self.axis == 'horizontal' ? size.width : size.height
+  }
+
+  _cross(size) {
+    return self.axis == 'horizontal' ? size.height : size.width
+  }
+
+  _size(main: number, cross: number) {
+    return self.axis == 'horizontal' ? Size(main, cross) : Size(cross, main)
+  }
+
+  _constraints(
+    min_main: number, max_main: number, min_cross: number, max_cross: number,
+  ) {
+    if self.axis == 'horizontal' {
+      return Constraints(min_main, max_main, min_cross, max_cross)
+    }
+
+    return Constraints(min_cross, max_cross, min_main, max_main)
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var horizontal = self.axis == 'horizontal'
+    var max_main = horizontal ? c.max_width : c.max_height
+    var max_cross = horizontal ? c.max_height : c.max_width
+    var can_flex = max_main != INFINITY
+    var stretch = self.align_items == 'stretch'
+    var count = self.children.length()
+    var gaps = count > 1 ? self.spacing * (count - 1) : 0
+
+    if stretch and max_cross == INFINITY {
+      raise LayoutError('a ${horizontal ? "Row" : "Column"} with align_items STRETCH needs a bounded ${horizontal ? "height" : "width"}, but was given ${c}')
+    }
+
+    var min_cross = stretch ? max_cross : 0
+    var total_flex = 0
+    var last_flexible = nil
+    var allocated = 0
+    var cross_size = 0
+
+    for child in self.children {
+      var flex = child.parent_data.flex
+
+      if flex > 0 {
+        total_flex += flex
+        last_flexible = child
+      } else {
+        child.layout(self._constraints(0, INFINITY, min_cross, max_cross), true)
+        allocated += self._main(child.size)
+        cross_size = cross_size.max(self._cross(child.size))
+      }
+    }
+
+    var free = ((can_flex ? max_main : 0) - allocated - gaps).max(0)
+    var flex_allocated = 0
+
+    if total_flex > 0 {
+      if !can_flex {
+        raise LayoutError(
+          'a ${horizontal ? "Row" : "Column"} with Expanded or Flexible children was given an unbounded ${horizontal ? "width" : "height"}; '
+            + 'there is no spare space to share. Give it a bounded size, or use shrink_wrap without flexible children',
+        )
+      }
+
+      var per_flex = free / total_flex
+      var shared = 0
+
+      for child in self.children {
+        var flex = child.parent_data.flex
+
+        if flex <= 0 {
+          continue
+        }
+
+        var extent = child == last_flexible ? free - shared : per_flex * flex
+        shared += extent
+        var min_main = child.parent_data.fit == 'tight' ? extent : 0
+        child.layout(
+          self._constraints(min_main, extent, min_cross, max_cross), true,
+        )
+        flex_allocated += self._main(child.size)
+        cross_size = cross_size.max(self._cross(child.size))
+      }
+    }
+
+    var max_ascent = 0
+    var max_descent = 0
+
+    if self.align_items == 'baseline' and horizontal {
+      for child in self.children {
+        var line = child.baseline()
+
+        if line != nil {
+          max_ascent = max_ascent.max(line)
+          max_descent = max_descent.max(child.size.height - line)
+        }
+      }
+
+      cross_size = cross_size.max(max_ascent + max_descent)
+    }
+
+    var used = allocated + flex_allocated + gaps
+    var ideal = can_flex and !self.shrink_wrap ? max_main : used
+
+    if stretch {
+      cross_size = max_cross
+    }
+
+    self.size = c.constrain(self._size(ideal, cross_size))
+    var main_size = self._main(self.size)
+    var actual_cross = self._cross(self.size)
+    var remaining = main_size - used
+
+    if remaining < -0.5 and !self._overflow_reported {
+      self._overflow_reported = true
+      io.stderr.write('zug: a ${horizontal ? "Row" : "Column"} overflowed by ${(-remaining).round()} points; its children do not fit in ${c}\n')
+    }
+
+    remaining = remaining.max(0)
+    var leading = 0
+    var between = self.spacing
+
+    using self.justify {
+      when 'end' {
+        leading = remaining
+      }
+      when 'center' {
+        leading = remaining / 2
+      }
+      when 'space_between' {
+        between += count > 1 ? remaining / (count - 1) : 0
+      }
+      when 'space_around' {
+        var share = count > 0 ? remaining / count : 0
+        between += share
+        leading = share / 2
+      }
+      when 'space_evenly' {
+        var share = remaining / (count + 1)
+        between += share
+        leading = share
+      }
+    }
+
+    var position = leading
+
+    for child in self.children {
+      var child_cross = self._cross(child.size)
+      var cross_offset = 0
+
+      using self.align_items {
+        when 'end' {
+          cross_offset = actual_cross - child_cross
+        }
+        when 'center' {
+          cross_offset = (actual_cross - child_cross) / 2
+        }
+        when 'baseline' {
+          if horizontal {
+            var line = child.baseline()
+            cross_offset = line == nil ? 0 : max_ascent - line
+          } else {
+            cross_offset = (actual_cross - child_cross) / 2
+          }
+        }
+      }
+
+      if horizontal {
+        self.place_child(child, Point(position, cross_offset))
+      } else {
+        self.place_child(child, Point(cross_offset, position))
+      }
+
+      position += self._main(child.size) + between
+    }
+  }
+
+  # The main-axis intrinsic size: what the inflexible children need, plus
+  # enough for every flexible child to have its share at the largest any
+  # of them needs per unit of flex.
+  _main_intrinsic(extent: number, use_max: bool) {
+    var total_flex = 0
+    var inflexible = 0
+    var per_flex = 0
+
+    for child in self.children {
+      var flex = child.parent_data.flex
+      var size = 0
+
+      if self.axis == 'horizontal' {
+        size = use_max
+          ? child.max_intrinsic_width(extent)
+          : child.min_intrinsic_width(extent)
+      } else {
+        size = use_max
+          ? child.max_intrinsic_height(extent)
+          : child.min_intrinsic_height(extent)
+      }
+
+      if flex > 0 {
+        total_flex += flex
+        per_flex = per_flex.max(size / flex)
+      } else {
+        inflexible += size
+      }
+    }
+
+    var count = self.children.length()
+    var gaps = count > 1 ? self.spacing * (count - 1) : 0
+    return per_flex * total_flex + inflexible + gaps
+  }
+
+  # The cross-axis intrinsic size at a main-axis extent: lays the
+  # inflexible children out at their own main size, shares what is left
+  # among the flexible ones, and takes the largest cross size.
+  _cross_intrinsic(extent: number, use_max: bool) {
+    var horizontal = self.axis == 'horizontal'
+    var total_flex = 0
+    var inflexible = 0
+    var cross = 0
+
+    for child in self.children {
+      var flex = child.parent_data.flex
+
+      if flex > 0 {
+        total_flex += flex
+        continue
+      }
+
+      var main = horizontal
+        ? child.max_intrinsic_width(INFINITY)
+        : child.max_intrinsic_height(INFINITY)
+      inflexible += main
+      var child_cross = 0
+
+      if horizontal {
+        child_cross = use_max
+          ? child.max_intrinsic_height(main)
+          : child.min_intrinsic_height(main)
+      } else {
+        child_cross = use_max
+          ? child.max_intrinsic_width(main)
+          : child.min_intrinsic_width(main)
+      }
+
+      cross = cross.max(child_cross)
+    }
+
+    var count = self.children.length()
+    var gaps = count > 1 ? self.spacing * (count - 1) : 0
+    var free = extent == INFINITY
+      ? INFINITY
+      : (extent - inflexible - gaps).max(0)
+    var per_flex = total_flex > 0 ? free / total_flex : 0
+
+    for child in self.children {
+      var flex = child.parent_data.flex
+
+      if flex <= 0 {
+        continue
+      }
+
+      var main = per_flex * flex
+      var child_cross = 0
+
+      if horizontal {
+        child_cross = use_max
+          ? child.max_intrinsic_height(main)
+          : child.min_intrinsic_height(main)
+      } else {
+        child_cross = use_max
+          ? child.max_intrinsic_width(main)
+          : child.min_intrinsic_width(main)
+      }
+
+      cross = cross.max(child_cross)
+    }
+
+    return cross
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self.axis == 'horizontal'
+      ? self._main_intrinsic(height, false)
+      : self._cross_intrinsic(height, false)
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self.axis == 'horizontal'
+      ? self._main_intrinsic(height, true)
+      : self._cross_intrinsic(height, true)
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self.axis == 'vertical'
+      ? self._main_intrinsic(width, false)
+      : self._cross_intrinsic(width, false)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self.axis == 'vertical'
+      ? self._main_intrinsic(width, true)
+      : self._cross_intrinsic(width, true)
+  }
+
+  compute_baseline() {
+    if self.axis == 'vertical' {
+      return parent.compute_baseline()
+    }
+
+    var best = nil
+
+    for child in self.children {
+      var line = child.baseline()
+
+      if line != nil {
+        var value = line + child.parent_data.offset.y
+        best = best == nil ? value : best.min(value)
+      }
+    }
+
+    return best
+  }
+
+  describe() {
+    return 'RenderFlex(${self.axis})'
+  }
+}
+
+/**
+ * A fixed gap. In a row it is `extent` wide, in a column `extent` tall,
+ * and elsewhere `extent` square.
+ */
+class RenderGap < RenderObject {
+
+  /**
+   * @type number
+   */
+  var extent = 0
+
+  /**
+   * @param number extent
+   * @constructor
+   */
+  @new(extent: number) {
+    parent()
+    self.extent = extent
+  }
+
+  /**
+   * @param number extent
+   */
+  set_extent(extent: number) {
+    if extent != self.extent {
+      self.extent = extent
+      self.mark_needs_layout()
+    }
+  }
+
+  _axis() {
+    var holder = self.render_parent
+    return instance_of(holder, RenderFlex) ? holder.axis : nil
+  }
+
+  perform_layout() {
+    var axis = self._axis()
+
+    if axis == 'horizontal' {
+      self.size = self.constraints.constrain(Size(self.extent, 0))
+    } else if axis == 'vertical' {
+      self.size = self.constraints.constrain(Size(0, self.extent))
+    } else {
+      self.size = self.constraints.constrain(Size(self.extent, self.extent))
+    }
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self._axis() == 'vertical' ? 0 : self.extent
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self._axis() == 'vertical' ? 0 : self.extent
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self._axis() == 'horizontal' ? 0 : self.extent
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self._axis() == 'horizontal' ? 0 : self.extent
+  }
+}

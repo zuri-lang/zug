@@ -1,0 +1,391 @@
+/**
+ * Expressions typed as text, such as `2 * (3 + 4)^2` or `sin(30) + pi`.
+ *
+ * The usual precedence holds: `^` binds tightest and groups from the
+ * right, then unary minus, then `*` and `/`, then `+` and `-`. A `%`
+ * after a number divides it by 100 and a `!` takes its factorial.
+ * Functions are `sin cos tan asin acos atan sqrt cbrt ln log exp abs`,
+ * and the constants are `pi` (or `π`) and `e`. `×` and `÷` work as `*`
+ * and `/`, and commas between thousands are ignored.
+ */
+
+import math
+import .engine { factorial, to_radians, from_radians }
+
+/**
+ * An expression could not be read or evaluated.
+ */
+class ExpressionError < Error {
+
+  /**
+   * Where in the text the problem is, counting from 0.
+   *
+   * @type number
+   */
+  var position = 0
+
+  /**
+   * @param string message
+   * @param number position
+   * @constructor
+   */
+  @new(message: string, position: number) {
+    parent(message)
+    self.type = 'ExpressionError'
+    self.position = position
+  }
+}
+
+var _FUNCTIONS = [
+  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sqrt', 'cbrt', 'ln', 'log',
+  'exp', 'abs',
+]
+
+# Splits text into tokens: numbers, names and single-character symbols,
+# each with the position it starts at.
+def _tokenize(text: string) {
+  var tokens = []
+  var i = 0
+
+  while i < text.length() {
+    var ch = text[i]
+
+    if ch == ' ' or ch == ',' {
+      i++
+      continue
+    }
+
+    if ch.is_number() or ch == '.' {
+      var start = i
+
+      while i < text.length()
+        and (text[i].is_number() or text[i] == '.' or text[i] == ',') {
+        i++
+      }
+
+      # An exponent, such as the e5 of 1.5e5.
+      if i < text.length()
+        and (text[i] == 'e' or text[i] == 'E')
+        and i + 1 < text.length() {
+        var next = text[i + 1]
+
+        if next.is_number()
+          or ((next == '-' or next == '+')
+            and i + 2 < text.length()
+            and text[i + 2].is_number()) {
+          i += 2
+
+          while i < text.length() and text[i].is_number() {
+            i++
+          }
+        }
+      }
+
+      var literal = text[start, i].replace(',', '', false)
+
+      if literal.count('.') > 1 or literal == '.' {
+        raise ExpressionError("'${literal}' is not a number", start)
+      }
+
+      tokens.append({ kind: 'number', text: literal, position: start })
+      continue
+    }
+
+    if ch.is_alpha() or ch == 'π' {
+      var start = i
+
+      while i < text.length() and (text[i].is_alpha() or text[i] == 'π') {
+        i++
+      }
+
+      tokens.append({
+        kind: 'name',
+        text: text[start, i].lower(),
+        position: start,
+      })
+      continue
+    }
+
+    var symbol = ch
+
+    if ch == '×' {
+      symbol = '*'
+    } else if ch == '÷' {
+      symbol = '/'
+    } else if ch == '−' {
+      symbol = '-'
+    }
+
+    if !['+', '-', '*', '/', '^', '(', ')', '%', '!'].contains(symbol) {
+      raise ExpressionError(
+        "'${ch}' is not something a calculator understands", i,
+      )
+    }
+
+    tokens.append({ kind: 'symbol', text: symbol, position: i })
+    i++
+  }
+
+  return tokens
+}
+
+/**
+ * Reads and evaluates one expression.
+ */
+class Parser {
+  var tokens = []
+  var index = 0
+  var angle = 'deg'
+  var length = 0
+
+  /**
+   * @param string text
+   * @param string angle: `deg` or `rad`, for the trigonometric functions.
+   * @constructor
+   */
+  @new(text: string, angle: string) {
+    self.tokens = _tokenize(text)
+    self.angle = angle
+    self.length = text.length()
+  }
+
+  _peek() {
+    return self.index < self.tokens.length() ? self.tokens[self.index] : nil
+  }
+
+  _at() {
+    var token = self._peek()
+    return token == nil ? self.length : token.position
+  }
+
+  _accept(symbol: string) {
+    var token = self._peek()
+
+    if token != nil and token.kind == 'symbol' and token.text == symbol {
+      self.index++
+      return true
+    }
+
+    return false
+  }
+
+  _expect(symbol: string) {
+    if !self._accept(symbol) {
+      raise ExpressionError("expected '${symbol}'", self._at())
+    }
+  }
+
+  /**
+   * The value of the whole text.
+   *
+   * @returns number
+   * @throws ExpressionError When the text is not a whole expression
+   */
+  evaluate() {
+    if self.tokens.is_empty() {
+      raise ExpressionError('there is nothing to calculate', 0)
+    }
+
+    var value = self._expression()
+
+    if self._peek() != nil {
+      raise ExpressionError("did not expect '${self._peek().text}'", self._at())
+    }
+
+    if value.is_nan() or !value.is_finite() {
+      raise ExpressionError('the result is not a number', 0)
+    }
+
+    return value
+  }
+
+  _expression() {
+    var value = self._term()
+
+    while true {
+      if self._accept('+') {
+        value += self._term()
+      } else if self._accept('-') {
+        value -= self._term()
+      } else {
+        return value
+      }
+    }
+  }
+
+  _term() {
+    var value = self._unary()
+
+    while true {
+      if self._accept('*') {
+        value *= self._unary()
+      } else if self._accept('/') {
+        var at = self._at()
+        var divisor = self._unary()
+
+        if divisor == 0 {
+          raise ExpressionError('division by zero', at)
+        }
+
+        value /= divisor
+      } else {
+        return value
+      }
+    }
+  }
+
+  _unary() {
+    if self._accept('-') {
+      return -self._unary()
+    }
+
+    if self._accept('+') {
+      return self._unary()
+    }
+
+    return self._power()
+  }
+
+  _power() {
+    var base = self._postfix()
+
+    if self._accept('^') {
+      return base ** self._unary()
+    }
+
+    return base
+  }
+
+  _postfix() {
+    var value = self._primary()
+
+    while true {
+      var at = self._at()
+
+      if self._accept('%') {
+        value /= 100
+      } else if self._accept('!') {
+        var result = factorial(value)
+
+        if result == nil {
+          raise ExpressionError(
+            'a factorial needs a whole number from 0 to 170', at,
+          )
+        }
+
+        value = result
+      } else {
+        return value
+      }
+    }
+  }
+
+  _primary() {
+    var token = self._peek()
+
+    if token == nil {
+      raise ExpressionError('the expression ends too soon', self.length)
+    }
+
+    if token.kind == 'number' {
+      self.index++
+      return token.text.to_number()
+    }
+
+    if token.kind == 'symbol' and token.text == '(' {
+      self.index++
+      var value = self._expression()
+      self._expect(')')
+      return value
+    }
+
+    if token.kind == 'name' {
+      self.index++
+
+      if token.text == 'pi' or token.text == 'π' {
+        return math.PI
+      }
+
+      if token.text == 'e' {
+        return math.E
+      }
+
+      if !_FUNCTIONS.contains(token.text) {
+        raise ExpressionError(
+          "there is no function called '${token.text}'", token.position,
+        )
+      }
+
+      self._expect('(')
+      var argument = self._expression()
+      self._expect(')')
+      return self._apply(token.text, argument, token.position)
+    }
+
+    raise ExpressionError("did not expect '${token.text}'", token.position)
+  }
+
+  _apply(name: string, x: number, at: number) {
+    using name {
+      when 'sin' {
+        return to_radians(x, self.angle).sin()
+      }
+      when 'cos' {
+        return to_radians(x, self.angle).cos()
+      }
+      when 'tan' {
+        return to_radians(x, self.angle).tan()
+      }
+      when 'asin', 'acos' {
+        if x < -1 or x > 1 {
+          raise ExpressionError('${name} needs a value from -1 to 1', at)
+        }
+
+        return from_radians(name == 'asin' ? x.asin() : x.acos(), self.angle)
+      }
+      when 'atan' {
+        return from_radians(x.atan(), self.angle)
+      }
+      when 'sqrt' {
+        if x < 0 {
+          raise ExpressionError(
+            'the square root of a negative number is not real', at,
+          )
+        }
+
+        return x.sqrt()
+      }
+      when 'cbrt' {
+        return x.cbrt()
+      }
+      when 'ln', 'log' {
+        if x <= 0 {
+          raise ExpressionError('${name} needs a value above zero', at)
+        }
+
+        return name == 'ln' ? x.log() : x.log10()
+      }
+      when 'exp' {
+        return x.exp()
+      }
+      when 'abs' {
+        return x.abs()
+      }
+    }
+
+    raise ExpressionError("there is no function called '${name}'", at)
+  }
+}
+
+/**
+ * The value of `text`.
+ *
+ * @param string text
+ * @param ?string angle: `deg` (the default) or `rad`.
+ * @returns number
+ * @throws ExpressionError When the text is not an expression, or has no
+ *    value
+ */
+def evaluate(text: string, angle: ?string) {
+  return Parser(text, angle == nil ? 'deg' : angle).evaluate()
+}

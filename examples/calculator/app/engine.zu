@@ -1,0 +1,847 @@
+/**
+ * The calculator: what each key does, and what the display shows.
+ *
+ * Keys are entered one at a time, as on a pocket calculator, and the
+ * usual precedence holds: `2 + 3 × 4 =` is 14. `^` binds tightest and
+ * groups from the right. Pressing `=` again repeats the last operation.
+ * `%` after `a +` or `a −` takes that percentage of `a`, and divides by
+ * 100 otherwise. An operation without a value, such as a division by
+ * zero, puts the calculator in an error state until the next number or a
+ * clear.
+ */
+
+import math
+import .format { NumberFormat, format_number, group_text, ERROR_TEXT }
+
+var _PRECEDENCE = { '+': 1, '-': 1, '*': 2, '/': 2, '^': 3 }
+
+/**
+ * How each operator is shown.
+ *
+ * @type dict
+ */
+var SYMBOLS = { '+': '+', '-': '−', '*': '×', '/': '÷', '^': '^' }
+
+/**
+ * The keys `press()` takes besides the digits.
+ *
+ * @type list
+ */
+var KEYS = [
+  '.', '+', '-', '*', '/', '^', '(', ')', '=', '%', 'negate', 'clear',
+  'all_clear', 'backspace', 'mc', 'm+', 'm-', 'mr', 'square', 'cube', 'sqrt',
+  'cbrt', 'reciprocal', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'ln',
+  'log', 'exp', 'pow10', 'factorial', 'pi', 'e', 'rand',
+]
+
+/**
+ * `n!`, or `nil` when `n` is not a whole number from 0 to 170.
+ *
+ * @param number n
+ * @returns ?number
+ */
+def factorial(n: number) {
+  if !is_int(n) or n < 0 or n > 170 {
+    return nil
+  }
+
+  var result = 1
+
+  iter var i = 2; i <= n; i++ {
+    result *= i
+  }
+
+  return result
+}
+
+/**
+ * An angle in radians, from degrees when `angle` is `deg`.
+ *
+ * @param number x
+ * @param string angle
+ * @returns number
+ */
+def to_radians(x: number, angle: string) {
+  return angle == 'deg' ? x * math.PI / 180 : x
+}
+
+/**
+ * An angle in radians, given as degrees when `angle` is `deg`.
+ *
+ * @param number x
+ * @param string angle
+ * @returns number
+ */
+def from_radians(x: number, angle: string) {
+  return angle == 'deg' ? x * 180 / math.PI : x
+}
+
+# Values within this of a whole number after trigonometry are taken as
+# it, so sin(180) is 0 rather than 1.2e-16.
+def _tidy(x: number) {
+  var nearest = x.round()
+  return (x - nearest).abs() < 1e-12 ? nearest : x
+}
+
+/**
+ * One calculation the calculator has finished.
+ */
+class Entry {
+
+  /**
+   * @type string
+   */
+  var expression = ''
+
+  /**
+   * @type number
+   */
+  var result = 0
+
+  /**
+   * @param string expression
+   * @param number result
+   * @constructor
+   */
+  @new(expression: string, result: number) {
+    self.expression = expression
+    self.result = result
+  }
+
+  /**
+   * @returns dict
+   */
+  to_dict() {
+    return { expression: self.expression, result: self.result }
+  }
+}
+
+/**
+ * The state of a calculator.
+ */
+class Calculator {
+
+  /**
+   * `deg` or `rad`, for the trigonometric keys.
+   *
+   * @type string
+   */
+  var angle = 'deg'
+
+  /**
+   * How numbers are written into the expression and the history.
+   *
+   * @type NumberFormat
+   */
+  var format
+
+  /**
+   * The memory register.
+   *
+   * @type number
+   */
+  var memory = 0
+
+  /**
+   * Finished calculations, oldest first.
+   *
+   * @type list
+   */
+  var history = []
+
+  /**
+   * The digits being typed, or empty when none are.
+   *
+   * @type string
+   */
+  var entry = ''
+
+  /**
+   * The value shown when nothing is being typed.
+   *
+   * @type number
+   */
+  var value = 0
+
+  /**
+   * Whether the last operation had no value.
+   *
+   * @type bool
+   */
+  var error = false
+
+  /**
+   * Whether `=` was the last key that did anything.
+   *
+   * @type bool
+   */
+  var just_evaluated = false
+
+  /**
+   * The most digits an entry may have.
+   *
+   * @type number
+   */
+  var max_digits = 16
+
+  var _values = []
+  var _operators = []
+  var _tokens = []
+  var _awaiting = false
+  var _operand_text
+  var _last_applied
+  var _repeat
+
+  @new() {
+    self.format = NumberFormat({ grouping: true })
+  }
+
+  # The text a value takes in the expression line.
+  _text(x) {
+    return format_number(x, self.format)
+  }
+
+  /**
+   * The value the next operation works on: the digits typed, or the value
+   * shown.
+   *
+   * @returns number
+   */
+  operand() {
+    return self.entry != '' ? self.entry.to_number() : self.value
+  }
+
+  _add_token(token: string) {
+    if token != '' {
+      self._tokens.append(token)
+    }
+  }
+
+  _operand_token() {
+    if self._operand_text != nil {
+      return self._operand_text
+    }
+
+    return self.entry != '' ? self.entry : self._text(self.value)
+  }
+
+  /**
+   * Presses one key: a digit, or one of `KEYS`.
+   *
+   * @param string key
+   * @throws ValueError When the key is not one the calculator has
+   */
+  press(key: string) {
+    if key.length() == 1 and key.is_number() {
+      self._digit(key)
+      return
+    }
+
+    using key {
+      when '.' {
+        self._decimal()
+      }
+      when '+', '-', '*', '/', '^' {
+        self._operator(key)
+      }
+      when '(' {
+        self._open()
+      }
+      when ')' {
+        self._close()
+      }
+      when '=' {
+        self._equals()
+      }
+      when '%' {
+        self._percent()
+      }
+      when 'negate' {
+        self._negate()
+      }
+      when 'clear' {
+        self._clear()
+      }
+      when 'all_clear' {
+        self.reset()
+      }
+      when 'backspace' {
+        self._backspace()
+      }
+      when 'mc' {
+        self.memory = 0
+      }
+      when 'm+' {
+        self._to_memory(1)
+      }
+      when 'm-' {
+        self._to_memory(-1)
+      }
+      when 'mr' {
+        self._set_operand(self.memory, nil)
+      }
+      default {
+        if !KEYS.contains(key) {
+          raise ValueError("the calculator has no '${key}' key")
+        }
+
+        self._function(key)
+      }
+    }
+  }
+
+  /**
+   * Starts afresh, keeping the memory, the history and the angle unit.
+   */
+  reset() {
+    self.entry = ''
+    self.value = 0
+    self.error = false
+    self.just_evaluated = false
+    self._values = []
+    self._operators = []
+    self._tokens = []
+    self._awaiting = false
+    self._operand_text = nil
+    self._last_applied = nil
+    self._repeat = nil
+  }
+
+  _begin() {
+    if self.error or self.just_evaluated {
+      var keep_repeat = self._repeat
+      self.reset()
+      self._repeat = keep_repeat
+    }
+  }
+
+  # Adds the value shown to the memory, or takes it away, and finishes
+  # the number being typed, so the next digit starts a new one.
+  _to_memory(sign: number) {
+    if self.error {
+      return
+    }
+
+    var x = self.operand()
+    self.memory += sign * x
+    self.value = x
+    self.entry = ''
+    self._operand_text = nil
+  }
+
+  _digit(digit: string) {
+    self._begin()
+
+    if self._operand_text != nil {
+      self.entry = ''
+      self._operand_text = nil
+    }
+
+    var digits = self.entry.replace('/[^0-9]/', '').length()
+
+    if self.entry == '' or self.entry == '0' {
+      self.entry = digit
+    } else if self.entry == '-0' {
+      self.entry = '-' + digit
+    } else if digits < self.max_digits {
+      self.entry += digit
+    }
+
+    self._awaiting = false
+  }
+
+  _decimal() {
+    self._begin()
+
+    if self._operand_text != nil {
+      self.entry = ''
+      self._operand_text = nil
+    }
+
+    if self.entry == '' {
+      self.entry = '0.'
+    } else if !self.entry.contains('.') {
+      self.entry += '.'
+    }
+
+    self._awaiting = false
+  }
+
+  _compute(a: number, op: string, b: number) {
+    using op {
+      when '+' {
+        return a + b
+      }
+      when '-' {
+        return a - b
+      }
+      when '*' {
+        return a * b
+      }
+      when '/' {
+        return b == 0 ? math.NaN : a / b
+      }
+      when '^' {
+        return a ** b
+      }
+    }
+
+    return math.NaN
+  }
+
+  _apply_top() {
+    var op = self._operators.pop()
+    var b = self._values.pop()
+    var a = self._values.pop()
+    self._values.append(self._compute(a, op, b))
+    self._last_applied = [op, b]
+  }
+
+  # Applies the waiting operators that bind at least as tightly as `op`,
+  # or every one down to the nearest open parenthesis when `op` is nil.
+  _reduce(op) {
+    while !self._operators.is_empty() {
+      var top = self._operators[-1]
+
+      if top == '(' {
+        return
+      }
+
+      if op != nil {
+        var before = _PRECEDENCE[top]
+        var after = _PRECEDENCE[op]
+
+        if before < after or (before == after and op == '^') {
+          return
+        }
+      }
+
+      self._apply_top()
+    }
+  }
+
+  _fail() {
+    self.error = true
+    self.entry = ''
+    self._values = []
+    self._operators = []
+  }
+
+  _check(x) {
+    if x.is_nan() or !x.is_finite() {
+      self._fail()
+      return false
+    }
+
+    return true
+  }
+
+  _operator(op: string) {
+    if self.error {
+      return
+    }
+
+    if self._awaiting
+      and !self._operators.is_empty()
+      and self._operators[-1] != '(' {
+      self._operators[-1] = op
+      self._tokens[-1] = SYMBOLS[op]
+      return
+    }
+
+    if self.just_evaluated {
+      self._tokens = []
+      self.just_evaluated = false
+    }
+
+    var x = self.operand()
+    self._values.append(x)
+    self._add_token(self._operand_token())
+    self._reduce(op)
+    self._operators.append(op)
+    self._tokens.append(SYMBOLS[op])
+
+    if !self._check(self._values[-1]) {
+      return
+    }
+
+    self.value = self._values[-1]
+    self.entry = ''
+    self._operand_text = nil
+    self._awaiting = true
+  }
+
+  _open() {
+    if self.error or self.just_evaluated {
+      self.reset()
+    }
+
+    # A number typed straight before a parenthesis multiplies it.
+    if !self._awaiting and (self.entry != '' or self._operand_text != nil) {
+      self._operator('*')
+    }
+
+    self._operators.append('(')
+    self._tokens.append('(')
+    self.entry = ''
+    self.value = 0
+    self._operand_text = nil
+    self._awaiting = true
+  }
+
+  _close() {
+    if self.error or !self._operators.contains('(') {
+      return
+    }
+
+    var x = self.operand()
+    self._values.append(x)
+    self._add_token(self._operand_token())
+    self._reduce(nil)
+    self._operators.pop()
+    self._tokens.append(')')
+    var result = self._values.pop()
+
+    if !self._check(result) {
+      return
+    }
+
+    self.value = result
+    self.entry = ''
+    self._operand_text = ''
+    self._awaiting = false
+  }
+
+  _equals() {
+    if self.error {
+      return
+    }
+
+    if self._operators.is_empty() {
+      if self.just_evaluated and self._repeat != nil {
+        var before = self.value
+        var result = self._compute(before, self._repeat[0], self._repeat[1])
+        self._tokens = [
+          self._text(before), SYMBOLS[self._repeat[0]],
+          self._text(self._repeat[1]),
+        ]
+
+        if self._check(result) {
+          self.value = result
+          self.history.append(Entry(' '.join(self._tokens), result))
+        }
+
+        return
+      }
+
+      var x = self.operand()
+      self._tokens = [self._operand_token()]
+      self.value = x
+      self.entry = ''
+      self._operand_text = nil
+      self.just_evaluated = true
+      return
+    }
+
+    var x = self.operand()
+    self._values.append(x)
+    self._add_token(self._operand_token())
+
+    while !self._operators.is_empty() {
+      if self._operators[-1] == '(' {
+        self._operators.pop()
+        self._tokens.append(')')
+      } else {
+        self._apply_top()
+      }
+    }
+
+    var result = self._values.pop()
+    self._values = []
+    self._repeat = self._last_applied
+
+    if !self._check(result) {
+      return
+    }
+
+    self.value = result
+    self.entry = ''
+    self._operand_text = nil
+    self._awaiting = false
+    self.just_evaluated = true
+    self.history.append(Entry(' '.join(self._tokens), result))
+  }
+
+  _set_operand(x: number, text) {
+    if self.just_evaluated {
+      self._tokens = []
+      self.just_evaluated = false
+    }
+
+    if self.error {
+      self.reset()
+    }
+
+    if !self._check(x) {
+      return
+    }
+
+    self.value = x
+    self.entry = ''
+    self._operand_text = text
+    self._awaiting = false
+  }
+
+  _percent() {
+    if self.error {
+      return
+    }
+
+    var x = self.operand()
+    var shown = '${self._operand_token()}%'
+
+    if !self._operators.is_empty()
+      and ['+', '-'].contains(self._operators[-1])
+      and !self._values.is_empty() {
+      x = self._values[-1] * x / 100
+    } else {
+      x = x / 100
+    }
+
+    self._set_operand(x, shown)
+  }
+
+  _negate() {
+    if self.error {
+      return
+    }
+
+    if self.entry != '' {
+      self.entry = self.entry.starts_with('-')
+        ? self.entry[1, self.entry.length()]
+        : '-' + self.entry
+      return
+    }
+
+    var negated = -self.value
+
+    if self.just_evaluated {
+      self._tokens = []
+      self.just_evaluated = false
+    }
+
+    self.value = negated
+    self._operand_text = nil
+    self._awaiting = false
+  }
+
+  _clear() {
+    if self.entry != '' {
+      self.entry = ''
+      return
+    }
+
+    self.reset()
+  }
+
+  _backspace() {
+    if self.entry == '' or self.error {
+      return
+    }
+
+    self.entry = self.entry[0, self.entry.length() - 1]
+
+    if self.entry == '' or self.entry == '-' {
+      self.entry = ''
+    }
+  }
+
+  _function(name: string) {
+    if self.error {
+      self.reset()
+    }
+
+    var x = self.operand()
+    var shown = self._operand_token()
+    var result = math.NaN
+    var text = shown
+
+    using name {
+      when 'square' {
+        result = x * x
+        text = '(${shown})²'
+      }
+      when 'cube' {
+        result = x * x * x
+        text = '(${shown})³'
+      }
+      when 'sqrt' {
+        result = x < 0 ? math.NaN : x.sqrt()
+        text = '√(${shown})'
+      }
+      when 'cbrt' {
+        result = x.cbrt()
+        text = '∛(${shown})'
+      }
+      when 'reciprocal' {
+        result = x == 0 ? math.NaN : 1 / x
+        text = '1/(${shown})'
+      }
+      when 'sin' {
+        result = _tidy(to_radians(x, self.angle).sin())
+        text = 'sin(${shown})'
+      }
+      when 'cos' {
+        result = _tidy(to_radians(x, self.angle).cos())
+        text = 'cos(${shown})'
+      }
+      when 'tan' {
+        var cosine = _tidy(to_radians(x, self.angle).cos())
+        result = cosine == 0 ? math.NaN : _tidy(to_radians(x, self.angle).tan())
+        text = 'tan(${shown})'
+      }
+      when 'asin', 'acos' {
+        if x >= -1 and x <= 1 {
+          result = _tidy(from_radians(
+            name == 'asin' ? x.asin() : x.acos(), self.angle,
+          ))
+        }
+
+        text = '${name}(${shown})'
+      }
+      when 'atan' {
+        result = _tidy(from_radians(x.atan(), self.angle))
+        text = 'atan(${shown})'
+      }
+      when 'ln' {
+        result = x <= 0 ? math.NaN : x.log()
+        text = 'ln(${shown})'
+      }
+      when 'log' {
+        result = x <= 0 ? math.NaN : x.log10()
+        text = 'log(${shown})'
+      }
+      when 'exp' {
+        result = x.exp()
+        text = 'e^(${shown})'
+      }
+      when 'pow10' {
+        result = 10 ** x
+        text = '10^(${shown})'
+      }
+      when 'factorial' {
+        var value = factorial(x)
+        result = value == nil ? math.NaN : value
+        text = '(${shown})!'
+      }
+      when 'pi' {
+        result = math.PI
+        text = 'π'
+      }
+      when 'e' {
+        result = math.E
+        text = 'e'
+      }
+      when 'rand' {
+        result = rand()
+        text = self._text(result)
+      }
+    }
+
+    self._set_operand(result, text)
+  }
+
+  /**
+   * Shows `result` as the answer to `expression`, typed rather than keyed,
+   * and records it in the history.
+   *
+   * @param string expression
+   * @param number result
+   */
+  enter_result(expression: string, result: number) {
+    self.reset()
+    self.value = result
+    self._tokens = [expression]
+    self.just_evaluated = true
+    self.history.append(Entry(expression, result))
+  }
+
+  /**
+   * Makes `value` the current operand, as recalling a result from the
+   * history does.
+   *
+   * @param number value
+   */
+  recall(value: number) {
+    self._set_operand(value, nil)
+  }
+
+  /**
+   * The text for the main display.
+   *
+   * @param ?NumberFormat format: how to show a value; the calculator's own
+   *    format when left out.
+   * @returns string
+   */
+  display(format: ?NumberFormat) {
+    var f = format == nil ? self.format : format
+
+    if self.error {
+      return ERROR_TEXT
+    }
+
+    if self.entry != '' {
+      return f.grouping ? group_text(self.entry) : self.entry
+    }
+
+    return format_number(self.value, f)
+  }
+
+  /**
+   * The calculation so far, for the line above the display.
+   *
+   * @returns string
+   */
+  expression() {
+    var parts = self._tokens.clone()
+
+    # A value made by a function key shows what made it until an operator
+    # takes it.
+    if !self.just_evaluated
+      and self._operand_text != nil
+      and self._operand_text != '' {
+      parts.append(self._operand_text)
+    }
+
+    var text = ' '.join(parts)
+    return self.just_evaluated and text != '' ? text + ' =' : text
+  }
+
+  /**
+   * `C` while digits are being typed, which clears them, and `AC`
+   * otherwise, which clears everything.
+   *
+   * @returns string
+   */
+  clear_label() {
+    return self.entry != '' ? 'C' : 'AC'
+  }
+
+  /**
+   * Whether the memory holds a value.
+   *
+   * @returns bool
+   */
+  has_memory() {
+    return self.memory != 0
+  }
+
+  /**
+   * The value the display shows, as a number, or `nil` in an error.
+   *
+   * @returns ?number
+   */
+  current() {
+    return self.error ? nil : self.operand()
+  }
+}

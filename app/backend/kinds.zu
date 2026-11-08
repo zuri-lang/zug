@@ -1,0 +1,610 @@
+/**
+ * The kinds of native view, with the props each takes and the events each
+ * reports. This is the specification a backend implements: `zug`'s
+ * widgets only ever send these props and listen for these events.
+ *
+ * Each prop has a type, a default and whether changing it can change the
+ * view's size. Each event may name the prop it changes, which makes that
+ * prop controlled: what the widget declares is what the view shows, so a
+ * user's change that the application does not accept is undone.
+ *
+ * Sizing says how a view of the kind fills the space it is offered on
+ * each axis: `intrinsic` takes the size `measure()` gives, and `fill`
+ * takes all of a bounded axis, falling back to `measure()` when the axis
+ * is unbounded.
+ */
+
+import ..foundation { Color, Size, Point, check_options }
+import ..painting { Border, Shadow }
+
+/**
+ * One prop of a kind.
+ */
+class PropSpec {
+
+  /**
+   * What values it takes, as `check_options()` describes types.
+   *
+   * @type any
+   */
+  var type
+
+  /**
+   * The value a view starts with when the prop is not given.
+   *
+   * @type any
+   */
+  var initial
+
+  /**
+   * Whether changing it can change the view's size.
+   *
+   * @type bool
+   */
+  var layout = true
+
+  /**
+   * @param any type
+   * @param any initial
+   * @param bool layout
+   * @constructor
+   */
+  @new(type, initial, layout: bool) {
+    self.type = type
+    self.initial = initial
+    self.layout = layout
+  }
+}
+
+/**
+ * One kind of native view.
+ */
+class KindSpec {
+
+  /**
+   * @type string
+   */
+  var name
+
+  /**
+   * Prop names to `PropSpec`s.
+   *
+   * @type dict
+   */
+  var props = {}
+
+  /**
+   * Event names to the prop each controls, or `nil`.
+   *
+   * @type dict
+   */
+  var events = {}
+
+  /**
+   * How the view fills the width it is offered: `intrinsic` or `fill`.
+   *
+   * @type string
+   */
+  var width = 'intrinsic'
+
+  /**
+   * How the view fills the height it is offered.
+   *
+   * @type string
+   */
+  var height = 'intrinsic'
+
+  /**
+   * Whether views of this kind hold child views.
+   *
+   * @type bool
+   */
+  var container = false
+
+  /**
+   * @param string name
+   * @constructor
+   */
+  @new(name: string) {
+    self.name = name
+  }
+
+  /**
+   * Every prop's starting value.
+   *
+   * @returns dict
+   */
+  initial_props() {
+    var values = {}
+
+    for name, prop in self.props {
+      values[name] = prop.initial
+    }
+
+    return values
+  }
+
+  /**
+   * Whether changing `prop` can change the view's size. Unknown props are
+   * assumed to.
+   *
+   * @param string prop
+   * @returns bool
+   */
+  affects_layout(prop: string) {
+    var spec = self.props.get(prop)
+    return spec == nil or spec.layout
+  }
+
+  /**
+   * The prop `event` changes, or `nil`.
+   *
+   * @param string event
+   * @returns ?string
+   */
+  controlled_by(event: string) {
+    return self.events.get(event)
+  }
+}
+
+var _kinds = {}
+
+# Props every view kind takes. None of them changes a view's size.
+var _COMMON = {
+  tooltip: ['string', nil, false],
+  hidden: ['bool', false, false],
+  accessibility_label: ['string', nil, false],
+  accessibility_identifier: ['string', nil, false],
+}
+
+/**
+ * Adds a kind of view. Applications only need this for a kind of their
+ * own, backed by a backend that implements it.
+ *
+ * @param string name
+ * @param dict spec: `props`, prop names to `[type, initial, layout]`;
+ *    `events`, event names to the prop each controls or `nil`; and
+ *    optionally `width` and `height` (`intrinsic` or `fill`) and
+ *    `container` (a bool).
+ * @returns KindSpec
+ * @throws ValueError When the kind already exists
+ */
+def define_kind(name: string, spec: dict) {
+  if _kinds.contains(name) {
+    raise ValueError("the view kind '${name}' is already defined")
+  }
+
+  var o = check_options(
+    spec, 'define_kind',
+    {
+      props: 'dict',
+      events: 'dict',
+      width: 'string',
+      height: 'string',
+      container: 'bool',
+    },
+  )
+  var kind = KindSpec(name)
+
+  for prop, entry in _COMMON {
+    kind.props[prop] = PropSpec(entry[0], entry[1], entry[2])
+  }
+
+  for prop, entry in o.get('props', {}) {
+    kind.props[prop] = PropSpec(
+      entry[0], entry[1], entry.length() > 2 ? entry[2] : true,
+    )
+  }
+
+  kind.events = o.get('events', {})
+  kind.width = o.get('width', 'intrinsic')
+  kind.height = o.get('height', 'intrinsic')
+  kind.container = o.get('container', false)
+
+  for axis in [kind.width, kind.height] {
+    if axis != 'intrinsic' and axis != 'fill' {
+      raise ValueError("sizing must be 'intrinsic' or 'fill', got '${axis}'")
+    }
+  }
+
+  _kinds[name] = kind
+  return kind
+}
+
+/**
+ * The kind called `name`.
+ *
+ * @param string name
+ * @returns KindSpec
+ * @throws ValueError When there is no such kind
+ */
+def kind_spec(name: string) {
+  var kind = _kinds.get(name)
+
+  if kind == nil {
+    raise ValueError("there is no view kind '${name}'")
+  }
+
+  return kind
+}
+
+/**
+ * The names of every kind, in the order they were defined.
+ *
+ * @returns list
+ */
+def kind_names() {
+  return _kinds.keys()
+}
+
+define_kind('window', {
+  props: {
+    title: ['string', '', false],
+    size: [Size, Size(480, 320), false],
+    min_size: [Size, nil, false],
+    max_size: [Size, nil, false],
+    resizable: ['bool', true, false],
+    closable: ['bool', true, false],
+    minimizable: ['bool', true, false],
+    title_bar: ['string', 'normal', false],
+    background: [Color, nil, false],
+    visible: ['bool', true, false],
+    position: [Point, nil, false],
+    floating: ['bool', false, false],
+  },
+  events: {
+    close_requested: nil,
+    closed: nil,
+    resized: nil,
+    focus_changed: nil,
+    key: nil,
+  },
+  container: true,
+})
+
+define_kind('box', {
+  props: {
+    color: [Color, nil, false],
+    border: [Border, nil, false],
+    radius: ['number', 0, false],
+    shadow: [Shadow, nil, false],
+    clip: ['bool', false, false],
+    opacity: ['number', 1, false],
+  },
+  container: true,
+})
+
+define_kind('text', {
+  props: {
+    text: ['string', ''],
+    style: ['dict', {}],
+    align: ['string', 'start'],
+    max_lines: ['number', 0],
+    overflow: ['string', 'clip'],
+    selectable: ['bool', false, false],
+  },
+})
+
+define_kind('button', {
+  props: {
+    title: ['string', ''],
+    icon: ['dict', nil],
+    icon_position: ['string', 'leading'],
+    variant: ['string', 'push'],
+    role: ['string', 'normal', false],
+    shortcut: ['string', nil, false],
+    control_size: ['string', 'regular'],
+    enabled: ['bool', true, false],
+    style: ['dict', {}],
+    selected: ['bool', nil, false],
+    tint: [Color, nil, false],
+  },
+  events: { pressed: 'selected' },
+})
+
+define_kind('checkbox', {
+  props: {
+    title: ['string', ''],
+    value: ['bool', false, false],
+    tristate: ['bool', false, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'value' },
+})
+
+define_kind('radio', {
+  props: {
+    title: ['string', ''],
+    selected: ['bool', false, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'selected' },
+})
+
+define_kind('switch', {
+  props: {
+    value: ['bool', false, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'value' },
+})
+
+define_kind('text_field', {
+  props: {
+    text: ['string', '', false],
+    placeholder: ['string', nil, false],
+    secure: ['bool', false, false],
+    editable: ['bool', true, false],
+    enabled: ['bool', true, false],
+    bezel: ['string', 'rounded'],
+    align: ['string', 'start', false],
+    style: ['dict', {}],
+    selection: ['list', nil, false],
+  },
+  events: { changed: 'text', submitted: nil, focus_changed: nil, escape: nil },
+  width: 'fill',
+})
+
+define_kind('text_area', {
+  props: {
+    text: ['string', '', false],
+    editable: ['bool', true, false],
+    style: ['dict', {}, false],
+    wrap: ['bool', true, false],
+    bordered: ['bool', true, false],
+    selection: ['list', nil, false],
+  },
+  events: { changed: 'text', focus_changed: nil },
+  width: 'fill',
+  height: 'fill',
+})
+
+define_kind('search_field', {
+  props: {
+    text: ['string', '', false],
+    selection: ['list', nil, false],
+    placeholder: ['string', nil, false],
+    editable: ['bool', true, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'text', submitted: nil, focus_changed: nil },
+  width: 'fill',
+})
+
+define_kind('combo_box', {
+  props: {
+    text: ['string', '', false],
+    selection: ['list', nil, false],
+    items: ['list', [], false],
+    placeholder: ['string', nil, false],
+    editable: ['bool', true, false],
+    enabled: ['bool', true, false],
+    completes: ['bool', false, false],
+    visible_items: ['number', 8, false],
+    control_size: ['string', 'regular'],
+  },
+  events: {
+    changed: 'text',
+    selected: nil,
+    submitted: nil,
+    focus_changed: nil,
+  },
+  width: 'fill',
+})
+
+define_kind('popup', {
+  props: {
+    items: ['list', []],
+    selected: ['number', -1, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'selected' },
+})
+
+define_kind('slider', {
+  props: {
+    value: ['number', 0, false],
+    min: ['number', 0, false],
+    max: ['number', 1, false],
+    divisions: ['number', 0, false],
+    vertical: ['bool', false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'value', change_end: nil },
+  width: 'fill',
+})
+
+define_kind('stepper', {
+  props: {
+    value: ['number', 0, false],
+    min: ['number', 0, false],
+    max: ['number', 100, false],
+    step: ['number', 1, false],
+    wraps: ['bool', false, false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'value' },
+})
+
+define_kind('progress', {
+  props: {
+    value: ['number', nil, false],
+    min: ['number', 0, false],
+    max: ['number', 1, false],
+  },
+  width: 'fill',
+})
+
+define_kind('spinner', {
+  props: {
+    animating: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+})
+
+define_kind('segmented', {
+  props: {
+    segments: ['list', []],
+    mode: ['string', 'one', false],
+    selected: ['list', [], false],
+    enabled: ['bool', true, false],
+    control_size: ['string', 'regular'],
+  },
+  events: { changed: 'selected', pressed: nil },
+})
+
+define_kind('date_picker', {
+  props: {
+    value: ['number', 0, false],
+    min: ['number', nil, false],
+    max: ['number', nil, false],
+    mode: ['string', 'date'],
+    style: ['string', 'field'],
+    enabled: ['bool', true, false],
+  },
+  events: { changed: 'value' },
+})
+
+define_kind('color_well', {
+  props: {
+    value: [Color, nil, false],
+    enabled: ['bool', true, false],
+    style: ['string', 'default'],
+  },
+  events: { changed: 'value' },
+})
+
+define_kind('level', {
+  props: {
+    value: ['number', 0, false],
+    min: ['number', 0, false],
+    max: ['number', 5, false],
+    warning: ['number', nil, false],
+    critical: ['number', nil, false],
+    style: ['string', 'continuous'],
+    editable: ['bool', false, false],
+  },
+  events: { changed: 'value' },
+  width: 'fill',
+})
+
+define_kind('separator', {
+  width: 'fill',
+  height: 'fill',
+})
+
+define_kind('group_box', {
+  props: {
+    title: ['string', nil],
+  },
+  container: true,
+})
+
+define_kind('image', {
+  props: {
+    source: ['dict', nil],
+    fit: ['string', 'contain', false],
+    tint: [Color, nil, false],
+  },
+})
+
+define_kind('scroll', {
+  props: {
+    axis: ['string', 'vertical'],
+    bordered: ['bool', false, false],
+    background: [Color, nil, false],
+    scroll_to: ['list', nil, false],
+  },
+  events: { scrolled: nil },
+  width: 'fill',
+  height: 'fill',
+  container: true,
+})
+
+define_kind('tabs', {
+  props: {
+    tabs: ['list', []],
+    selected: ['number', 0, false],
+  },
+  events: { changed: 'selected' },
+  width: 'fill',
+  height: 'fill',
+  container: true,
+})
+
+define_kind('split', {
+  props: {
+    axis: ['string', 'horizontal'],
+    divider: ['string', 'thin', false],
+    panes: ['number', 0],
+    initial: ['list', nil, false],
+  },
+  events: { resized: nil },
+  width: 'fill',
+  height: 'fill',
+  container: true,
+})
+
+define_kind('table', {
+  props: {
+    columns: ['list', []],
+    row_count: ['number', 0, false],
+    selection: ['string', 'single', false],
+    selected: ['list', [], false],
+    alternating: ['bool', true, false],
+    grid: ['bool', false, false],
+    header: ['bool', true, false],
+    sort: ['dict', nil, false],
+    version: ['number', 0, false],
+  },
+  events: { cell: nil, changed: 'selected', activated: nil, sorted: nil },
+  width: 'fill',
+  height: 'fill',
+})
+
+define_kind('visual_effect', {
+  props: {
+    material: ['string', 'sidebar', false],
+    blending: ['string', 'behind', false],
+  },
+  container: true,
+})
+
+define_kind('canvas', {
+  props: {
+    repaint: ['any', nil, false],
+  },
+  events: { paint: nil },
+  width: 'fill',
+  height: 'fill',
+})
+
+define_kind('pointer', {
+  props: {
+    cursor: ['string', nil, false],
+    hover: ['bool', false, false],
+    scrolls: ['bool', false, false],
+    menu: ['list', nil, false],
+  },
+  events: {
+    tap: nil,
+    double_tap: nil,
+    secondary_tap: nil,
+    drag_start: nil,
+    drag: nil,
+    drag_end: nil,
+    enter: nil,
+    exit: nil,
+    hover: nil,
+    scroll: nil,
+    menu_selected: nil,
+  },
+  container: true,
+})

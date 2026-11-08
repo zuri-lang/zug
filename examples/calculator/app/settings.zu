@@ -1,0 +1,219 @@
+/**
+ * The calculator's settings, and the file they are kept in.
+ *
+ * Settings live in `settings.json` in `~/Library/Application
+ * Support/zug Calculator`, or in the directory `CALCULATOR_HOME` names.
+ * A missing file means the defaults. A file that cannot be read is moved
+ * aside to `settings.json.unreadable` rather than overwritten, and the
+ * defaults are used.
+ */
+
+import os
+import json
+import zug { report_error }
+
+/**
+ * What the user can change.
+ */
+class Settings {
+
+  /**
+   * Decimal places to show, or `nil` to show as many as needed.
+   *
+   * @type ?number
+   */
+  var places
+
+  /**
+   * @type bool
+   */
+  var grouping = true
+
+  /**
+   * @type number
+   */
+  var significant = 12
+
+  /**
+   * `deg` or `rad`.
+   *
+   * @type string
+   */
+  var angle = 'deg'
+
+  /**
+   * Whether the tape is kept between launches.
+   *
+   * @type bool
+   */
+  var keep_history = false
+
+  /**
+   * `basic` or `scientific`.
+   *
+   * @type string
+   */
+  var mode = 'basic'
+
+  /**
+   * Whether the tape is shown beside the keys.
+   *
+   * @type bool
+   */
+  var show_tape = false
+
+  /**
+   * Expressions typed recently, newest first.
+   *
+   * @type list
+   */
+  var recents = []
+
+  /**
+   * The settings as stored.
+   *
+   * @returns dict
+   */
+  to_dict() {
+    return {
+      places: self.places,
+      grouping: self.grouping,
+      significant: self.significant,
+      angle: self.angle,
+      keep_history: self.keep_history,
+      mode: self.mode,
+      show_tape: self.show_tape,
+      recents: self.recents,
+    }
+  }
+
+  /**
+   * Settings from what was stored, keeping the default for anything
+   * missing or out of range.
+   *
+   * @param dict data
+   * @returns Settings
+   */
+  static from_dict(data: dict) {
+    var settings = Settings()
+    var places = data.get('places')
+
+    if places == nil or (is_int(places) and places >= 0 and places <= 10) {
+      settings.places = places
+    }
+
+    if is_bool(data.get('grouping')) {
+      settings.grouping = data.grouping
+    }
+
+    var significant = data.get('significant')
+
+    if is_int(significant) and significant >= 6 and significant <= 15 {
+      settings.significant = significant
+    }
+
+    if ['deg', 'rad'].contains(data.get('angle')) {
+      settings.angle = data.angle
+    }
+
+    if is_bool(data.get('keep_history')) {
+      settings.keep_history = data.keep_history
+    }
+
+    if ['basic', 'scientific'].contains(data.get('mode')) {
+      settings.mode = data.mode
+    }
+
+    if is_bool(data.get('show_tape')) {
+      settings.show_tape = data.show_tape
+    }
+
+    if is_list(data.get('recents')) {
+      settings.recents = data.recents.filter(
+        @(item) => is_string(item),
+      )[0, data.recents.length().min(10)]
+    }
+
+    return settings
+  }
+}
+
+/**
+ * Where settings are kept.
+ *
+ * @returns string
+ */
+def storage_dir() {
+  var chosen = os.get_env('CALCULATOR_HOME')
+
+  if chosen != nil and chosen != '' {
+    return chosen
+  }
+
+  return os.join_paths(
+    os.get_env('HOME'), 'Library', 'Application Support', 'zug Calculator',
+  )
+}
+
+/**
+ * The settings and kept history in `dir`, as `{ settings, history }`
+ * where the history is a list of `{ expression, result }`.
+ *
+ * @param string dir
+ * @returns dict
+ */
+def load_state(dir: string) {
+  var path = os.join_paths(dir, 'settings.json')
+
+  if !file(path).exists() {
+    return { settings: Settings(), history: [] }
+  }
+
+  var data = nil
+
+  catch {
+    data = json.decode(file(path).read())
+  } as error {
+    report_error(error, 'reading ${path}')
+  }
+
+  if !is_dict(data) {
+    file(path).rename(path + '.unreadable')
+    return { settings: Settings(), history: [] }
+  }
+
+  var history = []
+
+  for entry in data.get('history', []) {
+    if is_dict(entry)
+      and is_string(entry.get('expression'))
+      and is_number(entry.get('result')) {
+      history.append({ expression: entry.expression, result: entry.result })
+    }
+  }
+
+  return { settings: Settings.from_dict(data.get('settings', {})), history }
+}
+
+/**
+ * Writes the settings, and the history when the settings keep it, to
+ * `dir`, replacing the file in one step.
+ *
+ * @param string dir
+ * @param Settings settings
+ * @param list history: `{ expression, result }` dictionaries.
+ */
+def save_state(dir: string, settings: Settings, history: list) {
+  if !os.dir_exists(dir) {
+    os.create_dir(dir, nil, true)
+  }
+
+  var path = os.join_paths(dir, 'settings.json')
+  var temporary = path + '.saving'
+  var data = {
+    settings: settings.to_dict(),
+    history: settings.keep_history ? history : [],
+  }
+  file(temporary, 'w').write(json.encode(data, false))
+  file(temporary).rename(path)
+}

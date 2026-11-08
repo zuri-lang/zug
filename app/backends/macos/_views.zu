@@ -1,0 +1,710 @@
+/**
+ * Native views: the base every kind builds on, and the simplest kinds.
+ */
+
+import ffi
+import .. ..foundation {
+  Size, Rect, EdgeInsets, Constraints, INFINITY, BackendError, report_error,
+}
+import .. ..backend { ViewHost, kind_spec }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_int, send_void_uint, send_void_double, send_void_rect, send_double,
+  send_size, send_rect, send_int, send_bool, typed, ns_string, retain, release,
+  rect, create_with_frame, push_pool, pop_pool, CGSize, CGRect,
+}
+import ._classes { register, unregister, host_for, shared_target, ZugView }
+import ._cocoa {
+  ns_color, cg_color, ns_font, text_alignment, finite, UNBOUNDED,
+  parse_shortcut,
+}
+
+/**
+ * The base of every native view.
+ *
+ * A subclass makes its `NSView`, and applies each prop in `apply()`. The
+ * base keeps the props, the children in each slot, and the native
+ * object's registration, and handles the props every kind shares.
+ */
+class MacView < ViewHost {
+
+  /**
+   * @type MacBackend
+   */
+  var backend
+
+  /**
+   * @type string
+   */
+  var kind_name
+
+  /**
+   * The view, owned by this object until `destroy()`.
+   *
+   * @type Pointer
+   */
+  var native
+
+  /**
+   * @type function
+   */
+  var dispatch
+
+  /**
+   * Every prop's current value.
+   *
+   * @type dict
+   */
+  var props = {}
+
+  /**
+   * @type bool
+   */
+  var destroyed = false
+
+  /**
+   * Slot keys to the child hosts in them, in order.
+   *
+   * @type dict
+   */
+  var slots = {}
+
+  /**
+   * The host this view is a child of.
+   *
+   * @type ?MacView
+   */
+  var parent_host
+
+  /**
+   * Sets up the view: registers it and applies every prop. Subclasses
+   * call this once their native view exists.
+   *
+   * @internal
+   * @param MacBackend backend
+   * @param string kind
+   * @param Pointer native
+   * @param dict props
+   * @param function dispatch
+   */
+  setup(backend, kind: string, native, props: dict, dispatch: function) {
+    self.backend = backend
+    self.kind_name = kind
+    self.native = native
+    self.dispatch = dispatch
+    self.props = kind_spec(kind).initial_props()
+
+    for name, value in props {
+      self.props[name] = value
+    }
+
+    register(native, self)
+
+    for name, value in self.props {
+      self._apply_one(name, value)
+    }
+
+    self.after_setup()
+  }
+
+  /**
+   * Called once every prop has been applied at creation.
+   */
+  after_setup() {}
+
+  kind() {
+    return self.kind_name
+  }
+
+  _check() {
+    if self.destroyed {
+      raise BackendError("a destroyed '${self.kind_name}' view was used")
+    }
+  }
+
+  _apply_one(name: string, value) {
+    using name {
+      when 'tooltip' {
+        send_void_id(
+          self.native, 'setToolTip:', value == nil ? nil : ns_string(value),
+        )
+      }
+      when 'hidden' {
+        send_void_bool(self.native, 'setHidden:', value == true)
+      }
+      when 'accessibility_label' {
+        send_void_id(
+          self.native, 'setAccessibilityLabel:',
+          value == nil ? nil : ns_string(value),
+        )
+      }
+      when 'accessibility_identifier' {
+        send_void_id(
+          self.native, 'setAccessibilityIdentifier:',
+          value == nil ? nil : ns_string(value),
+        )
+      }
+      default {
+        self.apply(name, value)
+      }
+    }
+  }
+
+  /**
+   * Applies one of the kind's own props to the native view.
+   *
+   * @param string name
+   * @param any value
+   */
+  apply(name: string, value) {}
+
+  update(changes: dict) {
+    self._check()
+
+    # Every prop is stored before any is applied, so one that reads
+    # another, as a table reloading reads its selection, sees the new
+    # value.
+    for name, value in changes {
+      self.props[name] = value
+    }
+
+    for name, value in changes {
+      self._apply_one(name, value)
+    }
+
+    self.after_update(changes)
+  }
+
+  /**
+   * Called after a batch of changes has been applied.
+   *
+   * @param dict changes
+   */
+  after_update(changes: dict) {}
+
+  /**
+   * The view's natural size with nothing else to go on: AppKit's fitting
+   * size.
+   *
+   * @param Constraints constraints
+   * @returns Size
+   */
+  measure(constraints: Constraints) {
+    var size = send_size(self.native, 'fittingSize')
+    return Size(size.width, size.height)
+  }
+
+  baseline() {
+    var offset = send_double(self.native, 'firstBaselineOffsetFromTop')
+    return offset > 0 ? offset : nil
+  }
+
+  content_insets(slot) {
+    return EdgeInsets.ZERO
+  }
+
+  set_frame(frame: Rect) {
+    self._check()
+    send_void_rect(
+      self.native, 'setFrame:',
+      rect(frame.x, frame.y, frame.width, frame.height),
+    )
+  }
+
+  set_content_size(slot, size: Size) {}
+
+  slot_size(slot, size: Size) {
+    return self.content_insets(slot).deflate_size(size)
+  }
+
+  /**
+   * The native view the children in `slot` are subviews of.
+   *
+   * @param any slot
+   * @returns Pointer
+   */
+  container_for(slot) {
+    return self.native
+  }
+
+  insert_child(child: ViewHost, index: number, slot) {
+    self._check()
+
+    if child.parent_host != nil and child.parent_host != self {
+      child.parent_host.remove_child(child)
+    }
+
+    var key = '${slot}'
+    var list = self.slots.get(key)
+
+    if list == nil {
+      list = []
+      self.slots[key] = list
+    }
+
+    var existing = list.index_of(child)
+
+    if existing >= 0 {
+      list.remove_at(existing)
+    }
+
+    var at = index.min(list.length())
+    var container = self.container_for(slot)
+    var _add = typed(ffi.void, [ffi.ptr, ffi.long, ffi.ptr])
+
+    if at == 0 {
+      # NSWindowBelow a nil sibling puts the view at the back.
+      _add(
+        container, sel('addSubview:positioned:relativeTo:'), child.native, -1,
+        list.is_empty() ? nil : list[0].native,
+      )
+    } else {
+      # NSWindowAbove the previous sibling.
+      _add(
+        container, sel('addSubview:positioned:relativeTo:'), child.native, 1,
+        list[at - 1].native,
+      )
+    }
+
+    list.insert(child, at)
+    child.parent_host = self
+  }
+
+  remove_child(child: ViewHost) {
+    for key, list in self.slots {
+      var index = list.index_of(child)
+
+      if index >= 0 {
+        list.remove_at(index)
+
+        if !child.destroyed {
+          send_void(child.native, 'removeFromSuperview')
+        }
+
+        child.parent_host = nil
+        return
+      }
+    }
+  }
+
+  focus() {
+    self._check()
+    var window = send(self.native, 'window')
+
+    if window != nil {
+      typed(ffi.bool, [ffi.ptr])(
+        window, sel('makeFirstResponder:'), self.focus_target(),
+      )
+    }
+  }
+
+  /**
+   * The view that takes focus for this one.
+   *
+   * @returns Pointer
+   */
+  focus_target() {
+    return self.native
+  }
+
+  invalidate() {
+    send_void_bool(self.native, 'setNeedsDisplay:', true)
+  }
+
+  destroy() {
+    if self.destroyed {
+      return
+    }
+
+    if self.parent_host != nil {
+      self.parent_host.remove_child(self)
+    } else {
+      send_void(self.native, 'removeFromSuperview')
+    }
+
+    self.before_destroy()
+    unregister(self.native)
+    self.destroyed = true
+    release(self.native)
+  }
+
+  /**
+   * Releases what a subclass holds beyond the view.
+   */
+  before_destroy() {}
+
+  /**
+   * Called when the control sends its action.
+   */
+  on_action() {}
+
+  /**
+   * Reports an event from this view to zug.
+   *
+   * @param string event
+   * @param any payload
+   * @returns any
+   */
+  fire(event: string, payload) {
+    if self.destroyed {
+      return nil
+    }
+
+    # The view already shows the value the user chose, and zug sends no
+    # update for it when the application accepts it, so the props record
+    # it here.
+    var controlled = kind_spec(self.kind_name).controlled_by(event)
+
+    if controlled != nil and is_dict(payload) and payload.contains(controlled) {
+      self.props[controlled] = payload[controlled]
+    }
+
+    return self.backend.deliver(self, event, payload)
+  }
+
+  /**
+   * Asks zug a question for this view, such as the text of a table cell,
+   * and returns the answer. Unlike `fire()`, it is not an event: nothing
+   * is redrawn after it.
+   *
+   * @param string event
+   * @param any payload
+   * @returns any
+   */
+  query(event: string, payload) {
+    if self.destroyed {
+      return nil
+    }
+
+    var result = nil
+
+    catch {
+      result = self.dispatch(event, payload)
+    } as error {
+      report_error(
+        error, "answering '" + event + "' for a " + self.kind_name + ' view',
+      )
+    }
+
+    return result
+  }
+
+  /**
+   * Draws this view's layer. Views backed by `ZugView` override it.
+   */
+  update_layer() {}
+}
+
+/**
+ * Text: a label that wraps.
+ */
+class MacText < MacView {
+
+  @new(backend, props: dict, dispatch: function) {
+    var label = retain(send_id(
+      cls('NSTextField'), 'wrappingLabelWithString:', ns_string(''),
+    ))
+    send_void_bool(label, 'setSelectable:', false)
+    self.setup(backend, 'text', label, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'text' {
+        send_void_id(self.native, 'setStringValue:', ns_string(value))
+      }
+      when 'style' {
+        var style = value == nil ? {} : value
+        send_void_id(self.native, 'setFont:', ns_font(style, nil))
+        var color = style.get('color')
+        send_void_id(
+          self.native, 'setTextColor:',
+          color == nil ? send(cls('NSColor'), 'labelColor') : ns_color(color),
+        )
+      }
+      when 'align' {
+        send_void_int(self.native, 'setAlignment:', text_alignment(value))
+      }
+      when 'max_lines' {
+        send_void_int(self.native, 'setMaximumNumberOfLines:', value)
+        self._line_breaks()
+      }
+      when 'overflow' {
+        self._line_breaks()
+      }
+      when 'selectable' {
+        send_void_bool(self.native, 'setSelectable:', value == true)
+      }
+    }
+  }
+
+  _line_breaks() {
+    var cell = send(self.native, 'cell')
+    var single = self.props.get('max_lines') == 1
+    var ellipsis = self.props.get('overflow') == 'ellipsis'
+
+    send_void_bool(cell, 'setWraps:', !single)
+
+    # NSLineBreakByWordWrapping 0, ByClipping 2, ByTruncatingTail 4.
+    var mode = single ? (ellipsis ? 4 : 2) : 0
+    send_void_uint(self.native, 'setLineBreakMode:', mode)
+    send_void_bool(cell, 'setTruncatesLastVisibleLine:', ellipsis)
+  }
+
+  measure(constraints: Constraints) {
+    var width = finite(constraints.max_width)
+    var cell = send(self.native, 'cell')
+    var size = typed(CGSize, [CGRect])(
+      cell, sel('cellSizeForBounds:'), rect(0, 0, width, UNBOUNDED),
+    )
+    return Size(size.width.ceil(), size.height.ceil())
+  }
+}
+
+# NSBezelStyle values for each ButtonVariant.
+var _BEZELS = {
+  push: 1,
+  flexible: 2,
+  square: 10,
+  toolbar: 11,
+  inline: 15,
+  circular: 7,
+  help: 9,
+  borderless: 1,
+}
+
+# NSControlSize values.
+var _CONTROL_SIZES = {
+  regular: 0,
+  small: 1,
+  mini: 2,
+  large: 3,
+}
+
+/**
+ * The `NSControlSize` for a `ControlSize` value.
+ *
+ * @param string size
+ * @returns number
+ */
+def control_size(size: string) {
+  return _CONTROL_SIZES.get(size, 0)
+}
+
+/**
+ * A push button.
+ */
+class MacButton < MacView {
+
+  @new(backend, props: dict, dispatch: function) {
+    var button = create_with_frame('NSButton', nil)
+    send_void_id(button, 'setTarget:', shared_target())
+    typed(ffi.void, [ffi.ptr])(button, sel('setAction:'), sel('zugAction:'))
+    self.setup(backend, 'button', button, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'title' {
+        self._title()
+      }
+      when 'variant' {
+        send_void_uint(self.native, 'setBezelStyle:', _BEZELS.get(value, 1))
+        send_void_bool(self.native, 'setBordered:', value != 'borderless')
+      }
+      when 'role' {
+        self._key_equivalent()
+        send_void_bool(
+          self.native, 'setHasDestructiveAction:', value == 'destructive',
+        )
+      }
+      when 'shortcut' {
+        self._key_equivalent()
+      }
+      when 'control_size' {
+        send_void_uint(self.native, 'setControlSize:', control_size(value))
+        self._title()
+      }
+      when 'enabled' {
+        send_void_bool(self.native, 'setEnabled:', value == true)
+      }
+      when 'style' {
+        self._title()
+      }
+      when 'tint' {
+        send_void_id(
+          self.native, 'setBezelColor:', value == nil ? nil : ns_color(value),
+        )
+      }
+      when 'selected' {
+        # NSButtonTypePushOnPushOff 1 for a toggle, MomentaryPushIn 7
+        # otherwise.
+        send_void_uint(self.native, 'setButtonType:', value == nil ? 7 : 1)
+
+        if value != nil {
+          send_void_int(self.native, 'setState:', value ? 1 : 0)
+        }
+      }
+    }
+  }
+
+  _title() {
+    var style = self.props.get('style')
+    send_void_id(
+      self.native, 'setTitle:', ns_string(self.props.get('title', '')),
+    )
+
+    if is_dict(style) and !style.is_empty() {
+      var base = self._base_font_size()
+      send_void_id(self.native, 'setFont:', ns_font(style, base))
+
+      var color = style.get('color')
+
+      if color != nil {
+        self._colored_title(color)
+      }
+    } else {
+      send_void_id(self.native, 'setFont:', ns_font({}, self._base_font_size()))
+    }
+  }
+
+  _base_font_size() {
+    var size = self.props.get('control_size', 'regular')
+    var typed_size = typed(ffi.double, [ffi.ulong])
+    return typed_size(
+      cls('NSFont'), sel('systemFontSizeForControlSize:'), control_size(size),
+    )
+  }
+
+  _colored_title(color) {
+    var title = ns_string(self.props.get('title', ''))
+    var attributes = send(cls('NSMutableDictionary'), 'dictionary')
+    var font_key = ffi.open().symbol('NSFontAttributeName').read(ffi.ptr)
+    var color_key = ffi
+      .open()
+      .symbol('NSForegroundColorAttributeName')
+      .read(ffi.ptr)
+    var style_key = ffi
+      .open()
+      .symbol('NSParagraphStyleAttributeName')
+      .read(ffi.ptr)
+    var paragraph = send(send(cls('NSMutableParagraphStyle'), 'alloc'), 'init')
+    send_void_int(paragraph, 'setAlignment:', 2)
+    typed(ffi.void, [ffi.ptr, ffi.ptr])(
+      attributes, sel('setObject:forKey:'), send(self.native, 'font'), font_key,
+    )
+    typed(ffi.void, [ffi.ptr, ffi.ptr])(
+      attributes, sel('setObject:forKey:'), ns_color(color), color_key,
+    )
+    typed(ffi.void, [ffi.ptr, ffi.ptr])(
+      attributes, sel('setObject:forKey:'), paragraph, style_key,
+    )
+    release(paragraph)
+    var attributed = typed(ffi.ptr, [ffi.ptr, ffi.ptr])(
+      send(cls('NSAttributedString'), 'alloc'),
+      sel('initWithString:attributes:'), title, attributes,
+    )
+    send_void_id(self.native, 'setAttributedTitle:', attributed)
+    release(attributed)
+  }
+
+  _key_equivalent() {
+    var role = self.props.get('role', 'normal')
+    var shortcut = self.props.get('shortcut')
+    var key = ''
+    var mask = 0
+
+    if shortcut != nil {
+      var parsed = parse_shortcut(shortcut)
+      key = parsed[0]
+      mask = parsed[1]
+    } else if role == 'primary' {
+      key = '\r'
+    } else if role == 'cancel' {
+      key = '\x1b'
+    }
+
+    send_void_id(self.native, 'setKeyEquivalent:', ns_string(key))
+    send_void_uint(self.native, 'setKeyEquivalentModifierMask:', mask)
+  }
+
+  on_action() {
+    if self.props.get('selected') != nil {
+      self.fire('pressed', { selected: send_int(self.native, 'state') == 1 })
+    } else {
+      self.fire('pressed', nil)
+    }
+  }
+}
+
+/**
+ * A decorated box: a layer-backed, flipped view with a background,
+ * border, corner radius and shadow.
+ */
+class MacBox < MacView {
+
+  @new(backend, props: dict, dispatch: function) {
+    var view = create_with_frame('ZugView', nil)
+    send_void_bool(view, 'setWantsLayer:', true)
+    send_void_uint(view, 'setLayerContentsRedrawPolicy:', 2)
+    self.setup(backend, 'box', view, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    if name == 'opacity' {
+      send_void_double(self.native, 'setAlphaValue:', value == nil ? 1 : value)
+    } else {
+      send_void_bool(self.native, 'setNeedsDisplay:', true)
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  update_layer() {
+    var layer = send(self.native, 'layer')
+
+    if layer == nil {
+      return
+    }
+
+    var color = self.props.get('color')
+    var border = self.props.get('border')
+    var shadow = self.props.get('shadow')
+    var set_cg = typed(ffi.void, [ffi.ptr])
+    set_cg(
+      layer, sel('setBackgroundColor:'), color == nil ? nil : cg_color(color),
+    )
+    send_void_double(layer, 'setCornerRadius:', self.props.get('radius', 0))
+    send_void_bool(
+      layer, 'setMasksToBounds:', self.props.get('clip', false) == true,
+    )
+
+    if border == nil {
+      send_void_double(layer, 'setBorderWidth:', 0)
+    } else {
+      send_void_double(layer, 'setBorderWidth:', border.width)
+      set_cg(layer, sel('setBorderColor:'), cg_color(border.color))
+    }
+
+    if shadow == nil {
+      typed(ffi.void, [ffi.float])(layer, sel('setShadowOpacity:'), 0)
+    } else {
+      set_cg(
+        layer, sel('setShadowColor:'), cg_color(shadow.color.with_alpha(1)),
+      )
+      typed(ffi.void, [ffi.float])(
+        layer, sel('setShadowOpacity:'), shadow.color.alpha,
+      )
+      send_void_double(layer, 'setShadowRadius:', shadow.blur / 2)
+      typed(ffi.void, [CGSize])(
+        layer, sel('setShadowOffset:'), { width: shadow.x, height: shadow.y },
+      )
+    }
+  }
+}

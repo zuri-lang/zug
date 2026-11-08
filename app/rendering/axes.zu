@@ -1,0 +1,161 @@
+/**
+ * The vocabulary layouts are described in: axes, and how children are
+ * distributed along and across them.
+ */
+
+/**
+ * A direction of layout.
+ */
+class Axis {
+  static var HORIZONTAL = 'horizontal'
+  static var VERTICAL = 'vertical'
+}
+
+/**
+ * How children are spread along the main axis of a row or column, as CSS
+ * `justify-content` spreads them.
+ */
+class Justify {
+
+  /**
+   * Packed at the start.
+   */
+  static var START = 'start'
+
+  /**
+   * Packed at the end.
+   */
+  static var END = 'end'
+
+  /**
+   * Packed in the middle.
+   */
+  static var CENTER = 'center'
+
+  /**
+   * The first at the start, the last at the end, the rest evenly between.
+   */
+  static var SPACE_BETWEEN = 'space_between'
+
+  /**
+   * Even space around each child, so the ends get half a gap.
+   */
+  static var SPACE_AROUND = 'space_around'
+
+  /**
+   * Even space between the children and at both ends.
+   */
+  static var SPACE_EVENLY = 'space_evenly'
+}
+
+/**
+ * Where children sit across the main axis of a row or column, as CSS
+ * `align-items` places them.
+ */
+class AlignItems {
+
+  /**
+   * At the top of a row, or the left of a column.
+   */
+  static var START = 'start'
+
+  /**
+   * At the bottom of a row, or the right of a column.
+   */
+  static var END = 'end'
+
+  /**
+   * In the middle.
+   */
+  static var CENTER = 'center'
+
+  /**
+   * Stretched to fill the cross axis.
+   */
+  static var STRETCH = 'stretch'
+
+  /**
+   * In a row, lined up on the baselines of their first lines of text.
+   */
+  static var BASELINE = 'baseline'
+}
+
+/**
+ * How a `Stack` sizes the children that are not positioned.
+ */
+class StackFit {
+
+  /**
+   * As small as they like, up to the stack's size.
+   */
+  static var LOOSE = 'loose'
+
+  /**
+   * As large as the stack may be.
+   */
+  static var EXPAND = 'expand'
+
+  /**
+   * With the constraints the stack itself was given.
+   */
+  static var PASSTHROUGH = 'passthrough'
+}
+
+var _JUSTIFY = [
+  'start', 'end', 'center', 'space_between', 'space_around', 'space_evenly',
+]
+var _ALIGN_ITEMS = ['start', 'end', 'center', 'stretch', 'baseline']
+var _AXES = ['horizontal', 'vertical']
+var _STACK_FITS = ['loose', 'expand', 'passthrough']
+
+/**
+ * Raises `ValueError` unless `value` is one of `Justify`'s values.
+ *
+ * @internal
+ * @param string value
+ * @param string owner
+ */
+def check_justify(value: string, owner: string) {
+  if !_JUSTIFY.contains(value) {
+    raise ValueError("justify of ${owner} must be one of Justify's values (${', '.join(_JUSTIFY)}), got '${value}'")
+  }
+}
+
+/**
+ * Raises `ValueError` unless `value` is one of `AlignItems`'s values.
+ *
+ * @internal
+ * @param string value
+ * @param string owner
+ */
+def check_align_items(value: string, owner: string) {
+  if !_ALIGN_ITEMS.contains(value) {
+    raise ValueError("align_items of ${owner} must be one of AlignItems's values (${', '.join(_ALIGN_ITEMS)}), got '${value}'")
+  }
+}
+
+/**
+ * Raises `ValueError` unless `value` is one of `Axis`'s values.
+ *
+ * @internal
+ * @param string value
+ * @param string owner
+ */
+def check_axis(value: string, owner: string) {
+  if !_AXES.contains(value) {
+    raise ValueError("the axis of ${owner} must be Axis.HORIZONTAL or Axis.VERTICAL, got '${value}'")
+  }
+}
+
+/**
+ * Raises `ValueError` unless `value` is one of `StackFit`'s values.
+ *
+ * @internal
+ * @param string value
+ * @param string owner
+ */
+def check_stack_fit(value: string, owner: string) {
+  if !_STACK_FITS.contains(value) {
+    raise ValueError("fit of ${owner} must be one of StackFit's values (${', '.join(_STACK_FITS)}), got '${value}'")
+  }
+}

@@ -1,0 +1,10 @@
+/**
+ * zug
+ *
+ * Native GUI toolkit for Zuri with a declarative, Flutter-like API.
+ *
+ * Everything `app` exports is re-exported from here, so this file is the
+ * whole of the package as far as anything importing it is concerned.
+ */
+
+import @.app { * }

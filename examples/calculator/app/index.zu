@@ -1,0 +1,21 @@
+/**
+ * @module app
+ *
+ * A calculator built with zug: keyed or typed calculations with the usual
+ * precedence, a scientific keypad, memory, a tape of past results, and
+ * settings that persist.
+ */
+
+import zug { run_app }
+import @.engine { * }
+import @.expression { * }
+import @.format { * }
+import @.settings { * }
+import @.ui { * }
+
+/**
+ * Runs the calculator.
+ */
+def main() {
+  run_app(CalculatorApp())
+}

@@ -1,0 +1,259 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+def one_of(tester, kind) {
+  var found = tester.find_kind(kind)
+  expect(found).to_have_length(1)
+  return found[0]
+}
+
+def block(name, width, height) {
+  return Box({
+    width, height, color: Color.RED, accessibility_identifier: name,
+  })
+}
+
+describe('ScrollView', @{
+  it('lets its child grow along the axis and reports the content size', @{
+    var rows = []
+
+    iter var i = 0; i < 30; i++ {
+      rows.append(block('row${i}', 50, 20))
+    }
+
+    var t = WidgetTester().pump_widget(
+      ScrollView(Column(rows, { align_items: AlignItems.STRETCH })),
+      { size: Size(200, 100) },
+    )
+    var scroll = one_of(t, 'scroll')
+    expect(scroll.frame.size()).to_equal(Size(200, 100))
+    expect(scroll.content_sizes['content']).to_equal(Size(200, 600))
+    expect(t.one('row29').frame.y).to_be(580)
+    expect(t.one('row0').frame.width).to_be(200)
+    t.dispose()
+  })
+
+  it('reports and requests positions through its controller', @{
+    var controller = ScrollController()
+    var seen = []
+    controller.add_listener(@{
+      seen.append(controller.offset())
+    })
+    var t = WidgetTester().pump_widget(ScrollView(
+      Box({ height: 1000 }), { controller },
+    ))
+    var scroll = one_of(t, 'scroll')
+    scroll.fire('scrolled', { x: 0, y: 120 })
+    expect(controller.offset()).to_equal(Point(0, 120))
+    controller.scroll_to(0, 40)
+    t.pump()
+    expect(scroll.props.scroll_to[0, 2]).to_equal([0, 40])
+    t.dispose()
+  })
+})
+
+describe('ListView', @{
+  it('lays out every child', @{
+    var t = WidgetTester().pump_widget(ListView(
+      [Text('a'), Text('b'), Text('c')], { spacing: 4 },
+    ))
+    expect(t
+      .find_kind('text')
+      .map(@(view) => view.text())).to_equal(['a', 'b', 'c'])
+    t.dispose()
+  })
+
+  it('builds only the rows in view, and more as it scrolls', @{
+    var built = []
+    var t = WidgetTester().pump_widget(
+      ListView.builder(10000, @(context, index) {
+        built.append(index)
+        return Text('Row ${index}')
+      }, { item_extent: 20, overscan: 2 }), { size: Size(200, 100) },
+    )
+    var texts = t.find_kind('text')
+    expect(texts.length() <= 10).to_be_true()
+    expect(t.find_text('Row 0')).to_have_length(1)
+    expect(t.find_text('Row 500')).to_be_empty()
+    expect(one_of(t, 'scroll').content_sizes['content'].height).to_be(200000)
+
+    one_of(t, 'scroll').fire('scrolled', { x: 0, y: 10000 })
+    expect(t.find_text('Row 500')).to_have_length(1)
+    expect(t.find_text('Row 0')).to_be_empty()
+    expect(t.find_text('Row 500')[0].window_frame().y).to_be(10000)
+    t.dispose()
+  })
+})
+
+describe('TabView', @{
+  it('keeps every tab in the tree and fills each with its content area', @{
+    var pair = ObservableValue(0)
+    var t = WidgetTester().pump_widget(Observer(pair, @(context) => TabView([
+      Tab('One', block('first', 10, 10)),
+      Tab(
+        'Two', Box({ color: Color.BLUE, accessibility_identifier: 'second' }),
+      ),
+    ], pair.value(), { on_changed: @(index) {
+      pair.set(index)
+    } })), { size: Size(300, 200) })
+    var tabs = one_of(t, 'tabs')
+    expect(tabs.props.tabs).to_equal(['One', 'Two'])
+    expect(t.one('second').frame.size()).to_equal(Size(284, 162))
+    expect(t.one('second').parent_slot).to_be(1)
+    tabs.fire('changed', { selected: 1 })
+    expect(pair.value()).to_be(1)
+    expect(tabs.props.selected).to_be(1)
+    t.dispose()
+  })
+})
+
+describe('SplitView', @{
+  it('gives each pane its share', @{
+    var t = WidgetTester().pump_widget(SplitView([
+      Box({ color: Color.RED, accessibility_identifier: 'left' }),
+      Box({ color: Color.BLUE, accessibility_identifier: 'right' }),
+    ], { initial: [100] }), { size: Size(301, 200) })
+    expect(t.one('left').frame.size()).to_equal(Size(100, 200))
+    expect(t.one('right').frame.size()).to_equal(Size(200, 200))
+    t.dispose()
+  })
+})
+
+describe('DataTable', @{
+  it('answers cell queries and reports selection, activation and sorting', @{
+    var people = [['Ada', 36], ['Alan', 41], ['Grace', 85]]
+    var selected = []
+    var activated = []
+    var sorted = []
+    var t = WidgetTester().pump_widget(DataTable(
+      [
+        DataColumn('name', 'Name', { sortable: true }),
+        DataColumn('age', 'Age'),
+      ],
+      people.length(), @(row, column) {
+        return column == 'name' ? people[row][0] : people[row][1]
+      }, {
+        on_selection_changed: @(rows) {
+          selected.append(rows)
+        },
+        on_activate: @(row) {
+          activated.append(row)
+        },
+        on_sort: @(column, ascending) {
+          sorted.append([column, ascending])
+        },
+      },
+    ))
+    var table = one_of(t, 'table')
+    expect(table.props.row_count).to_be(3)
+    expect(table.props.columns.map(
+      @(column) => column.title,
+    )).to_equal(['Name', 'Age'])
+    expect(table.fire('cell', { row: 1, column: 'name' })).to_be('Alan')
+    expect(table.fire('cell', { row: 2, column: 'age' })).to_be('85')
+    expect(table.fire('cell', { row: 9, column: 'age' })).to_be('')
+    table.fire('changed', { selected: [2] })
+    table.fire('activated', { row: 2 })
+    table.fire('sorted', { column: 'name', ascending: false })
+    expect(selected).to_equal([[2]])
+    expect(activated).to_equal([2])
+    expect(sorted).to_equal([['name', false]])
+    t.dispose()
+  })
+})
+
+describe('Canvas', @{
+  it('calls its paint function with a painter and its size', @{
+    var t = WidgetTester().pump_widget(Column([Canvas(@(painter, size) {
+      painter.fill_rect(Rect(0, 0, size.width, size.height), Color.WHITE)
+      painter.line(
+        Point(0, 0), Point(size.width, size.height), Paint({ width: 2 }),
+      )
+    }, {
+      height: 50,
+    })], { align_items: AlignItems.STRETCH }), { size: Size(200, 100) })
+    var canvas = one_of(t, 'canvas')
+    var calls = canvas.paint()
+    expect(calls[0]).to_equal(['fill_rect', Rect(0, 0, 200, 50), Color.WHITE])
+    expect(calls[1][0]).to_be('line')
+    t.dispose()
+  })
+
+  it('asks to repaint when its repaint value changes', @{
+    var value = ObservableValue(1)
+    var t = WidgetTester().pump_widget(Observer(
+      value,
+      @(context) => Canvas(@(painter, size) {}, { repaint: value.value() }),
+    ))
+    var canvas = one_of(t, 'canvas')
+    var before = canvas.updates.length()
+    value.set(2)
+    t.pump()
+    expect(canvas.updates.length()).to_be(before + 1)
+    t.dispose()
+  })
+})
+
+describe('PointerArea', @{
+  it('turns pointer reports into events', @{
+    var taps = []
+    var drags = []
+    var entered = []
+    var t = WidgetTester().pump_widget(PointerArea(Box({ color: Color.RED }), {
+      cursor: Cursor.POINTING_HAND,
+      on_tap: @(event) {
+        taps.append(event)
+      },
+      on_drag: @(event) {
+        drags.append(event.delta)
+      },
+      on_enter: @{
+        entered.append(true)
+      },
+    }))
+    var area = one_of(t, 'pointer')
+    expect(area.props.cursor).to_be('pointing_hand')
+    expect(area.props.hover).to_be_true()
+    area.fire('tap', { x: 5, y: 6, clicks: 1, modifiers: ['cmd'] })
+    area.fire('drag', { x: 10, y: 10, dx: 2, dy: 3 })
+    area.fire('enter', nil)
+    expect(taps[0].position).to_equal(Point(5, 6))
+    expect(taps[0].has_modifier('cmd')).to_be_true()
+    expect(drags).to_equal([Point(2, 3)])
+    expect(entered).to_equal([true])
+    t.dispose()
+  })
+
+  it('opens a context menu and runs the item chosen', @{
+    var chosen = []
+    var t = WidgetTester().pump_widget(ContextMenu(Text('target'), [
+      MenuItem('Copy', { role: 'copy' }),
+      MenuItem.separator(),
+      MenuItem('Delete', { on_selected: @{
+        chosen.append('delete')
+      } }),
+    ]))
+    var area = one_of(t, 'pointer')
+    expect(area.props.menu[0]).to_equal({
+      title: 'Copy',
+      shortcut: nil,
+      enabled: true,
+      checked: false,
+      role: 'copy',
+    })
+    expect(area.props.menu[1]).to_equal({ separator: true })
+    area.fire('menu_selected', { id: area.props.menu[2].id })
+    expect(chosen).to_equal(['delete'])
+    t.dispose()
+  })
+})
+
+describe('MenuItem', @{
+  it('refuses an unknown role', @{
+    expect(@{
+      MenuItem('x', { role: 'explode' })
+    }).to_raise_instance_of(ValueError)
+  })
+})

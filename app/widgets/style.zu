@@ -1,0 +1,317 @@
+/**
+ * Styles shared by everything below a point in the tree, and the system
+ * appearance.
+ *
+ * A `Style` gives the widgets below it a `StyleSheet`: the text styles,
+ * accent colour and spacing they use unless told otherwise. `Text` merges
+ * its own style over the sheet's `text` style. `Appearance.of(context)`
+ * says whether the system is light or dark, and rebuilds the widgets that
+ * asked when it changes.
+ *
+ * ```zuri
+ * import zug { Style, StyleSheet, TextStyle, Color, Text }
+ *
+ * var themed = Style(StyleSheet({ accent: Color.hex('#ff9500'), text: TextStyle({ size: 14 }) }), Text('Hello'))
+ * ```
+ */
+
+import ..foundation { Key, Color, EdgeInsets, check_options }
+import ..painting { TextStyle, FontWeight, FontDesign }
+import .framework { Inherited, StatefulWidget, State, Widget }
+
+var _SHEET_OPTIONS = {
+  accent: Color,
+  text: TextStyle,
+  title: TextStyle,
+  headline: TextStyle,
+  caption: TextStyle,
+  mono: TextStyle,
+  spacing: 'number',
+  padding: EdgeInsets,
+}
+
+/**
+ * The styles widgets use unless told otherwise.
+ *
+ * @printable
+ */
+class StyleSheet {
+
+  /**
+   * The colour of emphasis.
+   *
+   * @type Color
+   */
+  var accent
+
+  /**
+   * Body text, the style `Text` starts from.
+   *
+   * @type TextStyle
+   */
+  var text
+
+  /**
+   * Titles.
+   *
+   * @type TextStyle
+   */
+  var title
+
+  /**
+   * Large headings.
+   *
+   * @type TextStyle
+   */
+  var headline
+
+  /**
+   * Small secondary text.
+   *
+   * @type TextStyle
+   */
+  var caption
+
+  /**
+   * Fixed-width text.
+   *
+   * @type TextStyle
+   */
+  var mono
+
+  /**
+   * The usual gap between controls.
+   *
+   * @type number
+   */
+  var spacing = 8
+
+  /**
+   * The usual space around content.
+   *
+   * @type EdgeInsets
+   */
+  var padding
+
+  /**
+   * @param ?dict options: any of `accent`, `text`, `title`, `headline`,
+   *    `caption`, `mono`, `spacing` and `padding`; what is left out takes
+   *    the platform's usual look.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(options, 'StyleSheet', _SHEET_OPTIONS)
+    self.accent = o.get('accent', Color.system('accent'))
+    self.text = o.get('text', TextStyle())
+    self.title = o.get(
+      'title', TextStyle({ size: 17, weight: FontWeight.SEMIBOLD }),
+    )
+    self.headline = o.get(
+      'headline', TextStyle({ size: 24, weight: FontWeight.BOLD }),
+    )
+    self.caption = o.get(
+      'caption',
+      TextStyle({ size: 11, color: Color.system('secondary_label') }),
+    )
+    self.mono = o.get('mono', TextStyle({ design: FontDesign.MONOSPACED }))
+    self.spacing = o.get('spacing', 8)
+    self.padding = o.get('padding', EdgeInsets.all(16))
+  }
+
+  /**
+   * A copy with the options given replaced.
+   *
+   * @param dict options
+   * @returns StyleSheet
+   */
+  copy_with(options: dict) {
+    var merged = {
+      accent: self.accent,
+      text: self.text,
+      title: self.title,
+      headline: self.headline,
+      caption: self.caption,
+      mono: self.mono,
+      spacing: self.spacing,
+      padding: self.padding,
+    }
+
+    for name, value in check_options(
+      options, 'StyleSheet.copy_with', _SHEET_OPTIONS,
+    ) {
+      merged[name] = value
+    }
+
+    return StyleSheet(merged)
+  }
+
+  @eq(other) {
+    return instance_of(other, StyleSheet)
+      and self.accent == other.accent
+      and self.text == other.text
+      and self.title == other.title
+      and self.headline == other.headline
+      and self.caption == other.caption
+      and self.mono == other.mono
+      and self.spacing == other.spacing
+      and self.padding == other.padding
+  }
+
+  @to_string() {
+    return 'StyleSheet(${self.accent})'
+  }
+}
+
+var _default_sheet = nil
+
+/**
+ * The sheet used where no `Style` is above.
+ *
+ * @returns StyleSheet
+ */
+def default_style_sheet() {
+  if _default_sheet == nil {
+    _default_sheet = StyleSheet()
+  }
+
+  return _default_sheet
+}
+
+/**
+ * Gives the widgets below a `StyleSheet`.
+ */
+class Style < Inherited {
+
+  /**
+   * @type StyleSheet
+   */
+  var sheet
+
+  /**
+   * @param StyleSheet sheet
+   * @param Widget child
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(sheet: StyleSheet, child: Widget, options: ?dict) {
+    var o = check_options(options, 'Style', { key: Key })
+    parent(child, o.get('key'))
+    self.sheet = sheet
+  }
+
+  update_should_notify(previous) {
+    return previous.sheet != self.sheet
+  }
+
+  /**
+   * The sheet of the nearest `Style` above, or the default one.
+   *
+   * @param Context context
+   * @returns StyleSheet
+   */
+  static of(context) {
+    var found = context.depend_on(Style)
+    return found == nil ? default_style_sheet() : found.sheet
+  }
+}
+
+/**
+ * Holds the system appearance for the widgets below.
+ *
+ * @internal
+ */
+class AppearanceScope < Inherited {
+  var value = 'light'
+
+  @new(value: string, child: Widget) {
+    parent(child)
+    self.value = value
+  }
+
+  update_should_notify(previous) {
+    return previous.value != self.value
+  }
+}
+
+/**
+ * The system's light or dark appearance.
+ */
+class Appearance {
+  static var LIGHT = 'light'
+  static var DARK = 'dark'
+
+  /**
+   * `light` or `dark`, as the system is now. The widget asking is rebuilt
+   * when it changes.
+   *
+   * @param Context context
+   * @returns string
+   */
+  static of(context) {
+    var found = context.depend_on(AppearanceScope)
+
+    if found != nil {
+      return found.value
+    }
+
+    var runtime = context.runtime()
+    return runtime == nil ? 'light' : runtime.appearance
+  }
+}
+
+/**
+ * Keeps an `AppearanceScope` in step with the runtime's appearance.
+ *
+ * @internal
+ */
+class AppearanceTracker < StatefulWidget {
+  var child
+
+  @new(child: Widget) {
+    self.child = child
+  }
+
+  create_state() {
+    return AppearanceTrackerState()
+  }
+}
+
+/**
+ * @internal
+ */
+class AppearanceTrackerState < State {
+  var _listener
+  var value = 'light'
+
+  init_state() {
+    var runtime = self.context().runtime()
+
+    if runtime != nil {
+      self.value = runtime.appearance
+      self._listener = @(appearance) {
+        if self.mounted() {
+          self.set_state(@{
+            self.value = appearance
+          })
+        }
+      }
+      runtime.appearance_listeners.append(self._listener)
+    }
+  }
+
+  dispose() {
+    var runtime = self.context().runtime()
+
+    if runtime != nil and self._listener != nil {
+      var index = runtime.appearance_listeners.index_of(self._listener)
+
+      if index >= 0 {
+        runtime.appearance_listeners.remove_at(index)
+      }
+    }
+  }
+
+  build(context) {
+    return AppearanceScope(self.value, self.widget.child)
+  }
+}

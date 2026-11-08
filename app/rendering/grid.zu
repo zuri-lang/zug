@@ -1,0 +1,310 @@
+/**
+ * A grid of equal-width columns, whose cells may span several columns or
+ * rows.
+ */
+
+import ..foundation { Point, Size, Constraints, INFINITY, LayoutError }
+import .object { RenderObject, ParentData }
+
+/**
+ * What a grid stores on each child: how many columns and rows it spans.
+ */
+class GridParentData < ParentData {
+
+  /**
+   * @type number
+   */
+  var column_span = 1
+
+  /**
+   * @type number
+   */
+  var row_span = 1
+
+  /**
+   * The cell the child was placed in, as `[row, column]`.
+   *
+   * @type ?list
+   */
+  var cell
+}
+
+/**
+ * Lays its children out in rows of `columns` equal cells, filling each
+ * row from the left before starting the next, as text flows. A child that
+ * spans several cells takes the first place it fits.
+ *
+ * Every child is sized to fill its cells. A row is `row_height` tall when
+ * it is given, as tall as wide divided by `aspect_ratio` when that is
+ * given, and otherwise as tall as the tallest child in it that spans one
+ * row.
+ */
+class RenderGrid < RenderObject {
+
+  /**
+   * @type number
+   */
+  var columns = 1
+
+  /**
+   * @type number
+   */
+  var column_spacing = 0
+
+  /**
+   * @type number
+   */
+  var row_spacing = 0
+
+  /**
+   * @type ?number
+   */
+  var row_height
+
+  /**
+   * Cell width divided by cell height.
+   *
+   * @type ?number
+   */
+  var aspect_ratio
+
+  /**
+   * @param number columns
+   * @constructor
+   */
+  @new(columns: number) {
+    parent()
+    self.columns = columns
+  }
+
+  /**
+   * @param number columns
+   * @param number column_spacing
+   * @param number row_spacing
+   * @param ?number row_height
+   * @param ?number aspect_ratio
+   */
+  configure(
+    columns: number, column_spacing: number, row_spacing: number,
+    row_height: ?number, aspect_ratio: ?number,
+  ) {
+    if columns != self.columns
+      or column_spacing != self.column_spacing
+      or row_spacing != self.row_spacing
+      or row_height != self.row_height
+      or aspect_ratio != self.aspect_ratio {
+      self.columns = columns
+      self.column_spacing = column_spacing
+      self.row_spacing = row_spacing
+      self.row_height = row_height
+      self.aspect_ratio = aspect_ratio
+      self.mark_needs_layout()
+    }
+  }
+
+  setup_parent_data(child: RenderObject) {
+    if !instance_of(child.parent_data, GridParentData) {
+      child.parent_data = GridParentData()
+    }
+  }
+
+  # Assigns every child a cell, flowing row by row, and returns the
+  # number of rows used.
+  _place_cells() {
+    var taken = []
+    var row = 0
+    var column = 0
+    var rows = 0
+
+    for child in self.children {
+      var data = child.parent_data
+      var span = data.column_span.min(self.columns)
+      var placed = false
+
+      while !placed {
+        if column + span > self.columns {
+          row++
+          column = 0
+          continue
+        }
+
+        if _fits(taken, row, column, span, data.row_span, self.columns) {
+          _take(taken, row, column, span, data.row_span, self.columns)
+          data.cell = [row, column]
+          rows = rows.max(row + data.row_span)
+          column += span
+          placed = true
+        } else {
+          column++
+        }
+      }
+    }
+
+    return rows
+  }
+
+  _cell_width(width: number) {
+    return ((width - self.column_spacing * (self.columns - 1))
+      / self.columns).max(0)
+  }
+
+  _span_width(cell: number, span: number) {
+    return cell * span + self.column_spacing * (span - 1)
+  }
+
+  _natural_width() {
+    var widest = 0
+
+    for child in self.children {
+      var span = child.parent_data.column_span.min(self.columns)
+      var per = (child.max_intrinsic_width(INFINITY) -
+        self.column_spacing * (span - 1))
+        / span
+      widest = widest.max(per)
+    }
+
+    return widest * self.columns + self.column_spacing * (self.columns - 1)
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var rows = self._place_cells()
+    var width = c.has_bounded_width()
+      ? c.max_width
+      : c.constrain_width(self._natural_width())
+    var cell = self._cell_width(width)
+    var heights = []
+
+    iter var r = 0; r < rows; r++ {
+      heights.append(0)
+    }
+
+    if self.row_height != nil or self.aspect_ratio != nil {
+      var fixed = self.row_height != nil
+        ? self.row_height
+        : cell / self.aspect_ratio
+
+      iter var r = 0; r < rows; r++ {
+        heights[r] = fixed
+      }
+    } else {
+      for child in self.children {
+        var data = child.parent_data
+
+        if data.row_span == 1 {
+          var span_width = self._span_width(
+            cell, data.column_span.min(self.columns),
+          )
+          var natural = child.max_intrinsic_height(span_width)
+          heights[data.cell[0]] = heights[data.cell[0]].max(natural)
+        }
+      }
+    }
+
+    var tops = []
+    var top = 0
+
+    iter var r = 0; r < rows; r++ {
+      tops.append(top)
+      top += heights[r] + (r < rows - 1 ? self.row_spacing : 0)
+    }
+
+    for child in self.children {
+      var data = child.parent_data
+      var row = data.cell[0]
+      var column = data.cell[1]
+      var span = data.column_span.min(self.columns)
+      var span_height = 0
+
+      iter var r = row; r < row + data.row_span; r++ {
+        span_height += heights[r]
+      }
+
+      span_height += self.row_spacing * (data.row_span - 1)
+      var span_width = self._span_width(cell, span)
+      child.layout(Constraints.tight(Size(span_width, span_height)), false)
+      self.place_child(
+        child, Point(column * (cell + self.column_spacing), tops[row]),
+      )
+    }
+
+    self.size = c.constrain(Size(width, top))
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self._natural_width()
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self._natural_width()
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self.compute_max_intrinsic_height(width)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var rows = self._place_cells()
+    var cell = self._cell_width(
+      width == INFINITY ? self._natural_width() : width,
+    )
+
+    if self.row_height != nil or self.aspect_ratio != nil {
+      var fixed = self.row_height != nil
+        ? self.row_height
+        : cell / self.aspect_ratio
+      return fixed * rows + self.row_spacing * (rows - 1).max(0)
+    }
+
+    var heights = []
+
+    iter var r = 0; r < rows; r++ {
+      heights.append(0)
+    }
+
+    for child in self.children {
+      var data = child.parent_data
+
+      if data.row_span == 1 {
+        var natural = child.max_intrinsic_height(self._span_width(
+          cell, data.column_span.min(self.columns),
+        ))
+        heights[data.cell[0]] = heights[data.cell[0]].max(natural)
+      }
+    }
+
+    var total = 0
+
+    for h in heights {
+      total += h
+    }
+
+    return total + self.row_spacing * (rows - 1).max(0)
+  }
+}
+
+def _fits(
+  taken: list, row: number, column: number, span: number, row_span: number,
+  columns: number,
+) {
+  iter var r = row; r < row + row_span; r++ {
+    iter var col = column; col < column + span; col++ {
+      if taken.contains(r * columns + col) {
+        return false
+      }
+    }
+  }
+
+  return true
+}
+
+def _take(
+  taken: list, row: number, column: number, span: number, row_span: number,
+  columns: number,
+) {
+  iter var r = row; r < row + row_span; r++ {
+    iter var col = column; col < column + span; col++ {
+      taken.append(r * columns + col)
+    }
+  }
+}

@@ -1,0 +1,182 @@
+/**
+ * How numbers are shown: rounded to a number of significant digits or
+ * decimal places, with thousands separators when asked, and in scientific
+ * notation when they are too large or too small to show plainly.
+ */
+
+/**
+ * The text shown for a value that is not a number.
+ *
+ * @type string
+ */
+var ERROR_TEXT = 'Error'
+
+/**
+ * How numbers are shown.
+ */
+class NumberFormat {
+
+  /**
+   * Decimal places to show, or `nil` to show as many as the value needs.
+   *
+   * @type ?number
+   */
+  var places
+
+  /**
+   * Whether to separate thousands with commas.
+   *
+   * @type bool
+   */
+  var grouping = true
+
+  /**
+   * The most significant digits to show.
+   *
+   * @type number
+   */
+  var significant = 12
+
+  /**
+   * @param ?dict options: `places`, `grouping` and `significant`.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = options == nil ? {} : options
+    self.places = o.get('places')
+    self.grouping = o.get('grouping', true)
+    self.significant = o.get('significant', 12)
+  }
+}
+
+# The digits of a whole number, with commas between thousands.
+def _group(digits: string) {
+  var out = ''
+  var count = 0
+
+  iter var i = digits.length() - 1; i >= 0; i-- {
+    out = digits[i] + out
+    count++
+
+    if count % 3 == 0 and i > 0 {
+      out = ',' + out
+    }
+  }
+
+  return out
+}
+
+# Drops trailing zeros after a decimal point, and the point itself when
+# nothing is left after it.
+def _trim(text: string) {
+  if !text.contains('.') {
+    return text
+  }
+
+  var end = text.length()
+
+  while end > 0 and text[end - 1] == '0' {
+    end--
+  }
+
+  if end > 0 and text[end - 1] == '.' {
+    end--
+  }
+
+  return text[0, end]
+}
+
+/**
+ * Puts thousands separators in the whole part of a number's text, keeping
+ * its sign and whatever follows the decimal point as it is. Text in
+ * scientific notation is left alone.
+ *
+ * @param string text
+ * @returns string
+ */
+def group_text(text: string) {
+  if text.contains('e') or text == ERROR_TEXT {
+    return text
+  }
+
+  var sign = text.starts_with('-') ? '-' : ''
+  var body = sign == '' ? text : text[1, text.length()]
+  var point = body.index_of('.')
+  var whole = point < 0 ? body : body[0, point]
+  var rest = point < 0 ? '' : body[point, body.length()]
+  return sign + _group(whole) + rest
+}
+
+# The decimal text of a value rounded to `decimals` places, never in
+# exponent form.
+def _fixed_text(value: number, decimals: number) {
+  var rounded = value.fixed(decimals)
+  var text = '${rounded}'
+
+  if text.contains('e') {
+    return text
+  }
+
+  return text
+}
+
+/**
+ * The text of `value` in `format`.
+ *
+ * @param number value
+ * @param NumberFormat format
+ * @returns string
+ */
+def format_number(value: number, format: NumberFormat) {
+  if value.is_nan() or !value.is_finite() {
+    return ERROR_TEXT
+  }
+
+  if value == 0 {
+    value = 0
+  }
+
+  var magnitude = value.abs()
+  var exponent = magnitude == 0 ? 0 : magnitude.log10().floor()
+  var text = ''
+
+  # Values too large or too small to show plainly take scientific
+  # notation, rounded to the significant digits.
+  if magnitude != 0 and (exponent >= format.significant or exponent < -8) {
+    var mantissa = value / (10 ** exponent)
+    var digits = _trim(_fixed_text(mantissa, format.significant - 1))
+
+    if digits == '10' or digits == '-10' {
+      digits = digits.starts_with('-') ? '-1' : '1'
+      exponent++
+    }
+
+    return '${digits}e${exponent}'
+  }
+
+  if format.places != nil {
+    text = _fixed_text(value, format.places)
+
+    if format.places > 0 {
+      var point = text.index_of('.')
+      var have = point < 0 ? 0 : text.length() - point - 1
+
+      if point < 0 {
+        text += '.'
+      }
+
+      iter var i = have; i < format.places; i++ {
+        text += '0'
+      }
+    }
+  } else {
+    var decimals = (format.significant - 1 - exponent).max(0).min(17)
+    text = _trim(_fixed_text(value, decimals))
+  }
+
+  if text == '-0' {
+    text = '0'
+  }
+
+  return format.grouping ? group_text(text) : text
+}

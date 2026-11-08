@@ -1,0 +1,335 @@
+/**
+ * Widgets built by a function, for when a whole class would be more than
+ * the job needs.
+ *
+ * ```zuri
+ * import zug { Observer, ObservableValue, Text, Builder }
+ *
+ * var count = ObservableValue(0)
+ * var label = Observer(count, @(context) => Text('Count: ${count.value()}'))
+ * var sized = Builder(@(context) => Text('built here'))
+ * ```
+ */
+
+import ..foundation { Key, Observable, Promise, check_options }
+import .framework { Widget, StatelessWidget, StatefulWidget, State }
+
+/**
+ * Builds its child with a function of the context, which is the context
+ * at this point in the tree rather than the one of the widget that made
+ * the builder.
+ */
+class Builder < StatelessWidget {
+
+  /**
+   * Called with the context; returns a widget.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @param function builder
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(builder: function, options: ?dict) {
+    var o = check_options(options, 'Builder', { key: Key })
+    self.key = o.get('key')
+    self.builder = builder
+  }
+
+  build(context) {
+    return self.builder(context)
+  }
+}
+
+/**
+ * Builds its child with a function of the context and a `set_state`
+ * function, for a little local state without a `State` class. The state
+ * itself lives in variables the function closes over.
+ *
+ * ```zuri
+ * import zug { StatefulBuilder, Checkbox }
+ *
+ * var on = false
+ * var toggle = StatefulBuilder(@(context, set_state) {
+ *   return Checkbox(on, { on_changed: @(value) { set_state(@{ on = value }) } })
+ * })
+ * ```
+ */
+class StatefulBuilder < StatefulWidget {
+
+  /**
+   * Called with the context and `set_state`; returns a widget.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @param function builder
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(builder: function, options: ?dict) {
+    var o = check_options(options, 'StatefulBuilder', { key: Key })
+    self.key = o.get('key')
+    self.builder = builder
+  }
+
+  create_state() {
+    return StatefulBuilderState()
+  }
+}
+
+/**
+ * The state of a `StatefulBuilder`.
+ *
+ * @internal
+ */
+class StatefulBuilderState < State {
+  var _set_state
+
+  init_state() {
+    self._set_state = @(change) {
+      self.set_state(change)
+    }
+  }
+
+  build(context) {
+    return self.widget.builder(context, self._set_state)
+  }
+}
+
+/**
+ * Rebuilds whenever `observable` notifies. The builder is called with the
+ * context and the `child` option, a part that does not depend on the
+ * observable and so is built once rather than on every change.
+ */
+class Observer < StatefulWidget {
+
+  /**
+   * @type Observable
+   */
+  var observable
+
+  /**
+   * Called with the context and `child`; returns a widget.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @type ?Widget
+   */
+  var child
+
+  /**
+   * @param Observable observable
+   * @param function builder
+   * @param ?dict options: `child` and `key`.
+   * @constructor
+   */
+  @new(observable: Observable, builder: function, options: ?dict) {
+    var o = check_options(options, 'Observer', { key: Key, child: Widget })
+    self.key = o.get('key')
+    self.observable = observable
+    self.builder = builder
+    self.child = o.get('child')
+  }
+
+  create_state() {
+    return ObserverState()
+  }
+}
+
+/**
+ * The state of an `Observer`.
+ *
+ * @internal
+ */
+class ObserverState < State {
+  var _listener
+
+  init_state() {
+    self._listener = @{
+      if self.mounted() {
+        self.set_state()
+      }
+    }
+
+    self.widget.observable.add_listener(self._listener)
+  }
+
+  did_update_widget(previous) {
+    if previous.observable != self.widget.observable {
+      previous.observable.remove_listener(self._listener)
+      self.widget.observable.add_listener(self._listener)
+    }
+  }
+
+  dispose() {
+    if !self.widget.observable.is_disposed() {
+      self.widget.observable.remove_listener(self._listener)
+    }
+  }
+
+  build(context) {
+    return self.widget.builder(context, self.widget.child)
+  }
+}
+
+/**
+ * Where a promise has got to, as `PromiseBuilder` gives it to its
+ * builder.
+ *
+ * @printable
+ */
+class PromiseSnapshot {
+
+  /**
+   * `pending`, `resolved` or `rejected`.
+   *
+   * @type string
+   */
+  var state = 'pending'
+
+  /**
+   * @type any
+   */
+  var value
+
+  /**
+   * @type ?Error
+   */
+  var error
+
+  /**
+   * @param string state
+   * @param any value
+   * @param ?Error error
+   * @constructor
+   */
+  @new(state: string, value, error) {
+    self.state = state
+    self.value = value
+    self.error = error
+  }
+
+  /**
+   * @returns bool
+   */
+  is_pending() {
+    return self.state == 'pending'
+  }
+
+  /**
+   * @returns bool
+   */
+  is_resolved() {
+    return self.state == 'resolved'
+  }
+
+  /**
+   * @returns bool
+   */
+  is_rejected() {
+    return self.state == 'rejected'
+  }
+
+  @to_string() {
+    return 'PromiseSnapshot(${self.state})'
+  }
+}
+
+/**
+ * Builds from where a `Promise` has got to, and again when it settles.
+ *
+ * ```zuri,ignore
+ * PromiseBuilder(run_in_background(load, path), @(context, snapshot) {
+ *   if snapshot.is_pending() {
+ *     return Spinner()
+ *   }
+ *
+ *   return snapshot.is_resolved() ? Text(snapshot.value) : Text('Failed: ${snapshot.error.message}')
+ * })
+ * ```
+ */
+class PromiseBuilder < StatefulWidget {
+
+  /**
+   * @type Promise
+   */
+  var promise
+
+  /**
+   * Called with the context and a `PromiseSnapshot`.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @param Promise promise
+   * @param function builder
+   * @param ?dict options: `key`.
+   * @constructor
+   */
+  @new(promise: Promise, builder: function, options: ?dict) {
+    var o = check_options(options, 'PromiseBuilder', { key: Key })
+    self.key = o.get('key')
+    self.promise = promise
+    self.builder = builder
+  }
+
+  create_state() {
+    return PromiseBuilderState()
+  }
+}
+
+/**
+ * @internal
+ */
+class PromiseBuilderState < State {
+  var snapshot
+
+  init_state() {
+    self._follow()
+  }
+
+  did_update_widget(previous) {
+    if previous.promise != self.widget.promise {
+      self._follow()
+    }
+  }
+
+  _follow() {
+    var promise = self.widget.promise
+    self.snapshot = PromiseSnapshot(
+      promise.is_pending()
+        ? 'pending'
+        : promise.is_resolved() ? 'resolved' : 'rejected',
+      promise.value(), promise.error(),
+    )
+
+    promise.then(@(value) {
+      if self.mounted() and self.widget.promise == promise {
+        self.set_state(@{
+          self.snapshot = PromiseSnapshot('resolved', value, nil)
+        })
+      }
+    }, @(error) {
+      if self.mounted() and self.widget.promise == promise {
+        self.set_state(@{
+          self.snapshot = PromiseSnapshot('rejected', nil, error)
+        })
+      }
+    })
+  }
+
+  build(context) {
+    return self.widget.builder(context, self.snapshot)
+  }
+}

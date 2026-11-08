@@ -1,0 +1,562 @@
+/**
+ * The runtime: one running application, with its backend, element tree
+ * and render pipeline, drawing frames when something changed.
+ *
+ * A frame rebuilds the elements marked dirty, unmounts those that left the
+ * tree, lays out what changed, and commits the result to native views. The
+ * backend calls for a frame just before the platform waits for events, so
+ * every change one event causes is drawn together.
+ */
+
+import ..foundation {
+  report_error, run_microtasks, has_microtasks, set_microtask_waker,
+  values_equal, ZugError, LifecycleError,
+}
+import ..backend { BackendDelegate, create_backend }
+import ..rendering { PipelineOwner, RenderWindowSet, RenderWindow }
+import .menus { menu_bar_spec }
+import .keyboard { KeyEvent }
+import .framework { BuildOwner, SingleChildRenderObjectWidget }
+
+/**
+ * The widget at the very top of the tree, above the application.
+ *
+ * @internal
+ */
+class RootWidget < SingleChildRenderObjectWidget {
+
+  @new(child) {
+    self.child = child
+  }
+
+  create_render_object(context) {
+    return RenderWindowSet()
+  }
+}
+
+var _current = nil
+
+/**
+ * The runtime of the running application, or `nil` when none is running.
+ *
+ * @returns ?Runtime
+ */
+def current_runtime() {
+  return _current
+}
+
+/**
+ * One running application.
+ */
+class Runtime < BackendDelegate {
+
+  /**
+   * @type Backend
+   */
+  var backend
+
+  /**
+   * @type BuildOwner
+   */
+  var build_owner
+
+  /**
+   * @type PipelineOwner
+   */
+  var pipeline
+
+  /**
+   * The element of the root widget, once a widget has been attached.
+   *
+   * @type ?Element
+   */
+  var root
+
+  /**
+   * The system appearance, `light` or `dark`.
+   *
+   * @type string
+   */
+  var appearance = 'light'
+
+  /**
+   * Whether closing the last window quits the application.
+   *
+   * @type bool
+   */
+  var quit_on_last_window_closed = true
+
+  /**
+   * Asked whether the application may quit. `nil` always allows it.
+   *
+   * @type ?function
+   */
+  var on_quit_requested_handler
+
+  /**
+   * Called when the application is activated with no windows open.
+   *
+   * @type ?function
+   */
+  var on_reopen_handler
+
+  /**
+   * Called with the appearance whenever it changes, after the runtime's
+   * own listeners.
+   *
+   * @type list
+   */
+  var appearance_listeners = []
+
+  var _pending_root
+  var _key_handlers = []
+  var _menu_spec
+  var _menu_handlers = {}
+  var _frame_requested = false
+  var _in_frame = false
+  var _started = false
+  var _post_frame = []
+  var _frames = 0
+
+  /**
+   * @param Backend backend
+   * @constructor
+   */
+  @new(backend) {
+    self.backend = backend
+    self.build_owner = BuildOwner()
+    self.build_owner.runtime = self
+    self.build_owner.on_build_scheduled = @{
+      self.request_frame()
+    }
+    self.pipeline = PipelineOwner()
+    self.pipeline.backend = backend
+    self.pipeline.on_need_frame = @{
+      self.request_frame()
+    }
+    self.pipeline.on_handler = @(handler, payload, context) => self.run_handler(
+      handler, payload, context,
+    )
+  }
+
+  /**
+   * Starts the backend. Called once, before anything is attached.
+   */
+  start() {
+    if self._started {
+      return
+    }
+
+    self._started = true
+    _current = self
+    set_microtask_waker(@{
+      self.request_frame()
+    })
+    self.backend.start(self)
+    self.appearance = self.backend.appearance()
+  }
+
+  /**
+   * Makes `widget` the application: attaches it the first time, and
+   * replaces the previous one afterwards.
+   *
+   * @param Widget widget
+   */
+  attach(widget) {
+    self._pending_root = widget
+    self.request_frame()
+  }
+
+  # Mounts or replaces the root, as the first part of a frame.
+  _attach_pending() {
+    var widget = self._pending_root
+
+    if widget == nil {
+      return
+    }
+
+    self._pending_root = nil
+
+    if self.root == nil {
+      var element = RootWidget(widget).create_element()
+      element.owner = self.build_owner
+      self.root = element
+      element.mount(nil, nil)
+      self.pipeline.add_root(element.render_object)
+    } else {
+      self.root.update(RootWidget(widget))
+    }
+  }
+
+  /**
+   * Runs the application until it quits.
+   *
+   * @param Widget widget
+   */
+  run(widget) {
+    self.start()
+    self.attach(widget)
+    self.backend.run()
+    self.shutdown()
+  }
+
+  /**
+   * Takes the application down: unmounts the tree, which closes every
+   * window, and releases the runtime.
+   */
+  shutdown() {
+    if self.root != nil {
+      var root = self.root
+      self.root = nil
+
+      catch {
+        root.deactivate_recursively()
+        root.unmount_recursively()
+        self.pipeline.remove_root(root.render_object)
+        self.pipeline.flush_commit()
+      } as error {
+        report_error(error, 'shutting the application down')
+      }
+    }
+
+    if _current == self {
+      _current = nil
+      set_microtask_waker(nil)
+    }
+  }
+
+  /**
+   * Asks for a frame, once however often it is called before the frame.
+   */
+  request_frame() {
+    if self._frame_requested or !self._started {
+      return
+    }
+
+    self._frame_requested = true
+    self.backend.request_frame()
+  }
+
+  /**
+   * Whether a frame has been asked for and not yet drawn.
+   *
+   * @returns bool
+   */
+  frame_pending() {
+    return self._frame_requested
+  }
+
+  /**
+   * How many frames have been drawn.
+   *
+   * @returns number
+   */
+  frames() {
+    return self._frames
+  }
+
+  /**
+   * Runs `callback` once, after the next frame has been committed.
+   *
+   * @param function callback
+   */
+  add_post_frame_callback(callback: function) {
+    self._post_frame.append(callback)
+    self.request_frame()
+  }
+
+  on_frame() {
+    self._frame_requested = false
+    self.draw_frame()
+  }
+
+  /**
+   * Draws a frame now.
+   */
+  draw_frame() {
+    if self._in_frame {
+      return
+    }
+
+    self._in_frame = true
+    self._frames++
+
+    catch {
+      run_microtasks()
+      self._attach_pending()
+      self.build_owner.build_scope()
+      self.build_owner.finalize_tree()
+      self.pipeline.flush_layout()
+      self.build_owner.finalize_tree()
+      self.pipeline.flush_commit()
+    } as error {
+      report_error(error, 'drawing a frame')
+    }
+
+    self._in_frame = false
+
+    if !self._post_frame.is_empty() {
+      var callbacks = self._post_frame
+      self._post_frame = []
+
+      for callback in callbacks {
+        catch {
+          callback()
+        } as error {
+          report_error(error, 'running a post-frame callback')
+        }
+      }
+    }
+
+    if has_microtasks() {
+      self.request_frame()
+    }
+
+    self._check_windows()
+  }
+
+  on_event_handled() {
+    run_microtasks()
+    self._check_windows()
+  }
+
+  on_appearance_changed(appearance: string) {
+    self.appearance = appearance
+
+    for listener in self.appearance_listeners.clone() {
+      catch {
+        listener(appearance)
+      } as error {
+        report_error(error, 'notifying a change of appearance')
+      }
+    }
+  }
+
+  on_quit_requested() {
+    if self.on_quit_requested_handler == nil {
+      return true
+    }
+
+    var answer = self.run_handler(
+      self.on_quit_requested_handler, nil, 'the quit request handler',
+    )
+    return answer != false
+  }
+
+  on_reopen() {
+    if self.on_reopen_handler != nil {
+      self.run_handler(self.on_reopen_handler, nil, 'the reopen handler')
+    }
+  }
+
+  /**
+   * Calls an event handler with `payload`, reporting what it raises.
+   *
+   * @internal
+   * @param function handler
+   * @param any payload
+   * @param string context
+   * @returns any what the handler returned, or `nil` when it raised.
+   */
+  run_handler(handler: function, payload, context: string) {
+    var result = nil
+
+    catch {
+      result = handler(payload)
+    } as error {
+      report_error(error, 'running ${context}')
+      return nil
+    }
+
+    return result
+  }
+
+  /**
+   * Every window in the tree.
+   *
+   * @returns list
+   */
+  windows() {
+    if self.root == nil {
+      return []
+    }
+
+    return self.root.render_object.windows()
+  }
+
+  /**
+   * Makes `element`, the element of a `Shortcuts` or `KeyListener`, one of
+   * the handlers of keys in its window.
+   *
+   * @internal
+   * @param Element element
+   */
+  add_key_handler(element) {
+    self._key_handlers.append(element)
+  }
+
+  /**
+   * @internal
+   * @param Element element
+   */
+  remove_key_handler(element) {
+    var index = self._key_handlers.index_of(element)
+
+    if index >= 0 {
+      self._key_handlers.remove_at(index)
+    }
+  }
+
+  /**
+   * Offers a key the focused control did not use to the key handlers in
+   * `window`, the deepest first. Returns whether one used it.
+   *
+   * @internal
+   * @param RenderWindow window
+   * @param dict payload
+   * @returns bool
+   */
+  dispatch_key(window, payload: dict) {
+    var event = KeyEvent(payload)
+    var handlers = self._key_handlers.clone()
+    handlers.sort(@(a, b) => b.depth - a.depth)
+
+    for element in handlers {
+      if !element.mounted() or _window_of(element) != window {
+        continue
+      }
+
+      var used = false
+
+      catch {
+        used = element.widget.handle_key(event)
+      } as error {
+        report_error(error, 'handling the key ' + event.key)
+        return true
+      }
+
+      if used {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
+   * Sets the menu bar from an `App`'s title and `MenuBar`, telling the
+   * backend only when the menus changed.
+   *
+   * @internal
+   * @param string title
+   * @param ?MenuBar bar
+   */
+  set_menu_bar(title: string, bar) {
+    var handlers = {}
+    var spec = menu_bar_spec(title, bar, handlers)
+    self._menu_handlers = handlers
+
+    if values_equal(spec, self._menu_spec) {
+      return
+    }
+
+    self._menu_spec = spec
+
+    if self.backend.has_capability('menu_bar') {
+      self.backend.set_menu_bar(spec, @(event, payload) {
+        var handler = self._menu_handlers.get(payload.id)
+
+        if handler != nil {
+          self.run_handler(@(ignored) => handler(), nil, 'a menu item')
+        }
+      })
+    }
+  }
+
+  # Quits once every window has been closed, when the application asks
+  # for that.
+  _check_windows() {
+    if !self.quit_on_last_window_closed or self.root == nil {
+      return
+    }
+
+    var windows = self.windows()
+
+    if windows.is_empty() {
+      return
+    }
+
+    for window in windows {
+      if !window.closed {
+        return
+      }
+    }
+
+    self.quit()
+  }
+
+  /**
+   * Quits the application, asking `on_quit_requested_handler` first.
+   */
+  quit() {
+    if self.on_quit_requested() {
+      self.backend.quit()
+    }
+  }
+}
+
+/**
+ * Runs `widget` as the application on the backend for this platform, and
+ * returns when it quits. `widget` must build an `App`.
+ *
+ * ```zuri,ignore
+ * run_app(App({ windows: [Window('Hello', Text('Hello, world'))] }))
+ * ```
+ *
+ * @param Widget widget
+ * @param ?dict options: `backend`, a backend's name, to choose one
+ *    rather than take the platform's.
+ */
+def run_app(widget, options: ?dict) {
+  if _current != nil {
+    raise LifecycleError('an application is already running')
+  }
+
+  var name = options == nil ? nil : options.get('backend')
+  var runtime = Runtime(create_backend(name))
+  runtime.run(widget)
+}
+
+/**
+ * Quits the running application.
+ *
+ * @throws LifecycleError When no application is running
+ */
+def quit_app() {
+  if _current == nil {
+    raise LifecycleError('no application is running')
+  }
+
+  _current.quit()
+}
+
+# The window an element is in: the nearest window above its render
+# object, or above the nearest render object above it.
+def _window_of(element) {
+  var node = element.find_render_object()
+  var probe = element
+
+  while node == nil and probe != nil {
+    probe = probe.parent_element
+
+    if probe != nil {
+      node = probe.find_render_object()
+    }
+  }
+
+  while node != nil and !instance_of(node, RenderWindow) {
+    node = node.render_parent
+  }
+
+  return node
+}

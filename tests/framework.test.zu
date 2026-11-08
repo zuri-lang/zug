@@ -1,0 +1,336 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+# A stateful widget that records its lifecycle into a shared list.
+class Probe < StatefulWidget {
+  var label = ''
+  var log
+
+  @new(label, log, options) {
+    self.label = label
+    self.log = log
+    self.key = options == nil ? nil : options.get('key')
+  }
+
+  create_state() {
+    return ProbeState()
+  }
+}
+
+class ProbeState < State {
+  var builds = 0
+
+  init_state() {
+    self.widget.log.append('init ${self.widget.label}')
+  }
+
+  did_change_dependencies() {
+    self.widget.log.append('dependencies ${self.widget.label}')
+  }
+
+  did_update_widget(previous) {
+    self.widget.log.append('update ${previous.label} -> ${self.widget.label}')
+  }
+
+  build(context) {
+    self.builds++
+    return Text('${self.widget.label}:${self.builds}')
+  }
+
+  deactivate() {
+    self.widget.log.append('deactivate ${self.widget.label}')
+  }
+
+  dispose() {
+    self.widget.log.append('dispose ${self.widget.label}')
+  }
+}
+
+# A parent whose children are given from outside, rebuilt on demand.
+class Holder < StatefulWidget {
+  var children = []
+
+  @new(children) {
+    self.children = children
+  }
+
+  create_state() {
+    return HolderState()
+  }
+}
+
+class HolderState < State {
+  var children = nil
+
+  build(context) {
+    return Column(self.children == nil ? self.widget.children : self.children)
+  }
+
+  show(children) {
+    self.set_state(@{
+      self.children = children
+    })
+  }
+}
+
+class Shade < Inherited {
+  var tone = ''
+  var notify = true
+
+  @new(tone, child, notify) {
+    parent(child)
+    self.tone = tone
+    self.notify = notify == nil ? true : notify
+  }
+
+  update_should_notify(previous) {
+    return self.notify and previous.tone != self.tone
+  }
+}
+
+class ShadeReader < StatelessWidget {
+  var counter
+
+  @new(counter) {
+    self.counter = counter
+  }
+
+  build(context) {
+    var shade = context.depend_on(Shade)
+    self.counter.append(shade == nil ? 'none' : shade.tone)
+    return Text('tone ${shade == nil ? "none" : shade.tone}')
+  }
+}
+
+class Faulty < StatelessWidget {
+  build(context) {
+    raise ValueError('broken build')
+  }
+}
+
+def texts(tester) {
+  return tester.find_kind('text').map(@(view) => view.text())
+}
+
+describe('State lifecycle', @{
+  var reported = []
+
+  before_each(@{
+    reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.message)
+    })
+  })
+
+  after_each(@{
+    set_error_handler(nil)
+  })
+
+  it('starts, updates and disposes in order', @{
+    var log = []
+    var tester = WidgetTester()
+    tester.pump_widget(Probe('a', log))
+    expect(log).to_equal(['init a', 'dependencies a'])
+    tester.pump_widget(Probe('b', log))
+    expect(log[-1]).to_be('update a -> b')
+    expect(texts(tester)).to_equal(['b:2'])
+    tester.pump_widget(Text('gone'))
+    expect(log[-2, log.length()]).to_equal(['deactivate b', 'dispose b'])
+    tester.dispose()
+  })
+
+  it('rebuilds after set_state', @{
+    var tester = WidgetTester()
+    tester.pump_widget(Probe('x', []))
+    var state = tester.state_of(ProbeState)
+    state.set_state()
+    tester.pump()
+    expect(texts(tester)).to_equal(['x:2'])
+    tester.dispose()
+  })
+
+  it('refuses set_state once disposed', @{
+    var tester = WidgetTester()
+    tester.pump_widget(Probe('x', []))
+    var state = tester.state_of(ProbeState)
+    tester.pump_widget(Text('other'))
+    expect(state.mounted()).to_be_false()
+    expect(@{
+      state.set_state()
+    }).to_raise_instance_of(LifecycleError)
+    tester.dispose()
+  })
+
+  it('rebuilds a dirty element once however often it is marked', @{
+    var tester = WidgetTester()
+    tester.pump_widget(Probe('x', []))
+    var state = tester.state_of(ProbeState)
+    state.set_state()
+    state.set_state()
+    state.set_state()
+    tester.pump()
+    expect(state.builds).to_be(2)
+    tester.dispose()
+  })
+})
+
+describe('keys', @{
+  it('keep state with a child as it moves', @{
+    var log = []
+    var tester = WidgetTester()
+    var a = Probe('a', log, { key: ValueKey('a') })
+    var b = Probe('b', log, { key: ValueKey('b') })
+    tester.pump_widget(Holder([a, b]))
+    expect(texts(tester)).to_equal(['a:1', 'b:1'])
+    tester
+      .state_of(HolderState)
+      .show([
+        Probe('b', log, { key: ValueKey('b') }),
+        Probe('a', log, { key: ValueKey('a') }),
+      ])
+    tester.pump()
+    expect(texts(tester)).to_equal(['b:2', 'a:2'])
+    expect(log.filter(
+      @(entry) => entry.starts_with('init'),
+    )).to_equal(['init a', 'init b'])
+    tester.dispose()
+  })
+
+  it('without them, match by position', @{
+    var log = []
+    var tester = WidgetTester()
+    tester.pump_widget(Holder([Probe('a', log), Probe('b', log)]))
+    tester.state_of(HolderState).show([Probe('b', log), Probe('a', log)])
+    tester.pump()
+    expect(log).to_contain('update a -> b')
+    expect(log).to_contain('update b -> a')
+    tester.dispose()
+  })
+
+  it('drop the state of a removed keyed child and keep the rest', @{
+    var log = []
+    var tester = WidgetTester()
+    tester.pump_widget(Holder([
+      Probe('a', log, { key: ValueKey(1) }),
+      Probe('b', log, { key: ValueKey(2) }),
+      Probe('c', log, { key: ValueKey(3) }),
+    ]))
+    tester
+      .state_of(HolderState)
+      .show([
+        Probe('a', log, { key: ValueKey(1) }),
+        Probe('c', log, { key: ValueKey(3) }),
+      ])
+    tester.pump()
+    expect(log).to_contain('dispose b')
+    expect(log).not.to_contain('dispose a')
+    expect(log).not.to_contain('dispose c')
+    expect(texts(tester)).to_equal(['a:2', 'c:2'])
+    tester.dispose()
+  })
+
+  it('give access to state through a global key', @{
+    var key = GlobalKey()
+    var tester = WidgetTester()
+    tester.pump_widget(Probe('g', [], { key }))
+    expect(instance_of(key.current_state(), ProbeState)).to_be_true()
+    expect(key.current_widget().label).to_be('g')
+    tester.pump_widget(Text('gone'))
+    expect(key.current_state()).to_be_nil()
+    tester.dispose()
+  })
+
+  it('refuse a global key used twice', @{
+    var key = GlobalKey()
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(error.message)
+    })
+    var tester = WidgetTester()
+    tester.pump_widget(Column([
+      Probe('a', [], { key }), Probe('b', [], { key }),
+    ]))
+    set_error_handler(nil)
+    expect(reported).to_have_length(1)
+    expect(reported[0]).to_contain('may be used once in the tree')
+    tester.dispose()
+  })
+})
+
+describe('Inherited', @{
+  it('gives the nearest value to widgets below', @{
+    var seen = []
+    var tester = WidgetTester()
+    tester.pump_widget(Shade(
+      'dark', Shade('light', ShadeReader(seen), nil), nil,
+    ))
+    expect(seen).to_equal(['light'])
+    tester.dispose()
+  })
+
+  it('gives nothing when there is none', @{
+    var seen = []
+    var tester = WidgetTester()
+    tester.pump_widget(ShadeReader(seen))
+    expect(seen).to_equal(['none'])
+    tester.dispose()
+  })
+
+  it('rebuilds dependents when it changes', @{
+    var seen = []
+    var tester = WidgetTester()
+    var reader = ShadeReader(seen)
+    tester.pump_widget(Shade('dark', reader, nil))
+    tester.pump_widget(Shade('light', reader, nil))
+    expect(seen).to_equal(['dark', 'light'])
+    expect(texts(tester)).to_equal(['tone light'])
+    tester.dispose()
+  })
+
+  it('leaves dependents alone when update_should_notify says no', @{
+    var seen = []
+    var tester = WidgetTester()
+    var reader = ShadeReader(seen)
+    tester.pump_widget(Shade('dark', reader, false))
+    tester.pump_widget(Shade('light', reader, false))
+    expect(seen).to_equal(['dark'])
+    tester.dispose()
+  })
+})
+
+describe('build errors', @{
+  it('are reported and shown in place of the widget', @{
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append(context)
+    })
+    var tester = WidgetTester()
+    tester.pump_widget(Column([Text('before'), Faulty(), Text('after')]))
+    set_error_handler(nil)
+    expect(reported).to_have_length(1)
+    expect(reported[0]).to_contain('building')
+    expect(tester.find_text('ValueError: broken build')).to_have_length(1)
+    expect(tester.find_text('before')).to_have_length(1)
+    expect(tester.find_text('after')).to_have_length(1)
+    tester.dispose()
+  })
+})
+
+describe('Context', @{
+  it('finds ancestors and reports its size after layout', @{
+    var found = []
+
+    var tester = WidgetTester()
+    tester.pump_widget(Padding(EdgeInsets.all(10), Center(Builder(@(context) {
+      found.append(context.find_ancestor_widget(Padding))
+      found.append(context)
+      return Box({ width: 40, height: 30 })
+    }))), { size: Size(200, 100) })
+
+    expect(instance_of(found[0], Padding)).to_be_true()
+    expect(found[1].size()).to_equal(Size(40, 30))
+    tester.dispose()
+  })
+})

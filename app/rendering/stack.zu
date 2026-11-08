@@ -1,0 +1,192 @@
+/**
+ * Children laid over one another.
+ */
+
+import ..foundation {
+  Point, Size, Constraints, Alignment, INFINITY, LayoutError,
+}
+import .object { RenderObject, ParentData }
+
+/**
+ * What a stack stores on each child: the edges a positioned child is
+ * fixed to, and its size.
+ */
+class StackParentData < ParentData {
+  var left
+  var top
+  var right
+  var bottom
+  var width
+  var height
+
+  /**
+   * Whether any position is set, which takes the child out of the
+   * stack's own sizing.
+   *
+   * @returns bool
+   */
+  is_positioned() {
+    return self.left != nil
+      or self.top != nil
+      or self.right != nil
+      or self.bottom != nil
+      or self.width != nil
+      or self.height != nil
+  }
+}
+
+/**
+ * Lays its children over one another, the first at the back. The stack
+ * takes the size of its largest child that is not positioned, and places
+ * the others by their edges, or by `alignment` on an axis with no edge
+ * set.
+ */
+class RenderStack < RenderObject {
+
+  /**
+   * @type Alignment
+   */
+  var alignment
+
+  /**
+   * How children that are not positioned are sized: `loose`, `expand` or
+   * `passthrough`.
+   *
+   * @type string
+   */
+  var fit = 'loose'
+
+  /**
+   * @param Alignment alignment
+   * @param string fit
+   * @constructor
+   */
+  @new(alignment: Alignment, fit: string) {
+    parent()
+    self.alignment = alignment
+    self.fit = fit
+  }
+
+  /**
+   * @param Alignment alignment
+   * @param string fit
+   */
+  configure(alignment: Alignment, fit: string) {
+    if alignment != self.alignment or fit != self.fit {
+      self.alignment = alignment
+      self.fit = fit
+      self.mark_needs_layout()
+    }
+  }
+
+  setup_parent_data(child: RenderObject) {
+    if !instance_of(child.parent_data, StackParentData) {
+      child.parent_data = StackParentData()
+    }
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var inner = c.loosen()
+
+    if self.fit == 'expand' {
+      inner = Constraints.tight(c.biggest())
+    } else if self.fit == 'passthrough' {
+      inner = c
+    }
+
+    var width = c.min_width
+    var height = c.min_height
+    var has_plain = false
+
+    for child in self.children {
+      if !child.parent_data.is_positioned() {
+        has_plain = true
+        child.layout(inner, true)
+        width = width.max(child.size.width)
+        height = height.max(child.size.height)
+      }
+    }
+
+    if has_plain {
+      self.size = c.constrain(Size(width, height))
+    } else {
+      var biggest = c.biggest()
+      self.size = biggest.is_finite() ? biggest : c.smallest()
+    }
+
+    for child in self.children {
+      var data = child.parent_data
+
+      if !data.is_positioned() {
+        self.place_child(
+          child, self.alignment.offset_for(child.size, self.size),
+        )
+        continue
+      }
+
+      var child_constraints = Constraints.UNBOUNDED
+
+      if data.left != nil and data.right != nil {
+        var w = (self.size.width - data.right - data.left).max(0)
+        child_constraints = child_constraints.tighten({ width: w })
+      } else if data.width != nil {
+        child_constraints = child_constraints.tighten({ width: data.width })
+      }
+
+      if data.top != nil and data.bottom != nil {
+        var h = (self.size.height - data.bottom - data.top).max(0)
+        child_constraints = child_constraints.tighten({ height: h })
+      } else if data.height != nil {
+        child_constraints = child_constraints.tighten({ height: data.height })
+      }
+
+      child.layout(child_constraints, true)
+      var aligned = self.alignment.offset_for(child.size, self.size)
+      var x = aligned.x
+      var y = aligned.y
+
+      if data.left != nil {
+        x = data.left
+      } else if data.right != nil {
+        x = self.size.width - data.right - child.size.width
+      }
+
+      if data.top != nil {
+        y = data.top
+      } else if data.bottom != nil {
+        y = self.size.height - data.bottom - child.size.height
+      }
+
+      self.place_child(child, Point(x, y))
+    }
+  }
+
+  _largest(measure: function) {
+    var best = 0
+
+    for child in self.children {
+      if !child.parent_data.is_positioned() {
+        best = best.max(measure(child))
+      }
+    }
+
+    return best
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return self._largest(@(child) => child.min_intrinsic_width(height))
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    return self._largest(@(child) => child.max_intrinsic_width(height))
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self._largest(@(child) => child.min_intrinsic_height(width))
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self._largest(@(child) => child.max_intrinsic_height(width))
+  }
+}

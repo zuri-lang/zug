@@ -1,0 +1,766 @@
+/**
+ * Drawing and pointer input: the canvas view and its painter, and the
+ * pointer area.
+ */
+
+import ffi
+import math
+import .. ..foundation { Size, Point, Rect, Constraints }
+import .. ..backend { Painter }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
+  send_void_double, send_void_uint, send_void_rect, send_rect, send_size,
+  send_double, send_uint, send_int, typed, typed_super, super_of, superclass_of,
+  ns_string, retain, release, rect, create, create_with_frame, define_class,
+  core_graphics, CGRect, CGPoint, CGSize,
+}
+import ._classes { register, unregister, host_for, B }
+import ._cocoa { ns_color, ns_font }
+import ._menus { build_menu }
+import ._views { MacView }
+
+var _cg = core_graphics.declare('
+  void CGContextSaveGState(void *context);
+  void CGContextRestoreGState(void *context);
+  void CGContextTranslateCTM(void *context, double tx, double ty);
+  void CGContextScaleCTM(void *context, double sx, double sy);
+  void CGContextRotateCTM(void *context, double angle);
+')
+
+/**
+ * A flipped view that its host draws.
+ *
+ * @type Pointer
+ */
+var ZugCanvas = define_class('ZugCanvas', 'NSView', {
+  isFlipped: ['${B}@:', ffi.bool, [], @(this) => true, true],
+  'drawRect:': ['v@:{CGRect=dddd}', ffi.void, [CGRect], @(this, dirty) {
+    var host = host_for(this)
+
+    if host != nil {
+      host.draw()
+    }
+  }],
+})
+
+var _rect_path = typed(ffi.ptr, [CGRect])
+var _rounded_path = typed(ffi.ptr, [CGRect, ffi.double, ffi.double])
+var _point = typed(ffi.void, [CGPoint])
+var _curve = typed(ffi.void, [CGPoint, CGPoint, CGPoint])
+var _arc = typed(
+  ffi.void, [CGPoint, ffi.double, ffi.double, ffi.double, ffi.bool],
+)
+var _dash = typed(ffi.void, [ffi.ptr, ffi.long, ffi.double])
+var _draw_at = typed(ffi.void, [CGPoint])
+var _draw_image = typed(
+  ffi.void, [CGRect, CGRect, ffi.ulong, ffi.double, ffi.bool, ffi.ptr],
+)
+var _attributed = typed(ffi.ptr, [ffi.ptr, ffi.ptr])
+var _set_object = typed(ffi.void, [ffi.ptr, ffi.ptr])
+
+# NSLineCapStyle and NSLineJoinStyle values.
+var _CAPS = { butt: 0, round: 1, square: 2 }
+var _JOINS = { miter: 0, round: 1, bevel: 2 }
+
+def _cg_rect(r) {
+  return rect(r.x, r.y, r.width, r.height)
+}
+
+/**
+ * Draws into the current AppKit graphics context of a canvas.
+ */
+class MacPainter < Painter {
+  var context
+  var _size
+
+  /**
+   * @param Pointer context: the `CGContext` drawn into.
+   * @param Size size
+   * @constructor
+   */
+  @new(context, size: Size) {
+    self.context = context
+    self._size = size
+  }
+
+  size() {
+    return self._size
+  }
+
+  save() {
+    _cg.CGContextSaveGState(self.context)
+  }
+
+  restore() {
+    _cg.CGContextRestoreGState(self.context)
+  }
+
+  translate(dx: number, dy: number) {
+    _cg.CGContextTranslateCTM(self.context, dx, dy)
+  }
+
+  scale(sx: number, sy: number) {
+    _cg.CGContextScaleCTM(self.context, sx, sy)
+  }
+
+  rotate(radians: number) {
+    _cg.CGContextRotateCTM(self.context, radians)
+  }
+
+  clip_rect(r: Rect) {
+    typed(ffi.void, [CGRect])(
+      cls('NSBezierPath'), sel('clipRect:'), _cg_rect(r),
+    )
+  }
+
+  _fill(path, color) {
+    send_void(ns_color(color), 'setFill')
+    send_void(path, 'fill')
+  }
+
+  _stroke(path, paint) {
+    send_void(ns_color(paint.color), 'setStroke')
+    send_void_double(path, 'setLineWidth:', paint.width)
+    send_void_uint(path, 'setLineCapStyle:', _CAPS.get(paint.cap, 0))
+    send_void_uint(path, 'setLineJoinStyle:', _JOINS.get(paint.join, 0))
+
+    if paint.dash != nil and !paint.dash.is_empty() {
+      _dash(
+        path, sel('setLineDash:count:phase:'), paint.dash.map(@(n) => n * 1.0),
+        paint.dash.length(), 0,
+      )
+    }
+
+    send_void(path, 'stroke')
+  }
+
+  _rect(r) {
+    return _rect_path(
+      cls('NSBezierPath'), sel('bezierPathWithRect:'), _cg_rect(r),
+    )
+  }
+
+  _rounded(r, radius) {
+    return _rounded_path(
+      cls('NSBezierPath'), sel('bezierPathWithRoundedRect:xRadius:yRadius:'),
+      _cg_rect(r), radius, radius,
+    )
+  }
+
+  _oval(r) {
+    return _rect_path(
+      cls('NSBezierPath'), sel('bezierPathWithOvalInRect:'), _cg_rect(r),
+    )
+  }
+
+  fill_rect(r: Rect, color) {
+    self._fill(self._rect(r), color)
+  }
+
+  stroke_rect(r: Rect, paint) {
+    self._stroke(self._rect(r), paint)
+  }
+
+  fill_rounded_rect(r: Rect, radius: number, color) {
+    self._fill(self._rounded(r, radius), color)
+  }
+
+  stroke_rounded_rect(r: Rect, radius: number, paint) {
+    self._stroke(self._rounded(r, radius), paint)
+  }
+
+  fill_oval(r: Rect, color) {
+    self._fill(self._oval(r), color)
+  }
+
+  stroke_oval(r: Rect, paint) {
+    self._stroke(self._oval(r), paint)
+  }
+
+  line(from: Point, to: Point, paint) {
+    var path = send(cls('NSBezierPath'), 'bezierPath')
+    _point(path, sel('moveToPoint:'), { x: from.x, y: from.y })
+    _point(path, sel('lineToPoint:'), { x: to.x, y: to.y })
+    self._stroke(path, paint)
+  }
+
+  _build(path) {
+    var native = send(cls('NSBezierPath'), 'bezierPath')
+    var last = { x: 0, y: 0 }
+
+    for command in path.commands {
+      using command[0] {
+        when 'move' {
+          last = { x: command[1], y: command[2] }
+          _point(native, sel('moveToPoint:'), last)
+        }
+        when 'line' {
+          last = { x: command[1], y: command[2] }
+          _point(native, sel('lineToPoint:'), last)
+        }
+        when 'quad' {
+          # A quadratic curve is the cubic whose controls are two thirds of
+          # the way from each end to the quadratic's control.
+          var c = { x: command[1], y: command[2] }
+          var end = { x: command[3], y: command[4] }
+          var c1 = {
+            x: last.x + (c.x - last.x) * 2 / 3,
+            y: last.y + (c.y - last.y) * 2 / 3,
+          }
+          var c2 = {
+            x: end.x + (c.x - end.x) * 2 / 3,
+            y: end.y + (c.y - end.y) * 2 / 3,
+          }
+          _curve(
+            native, sel('curveToPoint:controlPoint1:controlPoint2:'), end, c1,
+            c2,
+          )
+          last = end
+        }
+        when 'cubic' {
+          last = { x: command[5], y: command[6] }
+          _curve(
+            native, sel('curveToPoint:controlPoint1:controlPoint2:'), last,
+            { x: command[1], y: command[2] }, { x: command[3], y: command[4] },
+          )
+        }
+        when 'arc' {
+          var degrees = 180 / math.PI
+          _arc(
+            native,
+            sel('appendBezierPathWithArcWithCenter:radius:startAngle:endAngle:clockwise:'),
+            { x: command[1], y: command[2] }, command[3], command[4] * degrees,
+            command[5] * degrees, false,
+          )
+        }
+        when 'rect' {
+          send_void_id(
+            native, 'appendBezierPath:',
+            self._rect(Rect(command[1], command[2], command[3], command[4])),
+          )
+        }
+        when 'oval' {
+          send_void_id(
+            native, 'appendBezierPath:',
+            self._oval(Rect(command[1], command[2], command[3], command[4])),
+          )
+        }
+        when 'rounded_rect' {
+          send_void_id(
+            native, 'appendBezierPath:',
+            self._rounded(
+              Rect(command[1], command[2], command[3], command[4]), command[5],
+            ),
+          )
+        }
+        when 'close' {
+          send_void(native, 'closePath')
+        }
+      }
+    }
+
+    return native
+  }
+
+  fill_path(path, color) {
+    self._fill(self._build(path), color)
+  }
+
+  stroke_path(path, paint) {
+    self._stroke(self._build(path), paint)
+  }
+
+  _text(text: string, style) {
+    var data = style == nil ? {} : style.to_data()
+    var attributes = send(cls('NSMutableDictionary'), 'dictionary')
+    var font_key = ffi.open().symbol('NSFontAttributeName').read(ffi.ptr)
+    var color_key = ffi
+      .open()
+      .symbol('NSForegroundColorAttributeName')
+      .read(ffi.ptr)
+    _set_object(
+      attributes, sel('setObject:forKey:'), ns_font(data, nil), font_key,
+    )
+    var color = data.get('color')
+    _set_object(
+      attributes, sel('setObject:forKey:'),
+      color == nil ? send(cls('NSColor'), 'labelColor') : ns_color(color),
+      color_key,
+    )
+    var string = _attributed(
+      send(cls('NSAttributedString'), 'alloc'),
+      sel('initWithString:attributes:'), ns_string(text), attributes,
+    )
+    return string
+  }
+
+  text(text: string, at: Point, style) {
+    var string = self._text(text, style)
+    _draw_at(string, sel('drawAtPoint:'), { x: at.x, y: at.y })
+    release(string)
+  }
+
+  measure_text(text: string, style) {
+    var string = self._text(text, style)
+    var size = send_size(string, 'size')
+    release(string)
+    return Size(size.width, size.height)
+  }
+
+  image(source, r: Rect) {
+    var data = source.data
+    var image = nil
+
+    if data.contains('path') {
+      image = typed(ffi.ptr, [ffi.ptr])(
+        send(cls('NSImage'), 'alloc'), sel('initWithContentsOfFile:'),
+        ns_string(data.path),
+      )
+    } else if data.contains('symbol') {
+      image = retain(typed(ffi.ptr, [ffi.ptr, ffi.ptr])(
+        cls('NSImage'),
+        sel('imageWithSystemSymbolName:accessibilityDescription:'),
+        ns_string(data.symbol), nil,
+      ))
+    }
+
+    if image == nil {
+      return
+    }
+
+    # NSCompositingOperationSourceOver, drawn the right way up in a flipped
+    # view.
+    _draw_image(
+      image,
+      sel('drawInRect:fromRect:operation:fraction:respectFlipped:hints:'),
+      _cg_rect(r), rect(0, 0, 0, 0), 2, 1, true, nil,
+    )
+    release(image)
+  }
+}
+
+/**
+ * A canvas.
+ */
+class MacCanvas < MacView {
+  var _size
+
+  @new(backend, props: dict, dispatch: function) {
+    var view = create_with_frame('ZugCanvas', nil)
+    self.setup(backend, 'canvas', view, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    if name == 'repaint' {
+      send_void_bool(self.native, 'setNeedsDisplay:', true)
+    }
+  }
+
+  set_frame(frame) {
+    parent.set_frame(frame)
+
+    if self._size != frame.size() {
+      self._size = frame.size()
+      send_void_bool(self.native, 'setNeedsDisplay:', true)
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  /**
+   * Draws through the paint handler.
+   *
+   * @internal
+   */
+  draw() {
+    var context = send(
+      send(cls('NSGraphicsContext'), 'currentContext'), 'CGContext',
+    )
+    var bounds = send_rect(self.native, 'bounds')
+    var size = Size(bounds.size.width, bounds.size.height)
+    var painter = MacPainter(context, size)
+    self.query('paint', { painter, size })
+  }
+}
+
+# Modifier flags to the names zug uses.
+def _modifiers(event) {
+  var flags = send_uint(event, 'modifierFlags')
+  var names = []
+
+  if flags & (1 << 20) != 0 {
+    names.append('cmd')
+  }
+
+  if flags & (1 << 17) != 0 {
+    names.append('shift')
+  }
+
+  if flags & (1 << 19) != 0 {
+    names.append('alt')
+  }
+
+  if flags & (1 << 18) != 0 {
+    names.append('ctrl')
+  }
+
+  return names
+}
+
+def _pointer_event(this, event, name: string) {
+  var host = host_for(this)
+
+  if host != nil {
+    host.pointer(name, event)
+  }
+}
+
+var _NSView = cls('NSView')
+
+/**
+ * A flipped, transparent container that reports pointer input to its
+ * host.
+ *
+ * @type Pointer
+ */
+var ZugPointer = define_class('ZugPointer', 'NSView', {
+  isFlipped: ['${B}@:', ffi.bool, [], @(this) => true, true],
+  'acceptsFirstMouse:': [
+    '${B}@:@', ffi.bool, [ffi.ptr], @(this, event) => true, true,
+  ],
+  'mouseDown:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'down'),
+  ],
+  'mouseDragged:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'dragged'),
+  ],
+  'mouseUp:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'up'),
+  ],
+  'rightMouseDown:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
+    var host = host_for(this)
+
+    if host != nil and host.props.get('menu') != nil {
+      typed_super(
+        ffi.void, [ffi.ptr],
+      )(super_of(this, _NSView), sel('rightMouseDown:'), event)
+    } else {
+      _pointer_event(this, event, 'right')
+    }
+  }],
+  'mouseEntered:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'entered'),
+  ],
+  'mouseExited:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'exited'),
+  ],
+  'mouseMoved:': [
+    'v@:@', ffi.void, [ffi.ptr],
+    @(this, event) => _pointer_event(this, event, 'moved'),
+  ],
+  'scrollWheel:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
+    var host = host_for(this)
+
+    if host != nil and host.wants('scroll') {
+      host.pointer('scroll', event)
+    } else {
+      typed_super(
+        ffi.void, [ffi.ptr],
+      )(super_of(this, _NSView), sel('scrollWheel:'), event)
+    }
+  }],
+  updateTrackingAreas: ['v@:', ffi.void, [], @(this) {
+    var host = host_for(this)
+
+    if host != nil {
+      host.track()
+    }
+
+    typed_super(
+      ffi.void, [],
+    )(super_of(this, _NSView), sel('updateTrackingAreas'))
+  }],
+  resetCursorRects: ['v@:', ffi.void, [], @(this) {
+    var host = host_for(this)
+
+    if host != nil {
+      host.cursor_rects()
+    }
+  }],
+  'zugContextMenu:': ['v@:@', ffi.void, [ffi.ptr], @(this, item) {
+    var host = host_for(this)
+
+    if host != nil {
+      host.menu_chosen(item)
+    }
+  }],
+})
+
+# NSCursor class methods for each Cursor value.
+var _CURSORS = {
+  arrow: 'arrowCursor',
+  pointing_hand: 'pointingHandCursor',
+  text: 'IBeamCursor',
+  crosshair: 'crosshairCursor',
+  open_hand: 'openHandCursor',
+  closed_hand: 'closedHandCursor',
+  resize_left_right: 'resizeLeftRightCursor',
+  resize_up_down: 'resizeUpDownCursor',
+  not_allowed: 'operationNotAllowedCursor',
+}
+
+var _location = typed(CGPoint, [])
+var _convert = typed(CGPoint, [CGPoint, ffi.ptr])
+var _add_cursor_rect = typed(ffi.void, [CGRect, ffi.ptr])
+
+/**
+ * A pointer area.
+ */
+class MacPointer < MacView {
+  var tracking
+  var menu
+  var menu_ids = {}
+  var _start
+  var _last
+  var _dragging = false
+
+  @new(backend, props: dict, dispatch: function) {
+    var view = create_with_frame('ZugPointer', nil)
+    self.setup(backend, 'pointer', view, props, dispatch)
+  }
+
+  apply(name: string, value) {
+    using name {
+      when 'cursor' {
+        var window = send(self.native, 'window')
+
+        if window != nil {
+          send_void_id(window, 'invalidateCursorRectsForView:', self.native)
+        }
+      }
+      when 'hover' {
+        self.track()
+      }
+      when 'menu' {
+        release(self.menu)
+        self.menu = nil
+        self.menu_ids = {}
+
+        if value != nil {
+          self.menu = build_menu(
+            value, self.native, self.menu_ids, 'zugContextMenu:',
+          )
+        }
+
+        send_void_id(self.native, 'setMenu:', self.menu)
+      }
+    }
+  }
+
+  measure(constraints: Constraints) {
+    return Size.ZERO
+  }
+
+  baseline() {
+    return nil
+  }
+
+  /**
+   * Whether zug handles `event` for this area.
+   *
+   * @internal
+   * @param string event
+   * @returns bool
+   */
+  wants(event: string) {
+    return event == 'scroll' and self.props.get('scrolls', false) == true
+  }
+
+  /**
+   * Sets up hover tracking when hover events are wanted.
+   *
+   * @internal
+   */
+  track() {
+    if self.tracking != nil {
+      send_void_id(self.native, 'removeTrackingArea:', self.tracking)
+      release(self.tracking)
+      self.tracking = nil
+    }
+
+    if !self.props.get('hover', false) {
+      return
+    }
+
+    # MouseEnteredAndExited, MouseMoved, ActiveAlways and InVisibleRect.
+    var options = 0x01 | 0x02 | 0x80 | 0x200
+    var make = typed(ffi.ptr, [CGRect, ffi.ulong, ffi.ptr, ffi.ptr])
+    self.tracking = make(
+      send(cls('NSTrackingArea'), 'alloc'),
+      sel('initWithRect:options:owner:userInfo:'), rect(0, 0, 0, 0), options,
+      self.native, nil,
+    )
+    send_void_id(self.native, 'addTrackingArea:', self.tracking)
+  }
+
+  /**
+   * Gives the area its cursor.
+   *
+   * @internal
+   */
+  cursor_rects() {
+    var name = self.props.get('cursor')
+
+    if name == nil {
+      return
+    }
+
+    var cursor = send(cls('NSCursor'), _CURSORS.get(name, 'arrowCursor'))
+    _add_cursor_rect(
+      self.native, sel('addCursorRect:cursor:'),
+      send_rect(self.native, 'bounds'), cursor,
+    )
+  }
+
+  /**
+   * A context menu item was chosen.
+   *
+   * @internal
+   * @param Pointer item
+   */
+  menu_chosen(item) {
+    var id = self.menu_ids.get(item.address())
+
+    if id != nil {
+      self.fire('menu_selected', { id })
+    }
+  }
+
+  _where(event) {
+    var window_point = _location(event, sel('locationInWindow'))
+    var local = _convert(
+      self.native, sel('convertPoint:fromView:'), window_point, nil,
+    )
+    return local
+  }
+
+  /**
+   * Turns one native mouse event into zug's events.
+   *
+   * @internal
+   * @param string what
+   * @param Pointer event
+   */
+  pointer(what: string, event) {
+    var at = self._where(event)
+    var modifiers = _modifiers(event)
+
+    using what {
+      when 'down' {
+        self._start = at
+        self._last = at
+        self._dragging = false
+      }
+      when 'dragged' {
+        if self._start == nil {
+          return
+        }
+
+        var total_x = at.x - self._start.x
+        var total_y = at.y - self._start.y
+
+        if !self._dragging and (total_x * total_x + total_y * total_y) > 9 {
+          self._dragging = true
+          self.fire(
+            'drag_start', { x: self._start.x, y: self._start.y, modifiers },
+          )
+        }
+
+        if self._dragging {
+          self.fire(
+            'drag',
+            {
+              x: at.x,
+              y: at.y,
+              dx: at.x - self._last.x,
+              dy: at.y - self._last.y,
+              tx: total_x,
+              ty: total_y,
+              modifiers,
+            },
+          )
+        }
+
+        self._last = at
+      }
+      when 'up' {
+        if self._dragging {
+          self.fire(
+            'drag_end',
+            {
+              x: at.x,
+              y: at.y,
+              tx: at.x - self._start.x,
+              ty: at.y - self._start.y,
+              modifiers,
+            },
+          )
+        } else {
+          var clicks = send_int(event, 'clickCount')
+          self.fire(
+            clicks == 2 ? 'double_tap' : 'tap',
+            { x: at.x, y: at.y, clicks, modifiers },
+          )
+        }
+
+        self._start = nil
+        self._dragging = false
+      }
+      when 'right' {
+        self.fire('secondary_tap', { x: at.x, y: at.y, modifiers })
+      }
+      when 'entered' {
+        self.fire('enter', nil)
+      }
+      when 'exited' {
+        self.fire('exit', nil)
+      }
+      when 'moved' {
+        self.fire('hover', { x: at.x, y: at.y, modifiers })
+      }
+      when 'scroll' {
+        self.fire(
+          'scroll',
+          {
+            x: at.x,
+            y: at.y,
+            dx: send_double(event, 'scrollingDeltaX'),
+            dy: send_double(event, 'scrollingDeltaY'),
+            modifiers,
+          },
+        )
+      }
+    }
+  }
+
+  before_destroy() {
+    if self.tracking != nil {
+      send_void_id(self.native, 'removeTrackingArea:', self.tracking)
+      release(self.tracking)
+    }
+
+    send_void_id(self.native, 'setMenu:', nil)
+    release(self.menu)
+  }
+}

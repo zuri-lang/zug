@@ -1,0 +1,269 @@
+# Tests of the macOS backend against real AppKit views. They open windows
+# and take keyboard focus, so they run only when ZUG_MACOS_TESTS is 1:
+#
+#     ZUG_MACOS_TESTS=1 zuri test macos.test.zu
+
+import test { * }
+
+import os
+import ffi
+import ..app { * }
+
+var enabled = os.platform == 'macos' and os.get_env('ZUG_MACOS_TESTS') == '1'
+var suite = enabled ? describe : describe_skip
+
+var _objc = ffi.open('/usr/lib/libobjc.A.dylib')
+var _sel = _objc.function('sel_registerName', ffi.ptr, [ffi.string])
+var _send = _objc.function('objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr])
+var _send_void_id = _objc.function(
+  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr],
+)
+var _send_long = _objc.function('objc_msgSend', ffi.long, [ffi.ptr, ffi.ptr])
+var _utf8 = _objc.function('objc_msgSend', ffi.string, [ffi.ptr, ffi.ptr])
+var _class = _objc.function('objc_getClass', ffi.ptr, [ffi.string])
+var _send_long_arg = _objc.function(
+  'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long],
+)
+var _send_string_arg = _objc.function(
+  'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.string],
+)
+var _select_rows = _objc.function(
+  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.bool],
+)
+
+# Selects one row of a native table as a click does.
+def select_row(table, row) {
+  var indexes = _send_long_arg(
+    _class('NSIndexSet'), _sel('indexSetWithIndex:'), row,
+  )
+  _select_rows(
+    table, _sel('selectRowIndexes:byExtendingSelection:'), indexes, false,
+  )
+}
+
+# Types `text` into a native text view at its cursor.
+def type_into(text_view, text) {
+  var string = _send_string_arg(
+    _class('NSString'), _sel('stringWithUTF8String:'), text,
+  )
+  _send_void_id(text_view, _sel('insertText:'), string)
+}
+
+def native_string(object, name) {
+  return _utf8(_send(object, _sel(name)), _sel('UTF8String'))
+}
+
+def click(native) {
+  _send_void_id(native, _sel('performClick:'), nil)
+}
+
+# The views of `kind` in the running application, in tree order.
+def hosts(runtime, kind) {
+  var found = []
+  runtime.root.render_object.visit(@(node) {
+    if node.is_host() and node.kind == kind {
+      found.append(node)
+    }
+  })
+  return found
+}
+
+# What zug reported while the last run_steps() ran, as
+# `context: message` lines. An error in an AppKit callback is reported
+# rather than raised, so a test must look here to see it.
+var reported = []
+
+# Runs `widget` as an application, calls each step in turn on a timer
+# with the runtime, and quits after the last. Returns the backend.
+def run_steps(widget, steps: list) {
+  var backend = create_backend('macos')
+  var runtime = Runtime(backend)
+  var at = 0.5
+  reported.clear()
+  set_error_handler(@(error, context) {
+    reported.append('${context}: ${error.message}')
+  })
+
+  for step in steps {
+    var fn = step
+    backend.start_timer(at, false, @{
+      fn(runtime)
+    })
+    at += 0.3
+  }
+
+  backend.start_timer(at, false, @{
+    runtime.quit()
+  })
+
+  catch {
+    runtime.run(widget)
+  } as error {
+    set_error_handler(nil)
+    raise error
+  }
+
+  set_error_handler(nil)
+  return backend
+}
+
+class Probe < StatefulWidget {
+  create_state() {
+    return ProbeState()
+  }
+}
+
+class ProbeState < State {
+  var count = 0
+
+  build(context) {
+    return Padding(EdgeInsets.all(10), Column([
+      Text('count ${self.count}'),
+      Button('Press', { on_pressed: @{
+        self.set_state(@{
+          self.count++
+        })
+      } }),
+      Checkbox(false, { label: 'Never', on_changed: @(value) {} }),
+      Box({ width: 50, height: 20, color: Color.RED }),
+    ], { spacing: 8, align_items: AlignItems.START }))
+  }
+}
+
+class Editor < StatefulWidget {
+  create_state() {
+    return EditorState()
+  }
+}
+
+# The selections the editor's table reported, and its notes.
+var editor_selections = []
+var editor_notes = TextController('one')
+
+class EditorState < State {
+  var selected = [0]
+
+  build(context) {
+    return Column([
+      Expanded(DataTable(
+        [DataColumn('name', 'Name')], 4, @(row, column) => 'row ${row}', {
+          selected: self.selected,
+          on_selection_changed: @(rows) {
+            editor_selections.append(rows)
+            self.set_state(@{
+              self.selected = rows
+            })
+          },
+        },
+      )),
+      Expanded(TextArea({ controller: editor_notes })),
+    ])
+  }
+}
+
+suite('the macOS backend', @{
+  it(
+    'creates native views, routes their actions, and undoes refused changes', @{
+      var seen = {}
+
+      var backend = run_steps(
+        App({
+          title: 'Probe',
+          windows: [Window('Probe', Probe(), { size: Size(300, 200) })],
+        }),
+        [
+          @(runtime) {
+            var window = runtime.windows()[0]
+            seen['visible'] = _objc.function(
+              'objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr],
+            )(window.view.native, _sel('isVisible'))
+            seen['content'] = window.view.content_size()
+            var button = hosts(runtime, 'button')[0]
+            seen['title'] = native_string(button.view.native, 'title')
+            seen['button_frame'] = button.view.native == nil ? nil : button.size
+            click(button.view.native)
+          },
+          @(runtime) {
+            seen['text'] = native_string(
+              hosts(runtime, 'text')[0].view.native, 'stringValue',
+            )
+            click(hosts(runtime, 'checkbox')[0].view.native)
+          },
+          @(runtime) {
+            seen['checkbox_state'] = _send_long(
+              hosts(runtime, 'checkbox')[0].view.native, _sel('state'),
+            )
+            seen['live'] = runtime.backend.live_objects()
+          },
+        ],
+      )
+
+      expect(reported).to_be_empty()
+      expect(seen.visible).to_be_true()
+      expect(seen.content).to_equal(Size(300, 200))
+      expect(seen.title).to_be('Press')
+      expect(seen.text).to_be('count 1')
+      expect(seen.checkbox_state).to_be(0)
+      expect(seen.live > 0).to_be_true()
+      expect(backend.live_objects()).to_be(0)
+    },
+  )
+
+  it('lays native views out where zug placed them', @{
+    var frames = []
+    var _frame_type = ffi
+      .struct('R')
+      .add_field('x', ffi.double)
+      .add_field('y', ffi.double)
+      .add_field('w', ffi.double)
+      .add_field('h', ffi.double)
+    var native_frame = _objc.function(
+      'objc_msgSend', _frame_type, [ffi.ptr, ffi.ptr],
+    )
+
+    run_steps(App({ windows: [Window('Layout', Padding(EdgeInsets.all(20), Row([
+      Box({ width: 40, height: 30, color: Color.RED }),
+      Expanded(Box({ height: 30, color: Color.BLUE })),
+    ], {
+      spacing: 10,
+      align_items: AlignItems.START,
+    })), { size: Size(200, 100) })] }), [
+      @(runtime) {
+        for host in hosts(runtime, 'box') {
+          var frame = native_frame(host.view.native, _sel('frame'))
+          frames.append(Rect(frame.x, frame.y, frame.w, frame.h))
+        }
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(frames).to_equal([Rect(20, 20, 40, 30), Rect(70, 20, 110, 30)])
+  })
+
+  it('keeps what the user selects and types once the application accepts it', @{
+    var seen = {}
+
+    run_steps(
+      App({ windows: [Window('Editor', Editor(), { size: Size(300, 300) })] }),
+      [
+        @(runtime) {
+          select_row(hosts(runtime, 'table')[0].view.table, 2)
+          type_into(hosts(runtime, 'text_area')[0].view.text_view, ' two')
+        },
+        @(runtime) {
+          var table = hosts(runtime, 'table')[0].view.table
+          seen['row'] = _send_long(table, _sel('selectedRow'))
+          seen['text'] = native_string(
+            hosts(runtime, 'text_area')[0].view.text_view, 'string',
+          )
+        },
+      ],
+    )
+
+    expect(reported).to_be_empty()
+    expect(editor_selections).to_equal([[2]])
+    expect(seen.row).to_be(2)
+    expect(editor_notes.text()).to_be('one two')
+    expect(seen.text).to_be('one two')
+  })
+})

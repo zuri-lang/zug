@@ -1,0 +1,831 @@
+/**
+ * Containers with native behaviour of their own: scrolling, tabs, split
+ * panes, tables of data, and translucent backgrounds.
+ *
+ * ```zuri
+ * import zug { * }
+ *
+ * var tabs = TabView([
+ *   Tab('General', Text('General settings')),
+ *   Tab('Advanced', Text('Advanced settings')),
+ * ], 0, { on_changed: @(index) { echo index } })
+ *
+ * var rows = ListView.builder(1000, @(context, index) => Text('Row ${index}'), { item_extent: 24 })
+ * ```
+ */
+
+import ..foundation {
+  Key, Point, Size, Color, Observable, EdgeInsets, ValueKey, check_options,
+}
+import ..rendering {
+  RenderScroll, RenderSlotted, RenderHostProxy, RenderHost, Axis, check_axis,
+}
+import .framework { Widget, StatelessWidget, StatefulWidget, State }
+import .host {
+  HostWidget, SingleChildHostWidget, MultiChildHostWidget, host_options,
+  common_props,
+}
+import .basic { Column, Row, Padding, Box, Stack, Positioned, Responsive }
+
+/**
+ * Follows and moves the position of a scroll view.
+ */
+class ScrollController < Observable {
+  var _offset
+  var _request
+  var _requests = 0
+
+  @new() {
+    self._offset = Point.ZERO
+  }
+
+  /**
+   * How far the view is scrolled: the point of the content shown at its
+   * top left.
+   *
+   * @returns Point
+   */
+  offset() {
+    return self._offset
+  }
+
+  /**
+   * Scrolls so the content at `x`, `y` is at the view's top left.
+   *
+   * @param number x
+   * @param number y
+   * @returns ScrollController this same instance
+   */
+  scroll_to(x: number, y: number) {
+    self._requests++
+    self._request = [x, y, self._requests]
+    self.notify()
+    return self
+  }
+
+  /**
+   * The latest request, for the view to carry out.
+   *
+   * @internal
+   * @returns ?list
+   */
+  request() {
+    return self._request
+  }
+
+  /**
+   * Takes the position the view reports.
+   *
+   * @internal
+   * @param Point offset
+   */
+  update_from_view(offset: Point) {
+    if offset != self._offset {
+      self._offset = offset
+      self.notify()
+    }
+  }
+}
+
+var _AXES = ['vertical', 'horizontal', 'both']
+
+/**
+ * The native scroll view.
+ *
+ * @internal
+ */
+class ScrollHost < SingleChildHostWidget {
+  var axis = 'vertical'
+  var bordered = false
+  var background
+  var request
+  var on_scroll
+
+  @new(
+    child: Widget, axis: string, bordered: bool, background, request, on_scroll,
+    common: dict,
+  ) {
+    self.child = child
+    self.axis = axis
+    self.bordered = bordered
+    self.background = background
+    self.request = request
+    self.on_scroll = on_scroll
+    self.common = common
+  }
+
+  kind() {
+    return 'scroll'
+  }
+
+  props(context) {
+    return {
+      axis: self.axis,
+      bordered: self.bordered,
+      background: self.background,
+      scroll_to: self.request,
+    }
+  }
+
+  handlers() {
+    var on_scroll = self.on_scroll
+    return {
+      scrolled: @(payload) => on_scroll == nil
+        ? nil
+        : on_scroll(Point(payload.x, payload.y)),
+    }
+  }
+
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    return RenderScroll(props, handlers)
+  }
+}
+
+/**
+ * Scrolls its child when it does not fit. It fills the space it is
+ * given; in a column, put it in `Expanded`.
+ */
+class ScrollView < StatefulWidget {
+  var child
+  var options = {}
+
+  /**
+   * @param Widget child
+   * @param ?dict options: `axis` (`vertical`, `horizontal` or `both`;
+   *    vertical when left out), `controller`, `on_scroll` (called with
+   *    the offset as a `Point`), `bordered`, `background` and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(child: Widget, options: ?dict) {
+    var o = check_options(
+      options, 'ScrollView',
+      host_options({
+        axis: 'string',
+        controller: ScrollController,
+        on_scroll: 'function',
+        bordered: 'bool',
+        background: Color,
+      }),
+    )
+
+    if !_AXES.contains(o.get('axis', 'vertical')) {
+      raise ValueError("axis of ScrollView must be 'vertical', 'horizontal' or 'both', got '${o.get('axis')}'")
+    }
+
+    self.key = o.get('key')
+    self.child = child
+    self.options = o
+  }
+
+  create_state() {
+    return ScrollViewState()
+  }
+}
+
+/**
+ * @internal
+ */
+class ScrollViewState < State {
+  var _listener
+
+  init_state() {
+    self._listener = @{
+      if self.mounted() {
+        self.set_state()
+      }
+    }
+
+    var controller = self.widget.options.get('controller')
+
+    if controller != nil {
+      controller.add_listener(self._listener)
+    }
+  }
+
+  did_update_widget(previous) {
+    var before = previous.options.get('controller')
+    var after = self.widget.options.get('controller')
+
+    if before != after {
+      if before != nil {
+        before.remove_listener(self._listener)
+      }
+
+      if after != nil {
+        after.add_listener(self._listener)
+      }
+    }
+  }
+
+  dispose() {
+    var controller = self.widget.options.get('controller')
+
+    if controller != nil and !controller.is_disposed() {
+      controller.remove_listener(self._listener)
+    }
+  }
+
+  build(context) {
+    var o = self.widget.options
+    var controller = o.get('controller')
+    var on_scroll = o.get('on_scroll')
+
+    return ScrollHost(
+      self.widget.child,
+      o.get('axis', 'vertical'),
+      o.get('bordered', false),
+      o.get('background'),
+      controller == nil ? nil : controller.request(),
+      @(offset) {
+        if controller != nil {
+          controller.update_from_view(offset)
+        }
+
+        if on_scroll != nil {
+          on_scroll(offset)
+        }
+      },
+      common_props(o),
+    )
+  }
+}
+
+/**
+ * A scrolling list. `ListView(children)` lays out every child;
+ * `ListView.builder()` builds only the rows in view, for lists of any
+ * length.
+ */
+class ListView < StatelessWidget {
+  var children = []
+  var options = {}
+
+  /**
+   * @param list children
+   * @param ?dict options: `spacing`, `padding`, `axis` (vertical when left
+   *    out), `controller`, `on_scroll` and `key`.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(
+      options, 'ListView',
+      {
+        key: Key,
+        spacing: 'number',
+        padding: EdgeInsets,
+        axis: 'string',
+        controller: ScrollController,
+        on_scroll: 'function',
+      },
+    )
+    self.key = o.get('key')
+    self.children = children
+    self.options = o
+  }
+
+  /**
+   * A list of `count` rows, each `item_extent` points along the axis, of
+   * which only those in view, and a few either side, are built.
+   *
+   * @param number count
+   * @param function builder: called with the context and a row index;
+   *    returns the row.
+   * @param dict options: `item_extent` (required), `axis`, `controller`,
+   *    `on_scroll`, `overscan` (rows built beyond the view, 4) and `key`.
+   * @returns Widget
+   */
+  static builder(count: number, builder: function, options: dict) {
+    return LazyList(count, builder, options)
+  }
+
+  build(context) {
+    var o = self.options
+    var axis = o.get('axis', 'vertical')
+    var spacing = o.get('spacing', 0)
+    var content = axis == 'horizontal'
+      ? Row(
+        self.children, { spacing, shrink_wrap: true, align_items: 'stretch' },
+      )
+      : Column(
+        self.children, { spacing, shrink_wrap: true, align_items: 'stretch' },
+      )
+
+    if o.get('padding') != nil {
+      content = Padding(o.get('padding'), content)
+    }
+
+    return ScrollView(
+      content,
+      { axis, controller: o.get('controller'), on_scroll: o.get('on_scroll') },
+    )
+  }
+}
+
+/**
+ * The list `ListView.builder()` makes.
+ *
+ * @internal
+ */
+class LazyList < StatefulWidget {
+  var count = 0
+  var builder
+  var options = {}
+
+  @new(count: number, builder: function, options: dict) {
+    var o = check_options(
+      options, 'ListView.builder',
+      {
+        key: Key,
+        item_extent: 'number',
+        axis: 'string',
+        controller: ScrollController,
+        on_scroll: 'function',
+        overscan: 'number',
+      },
+    )
+
+    if o.get('item_extent') == nil or !(o.get('item_extent') > 0) {
+      raise ValueError('ListView.builder needs an item_extent above zero')
+    }
+
+    if !is_int(count) or count < 0 {
+      raise ValueError('ListView.builder needs a whole number of rows, got ${count}')
+    }
+
+    self.key = o.get('key')
+    self.count = count
+    self.builder = builder
+    self.options = o
+  }
+
+  create_state() {
+    return LazyListState()
+  }
+}
+
+/**
+ * @internal
+ */
+class LazyListState < State {
+  var offset = 0
+
+  build(context) {
+    var o = self.widget.options
+    var extent = o.get('item_extent')
+    var horizontal = o.get('axis', 'vertical') == 'horizontal'
+    var overscan = o.get('overscan', 4)
+    var count = self.widget.count
+    var on_scroll = o.get('on_scroll')
+
+    return Responsive(@(inner, constraints) {
+      var viewport = horizontal ? constraints.max_width : constraints.max_height
+
+      if !viewport.is_finite() {
+        viewport = extent * 20
+      }
+
+      var first = ((self.offset / extent).floor() - overscan).max(0)
+      var last = ((self.offset + viewport) / extent).ceil() + overscan
+      last = last.min(count)
+      var rows = []
+
+      iter var i = first; i < last; i++ {
+        var row = self.widget.builder(inner, i)
+
+        if horizontal {
+          rows.append(Positioned(
+            row,
+            {
+              key: ValueKey(i),
+              left: i * extent,
+              top: 0,
+              bottom: 0,
+              width: extent,
+            },
+          ))
+        } else {
+          rows.append(Positioned(
+            row,
+            {
+              key: ValueKey(i),
+              top: i * extent,
+              left: 0,
+              right: 0,
+              height: extent,
+            },
+          ))
+        }
+      }
+
+      var total = count * extent
+      var content = horizontal
+        ? Box({ width: total, child: Stack(rows) })
+        : Box({ height: total, child: Stack(rows) })
+
+      return ScrollView(content, {
+        axis: horizontal ? 'horizontal' : 'vertical',
+        controller: o.get('controller'),
+        on_scroll: @(point) {
+          var next = horizontal ? point.x : point.y
+
+          # Rebuild only when the rows in view change.
+          var moved_top = (next / extent).floor()
+            != (self.offset / extent).floor()
+          var moved_bottom = ((next + viewport) / extent).ceil()
+            != ((self.offset + viewport) / extent).ceil()
+
+          if moved_top or moved_bottom {
+            self.set_state(@{
+              self.offset = next
+            })
+          }
+
+          if on_scroll != nil {
+            on_scroll(point)
+          }
+        },
+      })
+    })
+  }
+}
+
+/**
+ * One tab of a `TabView`.
+ */
+class Tab {
+  var label = ''
+  var child
+
+  /**
+   * @param string label
+   * @param Widget child
+   * @constructor
+   */
+  @new(label: string, child: Widget) {
+    self.label = label
+    self.child = child
+  }
+}
+
+/**
+ * Tabs, each showing its own content. The content of every tab stays in
+ * the tree, so its state survives switching tabs.
+ */
+class TabView < MultiChildHostWidget {
+  var tabs = []
+  var selected = 0
+  var on_changed
+
+  /**
+   * @param list tabs: `Tab`s.
+   * @param number selected: the index of the tab shown.
+   * @param ?dict options: `on_changed` (called with the index chosen) and
+   *    the options every host widget takes.
+   * @constructor
+   */
+  @new(tabs: list, selected: number, options: ?dict) {
+    var o = check_options(
+      options, 'TabView', host_options({ on_changed: 'function' }),
+    )
+
+    for tab in tabs {
+      if !instance_of(tab, Tab) {
+        raise TypeError('a TabView takes Tabs, got ${typeof(tab)}')
+      }
+    }
+
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.tabs = tabs
+    self.children = tabs.map(@(tab) => tab.child)
+    self.selected = selected
+    self.on_changed = o.get('on_changed')
+  }
+
+  kind() {
+    return 'tabs'
+  }
+
+  props(context) {
+    return { tabs: self.tabs.map(@(tab) => tab.label), selected: self.selected }
+  }
+
+  handlers() {
+    var on_changed = self.on_changed
+    return {
+      changed: @(payload) => on_changed == nil
+        ? nil
+        : on_changed(payload.selected),
+    }
+  }
+
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    return RenderSlotted(kind, props, handlers)
+  }
+}
+
+/**
+ * How the dividers of a `SplitView` look.
+ */
+class SplitDivider {
+  static var THIN = 'thin'
+  static var THICK = 'thick'
+  static var PANE = 'pane'
+}
+
+/**
+ * Panes side by side, or one above another, with dividers the user can
+ * drag. A horizontal split puts panes side by side.
+ */
+class SplitView < MultiChildHostWidget {
+  var axis = 'horizontal'
+  var divider = 'thin'
+  var initial
+  var on_resize
+
+  /**
+   * @param list children: the panes.
+   * @param ?dict options: `axis` (horizontal when left out), `divider`
+   *    (see `SplitDivider`), `initial` sizes of the panes along the axis,
+   *    `on_resize` (called with the list of pane sizes) and the options
+   *    every host widget takes.
+   * @constructor
+   */
+  @new(children: list, options: ?dict) {
+    var o = check_options(
+      options, 'SplitView',
+      host_options({
+        axis: 'string',
+        divider: 'string',
+        initial: 'list',
+        on_resize: 'function',
+      }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.children = children
+    self.axis = o.get('axis', Axis.HORIZONTAL)
+    self.divider = o.get('divider', 'thin')
+    self.initial = o.get('initial')
+    self.on_resize = o.get('on_resize')
+    check_axis(self.axis, 'SplitView')
+  }
+
+  kind() {
+    return 'split'
+  }
+
+  props(context) {
+    return {
+      axis: self.axis,
+      divider: self.divider,
+      panes: self.children.length(),
+      initial: self.initial,
+    }
+  }
+
+  handlers() {
+    var on_resize = self.on_resize
+    return {
+      resized: @(payload) => on_resize == nil ? nil : on_resize(payload.sizes),
+    }
+  }
+
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    return RenderSlotted(kind, props, handlers)
+  }
+}
+
+/**
+ * One column of a `DataTable`.
+ */
+class DataColumn {
+  var id = ''
+  var title = ''
+  var width
+  var min_width
+  var max_width
+  var align = 'start'
+  var sortable = false
+
+  /**
+   * @param string id: what the table's `cell` function is given.
+   * @param string title
+   * @param ?dict options: `width`, `min_width`, `max_width`, `align` (see
+   *    `TextAlign`) and `sortable`.
+   * @constructor
+   */
+  @new(id: string, title: string, options: ?dict) {
+    var o = check_options(
+      options, 'DataColumn',
+      {
+        width: 'number',
+        min_width: 'number',
+        max_width: 'number',
+        align: 'string',
+        sortable: 'bool',
+      },
+    )
+    self.id = id
+    self.title = title
+    self.width = o.get('width')
+    self.min_width = o.get('min_width')
+    self.max_width = o.get('max_width')
+    self.align = o.get('align', 'start')
+    self.sortable = o.get('sortable', false)
+  }
+
+  /**
+   * The column as plain data.
+   *
+   * @returns dict
+   */
+  to_data() {
+    return {
+      id: self.id,
+      title: self.title,
+      width: self.width,
+      min_width: self.min_width,
+      max_width: self.max_width,
+      align: self.align,
+      sortable: self.sortable,
+    }
+  }
+}
+
+/**
+ * How many rows of a `DataTable` may be selected.
+ */
+class Selection {
+  static var NONE = 'none'
+  static var SINGLE = 'single'
+  static var MULTIPLE = 'multiple'
+}
+
+var _table_versions = 0
+
+/**
+ * A table of text in rows and columns, with a header, selection and
+ * sorting. Only the rows in view are asked for, so a table may have any
+ * number of rows.
+ *
+ * ```zuri
+ * import zug { DataTable, DataColumn }
+ *
+ * var people = [['Ada', 36], ['Alan', 41]]
+ * var table = DataTable([DataColumn('name', 'Name'), DataColumn('age', 'Age', { align: 'end' })], people.length(), @(row, column) {
+ *   return column == 'name' ? people[row][0] : '${people[row][1]}'
+ * })
+ * ```
+ */
+class DataTable < HostWidget {
+  var columns = []
+  var row_count = 0
+  var cell
+  var options = {}
+  var version = 0
+
+  /**
+   * @param list columns: `DataColumn`s.
+   * @param number row_count
+   * @param function cell: called with a row index and a column id;
+   *    returns the text of that cell.
+   * @param ?dict options: `selection` (see `Selection`; single when left
+   *    out), `selected` (a list of row indices), `on_selection_changed`
+   *    (called with that list), `on_activate` (called with a row when it
+   *    is double-clicked or Return is pressed on it), `sort` (`[column id,
+   *    ascending]`, shown in the header), `on_sort` (called with a column
+   *    id and whether ascending), `alternating`, `grid`, `header` and the
+   *    options every host widget takes.
+   * @constructor
+   */
+  @new(columns: list, row_count: number, cell: function, options: ?dict) {
+    var o = check_options(options, 'DataTable', host_options({
+      selection: 'string',
+      selected: 'list',
+      on_selection_changed: 'function',
+      on_activate: 'function',
+      sort: 'list',
+      on_sort: 'function',
+      alternating: 'bool',
+      grid: 'bool',
+      header: 'bool',
+    }))
+
+    for column in columns {
+      if !instance_of(column, DataColumn) {
+        raise TypeError('a DataTable takes DataColumns, got ${typeof(column)}')
+      }
+    }
+
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.columns = columns
+    self.row_count = row_count
+    self.cell = cell
+    self.options = o
+
+    # Every new table widget may carry new data, so the view reloads.
+    _table_versions++
+    self.version = _table_versions
+  }
+
+  kind() {
+    return 'table'
+  }
+
+  props(context) {
+    var o = self.options
+    var sort = o.get('sort')
+    return {
+      columns: self.columns.map(@(column) => column.to_data()),
+      row_count: self.row_count,
+      selection: o.get('selection', 'single'),
+      selected: o.get('selected', []),
+      alternating: o.get('alternating', true),
+      grid: o.get('grid', false),
+      header: o.get('header', true),
+      sort: sort == nil ? nil : { column: sort[0], ascending: sort[1] },
+      version: self.version,
+    }
+  }
+
+  handlers() {
+    var cell = self.cell
+    var count = self.row_count
+    var o = self.options
+    var on_selection_changed = o.get('on_selection_changed')
+    var on_activate = o.get('on_activate')
+    var on_sort = o.get('on_sort')
+
+    return {
+      cell: @(payload) {
+        if payload.row < 0 or payload.row >= count {
+          return ''
+        }
+
+        var text = cell(payload.row, payload.column)
+        return text == nil ? '' : '${text}'
+      },
+      changed: @(payload) => on_selection_changed == nil
+        ? nil
+        : on_selection_changed(payload.selected),
+      activated: @(payload) => on_activate == nil
+        ? nil
+        : on_activate(payload.row),
+      sorted: @(payload) => on_sort == nil
+        ? nil
+        : on_sort(payload.column, payload.ascending),
+    }
+  }
+}
+
+/**
+ * The translucent materials of `VisualEffect`.
+ */
+class Material {
+  static var SIDEBAR = 'sidebar'
+  static var HEADER = 'header'
+  static var CONTENT = 'content'
+  static var WINDOW = 'window'
+  static var MENU = 'menu'
+  static var POPOVER = 'popover'
+  static var HUD = 'hud'
+  static var UNDER_WINDOW = 'under_window'
+}
+
+/**
+ * A translucent background of a system material, such as a sidebar's.
+ * On a platform without such materials it is a plain container.
+ */
+class VisualEffect < SingleChildHostWidget {
+  var material = 'sidebar'
+  var blending = 'behind'
+
+  /**
+   * @param ?Widget child
+   * @param ?dict options: `material` (see `Material`), `blending`
+   *    (`behind` the window or `within` it) and the options every host
+   *    widget takes.
+   * @constructor
+   */
+  @new(child: ?Widget, options: ?dict) {
+    var o = check_options(
+      options, 'VisualEffect',
+      host_options({ material: 'string', blending: 'string' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.child = child
+    self.material = o.get('material', 'sidebar')
+    self.blending = o.get('blending', 'behind')
+  }
+
+  kind() {
+    return 'visual_effect'
+  }
+
+  props(context) {
+    return { material: self.material, blending: self.blending }
+  }
+}

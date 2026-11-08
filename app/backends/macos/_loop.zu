@@ -1,0 +1,198 @@
+/**
+ * The main run loop: an observer that draws frames before the loop
+ * sleeps, and timers.
+ *
+ * Both are added in the common modes, so frames are drawn and timers fire
+ * while a menu is open or a window is being resized, when AppKit runs the
+ * loop in a mode of its own.
+ */
+
+import ffi
+import .. ..foundation { report_error }
+import .. ..backend { TimerHandle }
+import ._runtime { core_foundation, quartz, push_pool, pop_pool }
+
+var _cf = core_foundation.declare('
+  #include <stdbool.h>
+  typedef double CFAbsoluteTime;
+  void *CFRunLoopGetMain(void);
+  void *CFRunLoopObserverCreate(void *allocator, unsigned long activities, bool repeats, long order, void (*callout)(void *observer, unsigned long activity, void *info), void *info);
+  void CFRunLoopAddObserver(void *loop, void *observer, void *mode);
+  void *CFRunLoopTimerCreate(void *allocator, CFAbsoluteTime fire, double interval, unsigned long flags, long order, void (*callout)(void *timer, void *info), void *info);
+  void CFRunLoopAddTimer(void *loop, void *timer, void *mode);
+  void CFRunLoopTimerInvalidate(void *timer);
+  bool CFRunLoopTimerIsValid(void *timer);
+  void CFRunLoopWakeUp(void *loop);
+  void CFRelease(void *object);
+  CFAbsoluteTime CFAbsoluteTimeGetCurrent(void);
+')
+
+var _ca = quartz.declare('double CACurrentMediaTime(void);')
+
+var _common_modes = core_foundation
+  .symbol('kCFRunLoopCommonModes')
+  .read(ffi.ptr)
+var _main = _cf.CFRunLoopGetMain()
+
+# kCFRunLoopBeforeWaiting.
+var _BEFORE_WAITING = 32
+
+var _on_idle = nil
+var _observer_callback = nil
+
+/**
+ * Calls `task` each time the main run loop is about to wait for events,
+ * inside an autorelease pool. Installed once.
+ *
+ * @param function task
+ */
+def on_before_waiting(task: function) {
+  _on_idle = task
+
+  if _observer_callback != nil {
+    return
+  }
+
+  _observer_callback = ffi.callback(@(observer, activity, info) {
+    if _on_idle == nil {
+      return
+    }
+
+    var pool = push_pool()
+
+    catch {
+      _on_idle()
+    } as error {
+      report_error(error, 'drawing before the run loop waits')
+    }
+
+    pop_pool(pool)
+  }, ffi.function_type(ffi.void, [ffi.ptr, ffi.ulong, ffi.ptr]))
+
+  var observer = _cf.CFRunLoopObserverCreate(
+    nil, _BEFORE_WAITING, true, 0, _observer_callback, nil,
+  )
+  _cf.CFRunLoopAddObserver(_main, observer, _common_modes)
+}
+
+/**
+ * Wakes the main run loop if it is waiting.
+ */
+def wake() {
+  _cf.CFRunLoopWakeUp(_main)
+}
+
+/**
+ * Seconds on a clock that only moves forwards.
+ *
+ * @returns number
+ */
+def now() {
+  return _ca.CACurrentMediaTime()
+}
+
+var _timers = {}
+var _timer_callback = nil
+
+def _timer_fired(timer) {
+  var handle = _timers.get(timer.address())
+
+  if handle == nil {
+    return
+  }
+
+  if !handle.repeats {
+    handle.finish()
+  }
+
+  var pool = push_pool()
+
+  catch {
+    handle.task()
+  } as error {
+    report_error(error, 'running a timer')
+  }
+
+  pop_pool(pool)
+
+  if handle.after != nil {
+    handle.after()
+  }
+}
+
+/**
+ * A timer on the main run loop.
+ */
+class MacTimer < TimerHandle {
+
+  /**
+   * @type function
+   */
+  var task
+
+  /**
+   * Called after each firing, so the backend can draw what it changed.
+   *
+   * @type ?function
+   */
+  var after
+
+  /**
+   * @type bool
+   */
+  var repeats = false
+
+  var _timer
+  var _active = true
+
+  /**
+   * @param number seconds
+   * @param bool repeats
+   * @param function task
+   * @param ?function after
+   * @constructor
+   */
+  @new(seconds: number, repeats: bool, task: function, after: ?function) {
+    self.task = task
+    self.after = after
+    self.repeats = repeats
+
+    if _timer_callback == nil {
+      _timer_callback = ffi.callback(@(timer, info) {
+        _timer_fired(timer)
+      }, ffi.function_type(ffi.void, [ffi.ptr, ffi.ptr]))
+    }
+
+    var interval = repeats ? seconds.max(0.001) : 0
+    self._timer = _cf.CFRunLoopTimerCreate(
+      nil, _cf.CFAbsoluteTimeGetCurrent() + seconds, interval, 0, 0,
+      _timer_callback, nil,
+    )
+    _timers[self._timer.address()] = self
+    _cf.CFRunLoopAddTimer(_main, self._timer, _common_modes)
+  }
+
+  /**
+   * Forgets the native timer once it has stopped.
+   *
+   * @internal
+   */
+  finish() {
+    if !self._active {
+      return
+    }
+
+    self._active = false
+    _timers.remove(self._timer.address())
+    _cf.CFRunLoopTimerInvalidate(self._timer)
+    _cf.CFRelease(self._timer)
+  }
+
+  cancel() {
+    self.finish()
+  }
+
+  is_active() {
+    return self._active
+  }
+}

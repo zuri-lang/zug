@@ -1,0 +1,76 @@
+import test { * }
+
+import math
+import ..app.expression { evaluate, ExpressionError }
+
+describe('evaluate', @{
+  it('follows precedence and grouping', @{
+    expect(evaluate('2 + 3 * 4')).to_be(14)
+    expect(evaluate('(2 + 3) * 4')).to_be(20)
+    expect(evaluate('2 * (3 + 4)^2')).to_be(98)
+    expect(evaluate('2^3^2')).to_be(512)
+    expect(evaluate('-2^2')).to_be(-4)
+    expect(evaluate('10 - 4 - 3')).to_be(3)
+  })
+
+  it('reads the calculator symbols, separators and exponents', @{
+    expect(evaluate('6 × 7')).to_be(42)
+    expect(evaluate('8 ÷ 2')).to_be(4)
+    expect(evaluate('1,234 + 1')).to_be(1235)
+    expect(evaluate('1.5e3')).to_be(1500)
+    expect(evaluate('2e-1')).to_be_close_to(0.2)
+  })
+
+  it('takes percentages and factorials', @{
+    expect(evaluate('50%')).to_be(0.5)
+    expect(evaluate('5!')).to_be(120)
+    expect(evaluate('3!!')).to_be(720)
+  })
+
+  it('knows functions and constants', @{
+    expect(evaluate('sin(30)')).to_be_close_to(0.5)
+    expect(evaluate('cos(pi)', 'rad')).to_be_close_to(-1)
+    expect(evaluate('sqrt(16) + abs(-2)')).to_be(6)
+    expect(evaluate('ln(e)')).to_be_close_to(1)
+    expect(evaluate('log(1000)')).to_be_close_to(3)
+    expect(evaluate('π')).to_be(math.PI)
+  })
+
+  it('says what is wrong, and where', @{
+    var cases = {
+      '2 +': 'the expression ends too soon',
+      '2 / 0': 'division by zero',
+      'foo(2)': "there is no function called 'foo'",
+      '(2 + 3': "expected ')'",
+      '2 3': "did not expect '3'",
+      '': 'there is nothing to calculate',
+      'sqrt(-1)': 'the square root of a negative number is not real',
+      '2 $ 3': "'$' is not something a calculator understands",
+    }
+
+    for text, message in cases {
+      var caught = nil
+
+      catch {
+        evaluate(text)
+      } as error {
+        caught = error
+      }
+
+      expect(instance_of(caught, ExpressionError)).to_be_true()
+      expect(caught.message).to_be(message)
+    }
+  })
+
+  it('points at the problem', @{
+    var caught = nil
+
+    catch {
+      evaluate('1 + 2 + foo')
+    } as error {
+      caught = error
+    }
+
+    expect(caught.position).to_be(8)
+  })
+})

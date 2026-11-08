@@ -1,0 +1,247 @@
+/**
+ * What a `Canvas` draws with: how lines look, and shapes made of lines
+ * and curves.
+ *
+ * ```zuri
+ * import zug { Paint, Path, Point, Color, LineCap }
+ *
+ * var outline = Paint({ color: Color.system('label'), width: 2, cap: LineCap.ROUND })
+ * var arrow = Path().move_to(0, 10).line_to(20, 10).line_to(14, 4).move_to(20, 10).line_to(14, 16)
+ * ```
+ */
+
+import ..foundation { Color, Point, Rect, check_options }
+
+/**
+ * How the ends of open lines are drawn.
+ */
+class LineCap {
+  static var BUTT = 'butt'
+  static var ROUND = 'round'
+  static var SQUARE = 'square'
+}
+
+/**
+ * How corners between line segments are drawn.
+ */
+class LineJoin {
+  static var MITER = 'miter'
+  static var ROUND = 'round'
+  static var BEVEL = 'bevel'
+}
+
+/**
+ * How a line is stroked: colour, width, ends, corners and dashes.
+ *
+ * @printable
+ */
+class Paint {
+
+  /**
+   * @type Color
+   */
+  var color
+
+  /**
+   * @type number
+   */
+  var width = 1
+
+  /**
+   * See `LineCap`.
+   *
+   * @type string
+   */
+  var cap = 'butt'
+
+  /**
+   * See `LineJoin`.
+   *
+   * @type string
+   */
+  var join = 'miter'
+
+  /**
+   * Alternating lengths drawn and skipped, or `nil` for a solid line.
+   *
+   * @type ?list
+   */
+  var dash
+
+  /**
+   * @param ?dict options: `color` (the label colour when left out),
+   *    `width` (1), `cap`, `join` and `dash`.
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'Paint',
+      {
+        color: Color,
+        width: 'number',
+        cap: 'string',
+        join: 'string',
+        dash: 'list',
+      },
+    )
+    self.color = o.get('color', Color.system('label'))
+    self.width = o.get('width', 1)
+    self.cap = o.get('cap', 'butt')
+    self.join = o.get('join', 'miter')
+    self.dash = o.get('dash')
+
+    if self.width < 0 {
+      raise ValueError('a Paint width must not be negative, got ${self.width}')
+    }
+  }
+
+  @eq(other) {
+    return instance_of(other, Paint)
+      and self.color == other.color
+      and self.width == other.width
+      and self.cap == other.cap
+      and self.join == other.join
+      and self.dash == other.dash
+  }
+
+  @to_string() {
+    return 'Paint(${self.color}, ${self.width})'
+  }
+}
+
+/**
+ * A shape made of lines and curves, built up one step at a time. Every
+ * method returns the path, so steps chain.
+ */
+class Path {
+
+  /**
+   * The steps, as lists starting with a step name: `move`, `line`,
+   * `quad`, `cubic`, `arc`, `rect`, `oval`, `rounded_rect` or `close`.
+   *
+   * @type list
+   */
+  var commands = []
+
+  /**
+   * Starts a new piece of the shape at `x`, `y`.
+   *
+   * @param number x
+   * @param number y
+   * @returns Path
+   */
+  move_to(x: number, y: number) {
+    self.commands.append(['move', x, y])
+    return self
+  }
+
+  /**
+   * A straight line to `x`, `y`.
+   *
+   * @param number x
+   * @param number y
+   * @returns Path
+   */
+  line_to(x: number, y: number) {
+    self.commands.append(['line', x, y])
+    return self
+  }
+
+  /**
+   * A quadratic curve to `x`, `y`, pulled towards the control point.
+   *
+   * @param number cx
+   * @param number cy
+   * @param number x
+   * @param number y
+   * @returns Path
+   */
+  quad_to(cx: number, cy: number, x: number, y: number) {
+    self.commands.append(['quad', cx, cy, x, y])
+    return self
+  }
+
+  /**
+   * A cubic curve to `x`, `y`, pulled towards two control points.
+   *
+   * @param number c1x
+   * @param number c1y
+   * @param number c2x
+   * @param number c2y
+   * @param number x
+   * @param number y
+   * @returns Path
+   */
+  cubic_to(
+    c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number,
+  ) {
+    self.commands.append(['cubic', c1x, c1y, c2x, c2y, x, y])
+    return self
+  }
+
+  /**
+   * An arc of the circle around `center`, from angle `start` to `end` in
+   * radians, measured clockwise from the positive x axis as the screen
+   * shows it.
+   *
+   * @param Point center
+   * @param number radius
+   * @param number start
+   * @param number end
+   * @returns Path
+   */
+  arc(center: Point, radius: number, start: number, end: number) {
+    self.commands.append(['arc', center.x, center.y, radius, start, end])
+    return self
+  }
+
+  /**
+   * A rectangle as a closed piece of the shape.
+   *
+   * @param Rect rect
+   * @returns Path
+   */
+  add_rect(rect: Rect) {
+    self.commands.append(['rect', rect.x, rect.y, rect.width, rect.height])
+    return self
+  }
+
+  /**
+   * An oval filling `rect` as a closed piece of the shape.
+   *
+   * @param Rect rect
+   * @returns Path
+   */
+  add_oval(rect: Rect) {
+    self.commands.append(['oval', rect.x, rect.y, rect.width, rect.height])
+    return self
+  }
+
+  /**
+   * A rectangle with rounded corners as a closed piece of the shape.
+   *
+   * @param Rect rect
+   * @param number radius
+   * @returns Path
+   */
+  add_rounded_rect(rect: Rect, radius: number) {
+    self.commands.append([
+      'rounded_rect', rect.x, rect.y, rect.width, rect.height, radius,
+    ])
+    return self
+  }
+
+  /**
+   * Closes the current piece with a line back to its start.
+   *
+   * @returns Path
+   */
+  close() {
+    self.commands.append(['close'])
+    return self
+  }
+
+  @eq(other) {
+    return instance_of(other, Path) and self.commands == other.commands
+  }
+}

@@ -1,0 +1,80 @@
+/**
+ * The backends zug knows about, and the choice of one for the running
+ * platform.
+ *
+ * A backend registers a loader rather than an instance, so nothing of a
+ * platform is loaded, or opened, on a platform it does not run on. The
+ * `ZUG_BACKEND` environment variable picks a backend by name, which is how
+ * tests run on the headless backend.
+ *
+ * ```zuri,ignore
+ * register_backend('gtk', @{
+ *   return zuri.import_file(os.join_paths(os.dir_name(__file__), 'gtk', 'index.zu')).create()
+ * }, @() => os.platform == 'linux')
+ * ```
+ */
+
+import os
+import ..foundation { BackendError }
+
+var _entries = []
+
+/**
+ * Makes a backend available.
+ *
+ * @param string name: what `ZUG_BACKEND` and `create_backend()` call it.
+ * @param function loader: returns a new `Backend` when called.
+ * @param function matches: returns whether the backend suits the running
+ *    platform.
+ * @throws ValueError When a backend of that name is already registered
+ */
+def register_backend(name: string, loader: function, matches: function) {
+  for entry in _entries {
+    if entry.name == name {
+      raise ValueError("a backend named '${name}' is already registered")
+    }
+  }
+
+  _entries.append({ name, loader, matches })
+}
+
+/**
+ * The names of every registered backend, in the order they registered.
+ *
+ * @returns list
+ */
+def backend_names() {
+  return _entries.map(@(entry) => entry.name)
+}
+
+/**
+ * Creates a backend: the one named, or else the one `ZUG_BACKEND` names,
+ * or else the first registered one that suits the running platform.
+ *
+ * @param ?string name
+ * @returns Backend
+ * @throws BackendError When no backend has that name or suits the platform
+ */
+def create_backend(name: ?string) {
+  if name == nil {
+    name = os.get_env('ZUG_BACKEND')
+  }
+
+  if name != nil and name != '' {
+    for entry in _entries {
+      if entry.name == name {
+        return entry['loader']()
+      }
+    }
+
+    raise BackendError("there is no backend named '${name}'; the backends are ${', '.join(backend_names())}")
+  }
+
+  for entry in _entries {
+    if entry['matches']() {
+      return entry['loader']()
+    }
+  }
+
+  raise BackendError("no backend suits the platform '${os.platform}'; the backends are ${', '.join(backend_names())}")
+}

@@ -1,0 +1,564 @@
+/**
+ * The contract between zug and a platform.
+ *
+ * Everything zug knows about a platform goes through the classes here. A
+ * backend subclasses `Backend`, `ViewHost` and `WindowHost`, implements
+ * every method, and registers itself with `register_backend()`. Nothing
+ * else in zug refers to a platform, so a new platform needs nothing beyond
+ * its backend.
+ *
+ * The rules every backend follows:
+ *
+ * - Props and event payloads are plain data: numbers, strings, bools,
+ *   lists, dictionaries, and zug's value classes such as `Color`, `Size`
+ *   and `EdgeInsets`. Native objects never cross the contract.
+ * - A view of each kind takes the props `kinds.zu` lists for it, and
+ *   reports the events listed there through the `dispatch` function it was
+ *   created with.
+ * - Coordinates are logical points with the origin at the top left of the
+ *   parent's content area, y growing downwards.
+ * - zug calls a backend only from the thread its `run()` was called on,
+ *   and a backend calls `dispatch` and the delegate only from that thread.
+ * - Layout is zug's. A backend measures views when asked and puts them
+ *   where it is told.
+ */
+
+import ..foundation { Size, EdgeInsets, Rect, Constraints }
+
+/**
+ * The capabilities a backend may report from `capabilities()`. zug
+ * degrades where one is missing: a missing `menu_bar` makes `MenuBar` do
+ * nothing, for one.
+ *
+ * @type list
+ */
+var CAPABILITIES = [
+  'multiple_windows',
+  'menu_bar',
+  'context_menus',
+  'hover',
+  'tooltips',
+  'native_dialogs',
+  'clipboard',
+  'visual_effects',
+  'appearance',
+  'keyboard',
+]
+
+/**
+ * What a backend calls on zug. The runtime implements it.
+ */
+class BackendDelegate {
+
+  /**
+   * Draws a frame: builds what changed, lays it out and commits it to the
+   * backend. Called once after each `Backend.request_frame()`, before the
+   * platform next waits for events.
+   */
+  on_frame() {
+    raise NotImplementedError('on_frame')
+  }
+
+  /**
+   * Called after the backend has called `dispatch` for a native event, so
+   * deferred work can run before the platform waits again.
+   */
+  on_event_handled() {
+    raise NotImplementedError('on_event_handled')
+  }
+
+  /**
+   * The system switched between light and dark.
+   *
+   * @param string appearance: `light` or `dark`.
+   */
+  on_appearance_changed(appearance: string) {
+    raise NotImplementedError('on_appearance_changed')
+  }
+
+  /**
+   * The user or the system asked the application to quit. Returns whether
+   * it may.
+   *
+   * @returns bool
+   */
+  on_quit_requested() {
+    raise NotImplementedError('on_quit_requested')
+  }
+
+  /**
+   * The application was activated with no windows open, such as by a
+   * click on its dock icon.
+   */
+  on_reopen() {
+    raise NotImplementedError('on_reopen')
+  }
+}
+
+/**
+ * A running timer.
+ */
+class TimerHandle {
+
+  /**
+   * Stops the timer. Does nothing when it has already stopped.
+   */
+  cancel() {
+    raise NotImplementedError('cancel')
+  }
+
+  /**
+   * Whether the timer will fire again.
+   *
+   * @returns bool
+   */
+  is_active() {
+    raise NotImplementedError('is_active')
+  }
+}
+
+/**
+ * One native view, of one of the kinds `kinds.zu` describes.
+ *
+ * A view is created with all of its props, then sent only the props that
+ * change. It reports what the user does through the `dispatch` function it
+ * was created with: `dispatch(event, payload)` with an event name from its
+ * kind and a dictionary, or `nil`, as the payload. What `dispatch` returns
+ * answers events that ask a question, such as a table asking for a cell's
+ * text.
+ *
+ * Child views are placed in slots. Most container kinds have one slot,
+ * `nil`. Kinds with several areas, such as tabs, name a slot for each.
+ */
+class ViewHost {
+
+  /**
+   * The kind this view was created as.
+   *
+   * @returns string
+   */
+  kind() {
+    raise NotImplementedError('kind')
+  }
+
+  /**
+   * Applies props that changed. Only the changed props are given.
+   *
+   * @param dict changes: prop names to their new values.
+   */
+  update(changes: dict) {
+    raise NotImplementedError('update')
+  }
+
+  /**
+   * The size the view would like to be within `constraints`, before zug's
+   * sizing rules for its kind apply. Text wraps at the maximum width.
+   *
+   * @param Constraints constraints
+   * @returns Size
+   */
+  measure(constraints: Constraints) {
+    raise NotImplementedError('measure')
+  }
+
+  /**
+   * The distance from the top of the view to the baseline of its first
+   * line of text, at the size `measure()` gave, or `nil` when the view has
+   * no text.
+   *
+   * @returns ?number
+   */
+  baseline() {
+    raise NotImplementedError('baseline')
+  }
+
+  /**
+   * The space a container's own drawing takes around the area where the
+   * children in `slot` go, such as a group box's title.
+   *
+   * @param ?string|number slot
+   * @returns EdgeInsets
+   */
+  content_insets(slot) {
+    raise NotImplementedError('content_insets')
+  }
+
+  /**
+   * Puts the view at `rect`, relative to the content area of the slot it
+   * is in.
+   *
+   * @param Rect rect
+   */
+  set_frame(rect: Rect) {
+    raise NotImplementedError('set_frame')
+  }
+
+  /**
+   * Sets the size of the content area of `slot`. For a scrolling view,
+   * this is the size of what scrolls.
+   *
+   * @param ?string|number slot
+   * @param Size size
+   */
+  set_content_size(slot, size: Size) {
+    raise NotImplementedError('set_content_size')
+  }
+
+  /**
+   * The size of the content area of `slot` when the view is `size`: what
+   * is left of a tab view for its tabs, or a pane of a split view as the
+   * view would divide it.
+   *
+   * @param any slot
+   * @param Size size
+   * @returns Size
+   */
+  slot_size(slot, size: Size) {
+    raise NotImplementedError('slot_size')
+  }
+
+  /**
+   * Makes `child` the subview at `index` within `slot`, moving it there
+   * when it is already a child.
+   *
+   * @param ViewHost child
+   * @param number index
+   * @param ?string|number slot
+   */
+  insert_child(child: ViewHost, index: number, slot) {
+    raise NotImplementedError('insert_child')
+  }
+
+  /**
+   * Takes `child` out of this view. Does nothing when it is not a child.
+   *
+   * @param ViewHost child
+   */
+  remove_child(child: ViewHost) {
+    raise NotImplementedError('remove_child')
+  }
+
+  /**
+   * Gives the view keyboard focus, when its kind can take it.
+   */
+  focus() {
+    raise NotImplementedError('focus')
+  }
+
+  /**
+   * Asks a view that draws its own content, such as a canvas, to draw
+   * again.
+   */
+  invalidate() {
+    raise NotImplementedError('invalidate')
+  }
+
+  /**
+   * Releases the view. It is taken out of its parent if it is still in
+   * one, and must not be used again.
+   */
+  destroy() {
+    raise NotImplementedError('destroy')
+  }
+}
+
+/**
+ * A native window. Its content area is a container with one slot, `nil`.
+ */
+class WindowHost < ViewHost {
+
+  /**
+   * The size of the window's content area.
+   *
+   * @returns Size
+   */
+  content_size() {
+    raise NotImplementedError('content_size')
+  }
+
+  /**
+   * Resizes the content area, as a window sized to its content needs.
+   *
+   * @param Size size
+   */
+  set_content_size_to(size: Size) {
+    raise NotImplementedError('set_content_size_to')
+  }
+
+  /**
+   * Shows the window and brings it to the front.
+   */
+  show() {
+    raise NotImplementedError('show')
+  }
+
+  /**
+   * Closes the window without asking. The host must not be used again.
+   */
+  close() {
+    raise NotImplementedError('close')
+  }
+
+  /**
+   * Takes keyboard focus away from every view in the window, so keys go to
+   * the window itself. A window starts this way.
+   */
+  clear_focus() {
+    raise NotImplementedError('clear_focus')
+  }
+}
+
+/**
+ * A platform.
+ */
+class Backend {
+
+  /**
+   * The platform's name, such as `macos` or `headless`.
+   *
+   * @returns string
+   */
+  name() {
+    raise NotImplementedError('name')
+  }
+
+  /**
+   * The capabilities from `CAPABILITIES` this backend has.
+   *
+   * @returns list
+   */
+  capabilities() {
+    raise NotImplementedError('capabilities')
+  }
+
+  /**
+   * Whether this backend has `capability`.
+   *
+   * @param string capability
+   * @returns bool
+   */
+  has_capability(capability: string) {
+    return self.capabilities().contains(capability)
+  }
+
+  /**
+   * Whether this backend can create views of `kind`.
+   *
+   * @param string kind
+   * @returns bool
+   */
+  supports_kind(kind: string) {
+    raise NotImplementedError('supports_kind')
+  }
+
+  /**
+   * Prepares the platform. Called once, before anything else but `name()`
+   * and `capabilities()`.
+   *
+   * @param BackendDelegate delegate
+   */
+  start(delegate: BackendDelegate) {
+    raise NotImplementedError('start')
+  }
+
+  /**
+   * Runs the platform's event loop until `quit()`.
+   */
+  run() {
+    raise NotImplementedError('run')
+  }
+
+  /**
+   * Ends the event loop, so `run()` returns.
+   */
+  quit() {
+    raise NotImplementedError('quit')
+  }
+
+  /**
+   * Arranges for `BackendDelegate.on_frame()` to be called soon, once,
+   * however many times this is called before it runs.
+   */
+  request_frame() {
+    raise NotImplementedError('request_frame')
+  }
+
+  /**
+   * Starts a timer that calls `task` after `seconds`, and again every
+   * `seconds` when `repeats` is true.
+   *
+   * @param number seconds
+   * @param bool repeats
+   * @param function task
+   * @returns TimerHandle
+   */
+  start_timer(seconds: number, repeats: bool, task: function) {
+    raise NotImplementedError('start_timer')
+  }
+
+  /**
+   * A clock in seconds that only moves forwards, for measuring intervals.
+   *
+   * @returns number
+   */
+  now() {
+    raise NotImplementedError('now')
+  }
+
+  /**
+   * Creates a window, hidden until `show()`.
+   *
+   * @param dict props: the `window` kind's props.
+   * @param function dispatch
+   * @returns WindowHost
+   */
+  create_window(props: dict, dispatch: function) {
+    raise NotImplementedError('create_window')
+  }
+
+  /**
+   * Creates a view of `kind`, not yet in any parent.
+   *
+   * @param string kind
+   * @param dict props
+   * @param function dispatch
+   * @returns ViewHost
+   * @throws UnsupportedError When the backend has no such kind
+   */
+  create_view(kind: string, props: dict, dispatch: function) {
+    raise NotImplementedError('create_view')
+  }
+
+  /**
+   * Replaces the application's menu bar. Each menu is a dictionary with a
+   * `title` and `items`; each item has an `id`, a `title` and optionally
+   * `shortcut`, `enabled`, `checked`, `role` and `items` for a submenu, or
+   * is `{ separator: true }`. Choosing an item calls `dispatch('selected',
+   * { id })`.
+   *
+   * @param list menus
+   * @param function dispatch
+   */
+  set_menu_bar(menus: list, dispatch: function) {
+    raise NotImplementedError('set_menu_bar')
+  }
+
+  /**
+   * Carries out a standard menu role, such as `copy` or `paste`, on
+   * whatever has keyboard focus, as the role's menu item would. Returns
+   * whether anything carried it out.
+   *
+   * @param string role
+   * @returns bool
+   */
+  perform_role(role: string) {
+    raise NotImplementedError('perform_role')
+  }
+
+  /**
+   * Shows an alert, attached to `window` when it is given, and calls
+   * `done` with the index of the button chosen and whether the
+   * suppression checkbox was ticked.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `title`, `message`, `style` (`informational`,
+   *    `warning` or `critical`), `buttons` (a list of titles) and
+   *    `suppression` (the checkbox's title, or `nil` for none).
+   * @param function done: called with `{ button, suppressed }`.
+   */
+  show_alert(window, spec: dict, done: function) {
+    raise NotImplementedError('show_alert')
+  }
+
+  /**
+   * Asks the user to pick files or directories, and calls `done` with the
+   * paths, or `nil` when the user cancelled.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `title`, `types` (file extensions), `multiple`,
+   *    `directories`, `files` and `directory` to start in.
+   * @param function done
+   */
+  pick_files(window, spec: dict, done: function) {
+    raise NotImplementedError('pick_files')
+  }
+
+  /**
+   * Asks the user where to save a file, and calls `done` with the path,
+   * or `nil` when the user cancelled.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `title`, `name` (a suggested file name), `types`
+   *    and `directory`.
+   * @param function done
+   */
+  save_file(window, spec: dict, done: function) {
+    raise NotImplementedError('save_file')
+  }
+
+  /**
+   * The text on the clipboard, or `nil` when it holds none.
+   *
+   * @returns ?string
+   */
+  read_clipboard() {
+    raise NotImplementedError('read_clipboard')
+  }
+
+  /**
+   * Puts `text` on the clipboard, replacing what was there.
+   *
+   * @param string text
+   */
+  write_clipboard(text: string) {
+    raise NotImplementedError('write_clipboard')
+  }
+
+  /**
+   * The system appearance: `light` or `dark`.
+   *
+   * @returns string
+   */
+  appearance() {
+    raise NotImplementedError('appearance')
+  }
+
+  /**
+   * The displays, the main one first, each as `{ frame, visible_frame,
+   * scale }` where the frames are `Rect`s.
+   *
+   * @returns list
+   */
+  screens() {
+    raise NotImplementedError('screens')
+  }
+
+  /**
+   * The size of `text` in `style`, wrapped at `max_width` when it is
+   * given.
+   *
+   * @param string text
+   * @param dict style: a `TextStyle`'s data.
+   * @param ?number max_width
+   * @returns Size
+   */
+  measure_text(text: string, style: dict, max_width: ?number) {
+    raise NotImplementedError('measure_text')
+  }
+
+  /**
+   * Opens `url` in the application the system chooses for it.
+   *
+   * @param string url
+   */
+  open_url(url: string) {
+    raise NotImplementedError('open_url')
+  }
+
+  /**
+   * Plays the system alert sound.
+   */
+  beep() {
+    raise NotImplementedError('beep')
+  }
+}

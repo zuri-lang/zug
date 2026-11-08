@@ -1,0 +1,185 @@
+/**
+ * The drawing surface a backend hands to a `Canvas` paint function.
+ *
+ * Coordinates are in points, with the origin at the canvas's top left.
+ * A backend implements every method; the paint function gets the
+ * backend's painter as its first argument and the canvas's `Size` as its
+ * second.
+ */
+
+import ..foundation { Size, Rect, Point, Color }
+import ..painting { Paint, Path }
+
+/**
+ * Draws on a canvas.
+ */
+class Painter {
+
+  /**
+   * The size of the canvas.
+   *
+   * @returns Size
+   */
+  size() {
+    raise NotImplementedError('size')
+  }
+
+  /**
+   * Saves the transform and clip, to be put back by `restore()`.
+   */
+  save() {
+    raise NotImplementedError('save')
+  }
+
+  /**
+   * Puts back the transform and clip saved last.
+   */
+  restore() {
+    raise NotImplementedError('restore')
+  }
+
+  /**
+   * Moves the origin.
+   *
+   * @param number dx
+   * @param number dy
+   */
+  translate(dx: number, dy: number) {
+    raise NotImplementedError('translate')
+  }
+
+  /**
+   * Scales what follows.
+   *
+   * @param number sx
+   * @param number sy
+   */
+  scale(sx: number, sy: number) {
+    raise NotImplementedError('scale')
+  }
+
+  /**
+   * Rotates what follows clockwise by `radians`.
+   *
+   * @param number radians
+   */
+  rotate(radians: number) {
+    raise NotImplementedError('rotate')
+  }
+
+  /**
+   * Limits what follows to `rect`.
+   *
+   * @param Rect rect
+   */
+  clip_rect(rect: Rect) {
+    raise NotImplementedError('clip_rect')
+  }
+
+  /**
+   * @param Rect rect
+   * @param Color color
+   */
+  fill_rect(rect: Rect, color: Color) {
+    raise NotImplementedError('fill_rect')
+  }
+
+  /**
+   * @param Rect rect
+   * @param Paint paint
+   */
+  stroke_rect(rect: Rect, paint: Paint) {
+    raise NotImplementedError('stroke_rect')
+  }
+
+  /**
+   * @param Rect rect
+   * @param number radius
+   * @param Color color
+   */
+  fill_rounded_rect(rect: Rect, radius: number, color: Color) {
+    raise NotImplementedError('fill_rounded_rect')
+  }
+
+  /**
+   * @param Rect rect
+   * @param number radius
+   * @param Paint paint
+   */
+  stroke_rounded_rect(rect: Rect, radius: number, paint: Paint) {
+    raise NotImplementedError('stroke_rounded_rect')
+  }
+
+  /**
+   * @param Rect rect
+   * @param Color color
+   */
+  fill_oval(rect: Rect, color: Color) {
+    raise NotImplementedError('fill_oval')
+  }
+
+  /**
+   * @param Rect rect
+   * @param Paint paint
+   */
+  stroke_oval(rect: Rect, paint: Paint) {
+    raise NotImplementedError('stroke_oval')
+  }
+
+  /**
+   * @param Point from
+   * @param Point to
+   * @param Paint paint
+   */
+  line(from: Point, to: Point, paint: Paint) {
+    raise NotImplementedError('line')
+  }
+
+  /**
+   * @param Path path
+   * @param Color color
+   */
+  fill_path(path: Path, color: Color) {
+    raise NotImplementedError('fill_path')
+  }
+
+  /**
+   * @param Path path
+   * @param Paint paint
+   */
+  stroke_path(path: Path, paint: Paint) {
+    raise NotImplementedError('stroke_path')
+  }
+
+  /**
+   * Draws `text` with its top left at `at`.
+   *
+   * @param string text
+   * @param Point at
+   * @param ?TextStyle style
+   */
+  text(text: string, at: Point, style) {
+    raise NotImplementedError('text')
+  }
+
+  /**
+   * The size `text` takes in `style`.
+   *
+   * @param string text
+   * @param ?TextStyle style
+   * @returns Size
+   */
+  measure_text(text: string, style) {
+    raise NotImplementedError('measure_text')
+  }
+
+  /**
+   * Draws an image scaled into `rect`.
+   *
+   * @param ImageSource source
+   * @param Rect rect
+   */
+  image(source, rect: Rect) {
+    raise NotImplementedError('image')
+  }
+}

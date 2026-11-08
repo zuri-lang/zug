@@ -1,0 +1,269 @@
+/**
+ * Images, icons, and boxes with a title.
+ *
+ * ```zuri
+ * import zug { Image, ImageSource, Icon, GroupBox, Text, Color }
+ *
+ * var logo = Image(ImageSource.file('assets/logo.png'), { width: 64, height: 64 })
+ * var gear = Icon('gearshape', { size: 18, color: Color.system('secondary_label') })
+ * var section = GroupBox(Text('Contents'), { title: 'Options' })
+ * ```
+ */
+
+import ..foundation { Key, Color, check_options }
+import ..rendering { RenderHostInset }
+import .framework { StatelessWidget, Widget }
+import .host { HostWidget, SingleChildHostWidget, host_options, common_props }
+import .basic { Box }
+
+/**
+ * Where an image comes from: a file, bytes in memory, or a symbol from
+ * the platform's icon set.
+ */
+class ImageSource {
+
+  /**
+   * The source as plain data, for the backend.
+   *
+   * @type dict
+   */
+  var data = {}
+
+  /**
+   * @param dict data
+   * @constructor
+   */
+  @new(data: dict) {
+    self.data = data
+  }
+
+  /**
+   * An image file, in any format the platform reads.
+   *
+   * @param string path
+   * @returns ImageSource
+   */
+  static file(path: string) {
+    return ImageSource({ path })
+  }
+
+  /**
+   * An encoded image held in memory, such as a PNG.
+   *
+   * @param bytes data
+   * @returns ImageSource
+   */
+  static memory(data: bytes) {
+    return ImageSource({ bytes: data })
+  }
+
+  /**
+   * A symbol from the platform's icon set, by name. On macOS these are SF
+   * Symbols, such as `gearshape` or `plus.circle`.
+   *
+   * @param string name
+   * @param ?dict options: `size` in points and `weight` (100 to 900).
+   * @returns ImageSource
+   */
+  static symbol(name: string, options: ?dict) {
+    var o = check_options(
+      options, 'ImageSource.symbol', { size: 'number', weight: 'number' },
+    )
+    return ImageSource({
+      symbol: name,
+      size: o.get('size', 13),
+      weight: o.get('weight', 400),
+    })
+  }
+
+  @eq(other) {
+    if !instance_of(other, ImageSource) {
+      return false
+    }
+
+    var mine = self.data
+    var theirs = other.data
+
+    if mine.contains('bytes') or theirs.contains('bytes') {
+      return mine.get('bytes') == theirs.get('bytes')
+        and id(mine.get('bytes')) == id(theirs.get('bytes'))
+    }
+
+    return mine == theirs
+  }
+}
+
+/**
+ * How an image fills its box.
+ */
+class ImageFit {
+
+  /**
+   * As large as fits, keeping its proportions.
+   */
+  static var CONTAIN = 'contain'
+
+  /**
+   * Stretched to fill, proportions ignored.
+   */
+  static var FILL = 'fill'
+
+  /**
+   * At its own size, centred.
+   */
+  static var NONE = 'none'
+
+  /**
+   * Shrunk to fit when it is larger, never enlarged.
+   */
+  static var SCALE_DOWN = 'scale_down'
+}
+
+var _FITS = ['contain', 'fill', 'none', 'scale_down']
+
+/**
+ * The view behind `Image` and `Icon`.
+ *
+ * @internal
+ */
+class ImageView < HostWidget {
+  var source
+  var fit = 'contain'
+  var tint
+
+  @new(source, fit: string, tint, common: dict) {
+    self.source = source
+    self.fit = fit
+    self.tint = tint
+    self.common = common
+  }
+
+  kind() {
+    return 'image'
+  }
+
+  props(context) {
+    return { source: self.source.data, fit: self.fit, tint: self.tint }
+  }
+}
+
+/**
+ * An image. Without a size it takes the image's own size.
+ */
+class Image < StatelessWidget {
+  var source
+  var options = {}
+
+  /**
+   * @param ImageSource source
+   * @param ?dict options: `width`, `height`, `fit` (see `ImageFit`),
+   *    `tint` for a template image, and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(source: ImageSource, options: ?dict) {
+    var o = check_options(
+      options, 'Image',
+      host_options({
+        width: 'number',
+        height: 'number',
+        fit: 'string',
+        tint: Color,
+      }),
+    )
+
+    if !_FITS.contains(o.get('fit', 'contain')) {
+      raise ValueError("fit of Image must be one of ImageFit's values, got '${o.get('fit')}'")
+    }
+
+    self.key = o.get('key')
+    self.source = source
+    self.options = o
+  }
+
+  build(context) {
+    var o = self.options
+    var view = ImageView(
+      self.source, o.get('fit', 'contain'), o.get('tint'), common_props(o),
+    )
+
+    if o.get('width') == nil and o.get('height') == nil {
+      return view
+    }
+
+    return Box({ width: o.get('width'), height: o.get('height'), child: view })
+  }
+}
+
+/**
+ * A symbol from the platform's icon set, tinted.
+ */
+class Icon < StatelessWidget {
+  var name = ''
+  var size = 13
+  var weight = 400
+  var color
+  var common = {}
+
+  /**
+   * @param string name: on macOS, an SF Symbol name such as `trash`.
+   * @param ?dict options: `size` in points (13), `weight` (400), `color`
+   *    (the label colour when left out), and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(name: string, options: ?dict) {
+    var o = check_options(
+      options, 'Icon',
+      host_options({ size: 'number', weight: 'number', color: Color }),
+    )
+    self.key = o.get('key')
+    self.name = name
+    self.size = o.get('size', 13)
+    self.weight = o.get('weight', 400)
+    self.color = o.get('color', Color.system('label'))
+    self.common = common_props(o)
+  }
+
+  build(context) {
+    return ImageView(
+      ImageSource.symbol(self.name, { size: self.size, weight: self.weight }),
+      'none', self.color, self.common,
+    )
+  }
+}
+
+/**
+ * A box with a border and an optional title around its child.
+ */
+class GroupBox < SingleChildHostWidget {
+  var title
+
+  /**
+   * @param Widget child
+   * @param ?dict options: `title` and the options every host widget
+   *    takes.
+   * @constructor
+   */
+  @new(child: Widget, options: ?dict) {
+    var o = check_options(
+      options, 'GroupBox', host_options({ title: 'string' }),
+    )
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.child = child
+    self.title = o.get('title')
+  }
+
+  kind() {
+    return 'group_box'
+  }
+
+  props(context) {
+    return { title: self.title }
+  }
+
+  make_render_host(kind: string, props: dict, handlers: dict) {
+    return RenderHostInset(kind, props, handlers)
+  }
+}

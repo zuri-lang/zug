@@ -1,0 +1,69 @@
+/**
+ * The smallest zug application: a counter.
+ *
+ *     zuri run examples/hello.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import ..app { * }
+
+class Counter < StatefulWidget {
+  create_state() {
+    return CounterState()
+  }
+}
+
+class CounterState < State {
+  var count = 0
+
+  build(context) {
+    var sheet = Style.of(context)
+
+    return Padding(sheet.padding, Column([
+      Text('Pressed ${self.count} times', {
+        style: sheet.headline,
+      }),
+      Text(
+        'The window, the buttons and the text are AppKit controls; the layout and the state are zug\'s.',
+        {
+          style: sheet.caption,
+        },
+      ),
+      Row([
+        Button('Minus', {
+          on_pressed: @{
+            self.set_state(@{
+              self.count--
+            })
+          },
+        }),
+        Button('Plus', {
+          role: ButtonRole.PRIMARY,
+          on_pressed: @{
+            self.set_state(@{
+              self.count++
+            })
+          },
+        }),
+        Button('Reset', {
+          on_pressed: self.count == 0 ? nil : @{
+            self.set_state(@{
+              self.count = 0
+            })
+          },
+        }),
+      ], { spacing: 8 }),
+    ], {
+      spacing: 12,
+      align_items: AlignItems.START,
+    }))
+  }
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Hello',
+    windows: [Window('Hello, zug', Counter(), { size: Size(420, 200) })],
+  }))
+}

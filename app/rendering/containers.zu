@@ -1,0 +1,176 @@
+/**
+ * Hosts whose children live in areas the native view manages: the
+ * scrolling content of a scroll view, the tabs of a tab view, the panes
+ * of a split view.
+ */
+
+import ..foundation { Point, Size, Constraints, INFINITY }
+import .host { RenderHost }
+
+/**
+ * A scroll view. Its child is laid out without a bound along the axes
+ * that scroll, and as wide or tall as the view across the others; the
+ * view scrolls whatever does not fit.
+ */
+class RenderScroll < RenderHost {
+
+  /**
+   * The size of what scrolls, at least the size of the view.
+   *
+   * @type Size
+   */
+  var content_size
+
+  var _sent_content
+
+  /**
+   * @param dict props
+   * @param ?dict handlers
+   * @constructor
+   */
+  @new(props: dict, handlers: ?dict) {
+    parent('scroll', props, handlers)
+    self.content_size = Size.ZERO
+  }
+
+  slot_for_child(index: number) {
+    return 'content'
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var axis = self.props.get('axis', 'vertical')
+    var scrolls_x = axis == 'horizontal' or axis == 'both'
+    var scrolls_y = axis == 'vertical' or axis == 'both'
+    var child = self.child()
+
+    if child == nil {
+      self.size = c.constrain(Size(
+        c.has_bounded_width() ? c.max_width : 0,
+        c.has_bounded_height() ? c.max_height : 0,
+      ))
+      self.content_size = self.size
+      return
+    }
+
+    var min_width = 0
+    var max_width = INFINITY
+    var min_height = 0
+    var max_height = INFINITY
+
+    if !scrolls_x and c.has_bounded_width() {
+      min_width = c.max_width
+      max_width = c.max_width
+    }
+
+    if !scrolls_y and c.has_bounded_height() {
+      min_height = c.max_height
+      max_height = c.max_height
+    }
+
+    child.layout(
+      Constraints(min_width, max_width, min_height, max_height), true,
+    )
+    var width = c.has_bounded_width()
+      ? c.max_width
+      : c.constrain_width(child.size.width)
+    var height = c.has_bounded_height()
+      ? c.max_height
+      : c.constrain_height(child.size.height)
+    self.size = Size(width, height)
+    self.content_size = Size(
+      child.size.width.max(width), child.size.height.max(height),
+    )
+    self.place_child(child, Point.ZERO)
+  }
+
+  after_commit() {
+    if self._sent_content != self.content_size {
+      self._sent_content = self.content_size
+      self.view.set_content_size('content', self.content_size)
+    }
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    return 0
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_width(height)
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return 0
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    var child = self.child()
+    return child == nil ? 0 : child.max_intrinsic_height(width)
+  }
+
+  compute_baseline() {
+    return nil
+  }
+}
+
+/**
+ * A host with one area per child, each the size the native view gives
+ * it: the tabs of a tab view, the panes of a split view. It fills the
+ * space it is given.
+ */
+class RenderSlotted < RenderHost {
+
+  slot_for_child(index: number) {
+    return index
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var width = c.has_bounded_width()
+      ? c.max_width
+      : c.constrain_width(self._natural(true))
+    var height = c.has_bounded_height()
+      ? c.max_height
+      : c.constrain_height(self._natural(false))
+    self.size = Size(width, height)
+    self.ensure_view()
+    self.flush_props()
+
+    iter var i = 0; i < self.children.length(); i++ {
+      var child = self.children[i]
+      var area = self.view.slot_size(i, self.size)
+      child.layout(
+        Constraints.tight(Size(area.width.max(0), area.height.max(0))), false,
+      )
+      self.place_child(child, Point.ZERO)
+    }
+  }
+
+  # The widest or tallest any child would like to be, with room for the
+  # view's own drawing, for when the space given is unbounded.
+  _natural(horizontal: bool) {
+    var largest = 0
+
+    for child in self.children {
+      largest = largest.max(
+        horizontal
+          ? child.max_intrinsic_width(INFINITY)
+          : child.max_intrinsic_height(INFINITY),
+      )
+    }
+
+    var insets = self.content_insets(0)
+    return largest + (horizontal ? insets.horizontal() : insets.vertical())
+  }
+
+  on_event(event: string, payload) {
+    if event == 'resized' {
+      self.mark_needs_layout()
+    }
+  }
+
+  compute_baseline() {
+    return nil
+  }
+}

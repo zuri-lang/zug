@@ -1,0 +1,170 @@
+/**
+ * The application's services: keys handled without a text field, an
+ * alert sheet, a timer, the clipboard, and work done on another isolate
+ * while the window stays responsive.
+ *
+ *     zuri run examples/services.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import ..app { * }
+
+# Runs on another isolate, so it is a top-level function and sees only
+# what it is given.
+def count_primes(limit) {
+  var count = 0
+
+  iter var n = 2; n < limit; n++ {
+    var prime = true
+
+    iter var d = 2; d * d <= n; d++ {
+      if n % d == 0 {
+        prime = false
+        break
+      }
+    }
+
+    if prime {
+      count++
+    }
+  }
+
+  return count
+}
+
+class Services < StatefulWidget {
+  create_state() {
+    return ServicesState()
+  }
+}
+
+class ServicesState < State {
+  var typed = ''
+  var seconds = 0
+  var answer = 'No answer yet'
+  var primes
+  var clock
+
+  init_state() {
+    self.clock = Timer.periodic(Duration.seconds(1), @(timer) {
+      self.set_state(@{
+        self.seconds++
+      })
+    })
+  }
+
+  dispose() {
+    self.clock.cancel()
+  }
+
+  _ask(context) {
+    show_alert(context, {
+      title: 'Clear what you typed?',
+      message: 'The digits typed so far are cleared.',
+      style: AlertStyle.WARNING,
+      buttons: ['Clear', 'Cancel'],
+    }).then(@(result) {
+      self.set_state(@{
+        self.answer = result.button == 0 ? 'Cleared' : 'Kept'
+
+        if result.button == 0 {
+          self.typed = ''
+        }
+      })
+    })
+  }
+
+  build(context) {
+    var sheet = Style.of(context)
+
+    var body = Column([
+      Text(
+        'Type digits anywhere in the window; Escape clears them.',
+        { style: sheet.caption },
+      ),
+      Text(
+        self.typed == '' ? 'Nothing typed' : self.typed,
+        { style: sheet.headline },
+      ),
+      Text('Open for ${self.seconds} seconds'),
+      Row([
+        Button('Ask', {
+          on_pressed: @{
+            self._ask(context)
+          },
+        }),
+        Text(self.answer),
+      ], { spacing: 8 }),
+      Row([
+        Button('Copy', {
+          on_pressed: @{
+            Clipboard.write_text(self.typed)
+          },
+        }),
+        Button('Paste', {
+          on_pressed: @{
+            var text = Clipboard.read_text()
+
+            if text != nil {
+              self.set_state(@{
+                self.typed = text.replace('/[^0-9]/', '')
+              })
+            }
+          },
+        }),
+      ], { spacing: 8 }),
+      Row([
+        Button('Count primes below 200,000', {
+          on_pressed: @{
+            var work = run_in_background(count_primes, 200000)
+            self.set_state(@{
+              self.primes = work
+            })
+          },
+        }),
+        self.primes == nil
+          ? Gap(0)
+          : PromiseBuilder(self.primes, @(context, snapshot) {
+            if snapshot.is_pending() {
+              return Spinner({ size: 'small' })
+            }
+
+            return Text(
+              snapshot.is_resolved()
+                ? '${snapshot.value} primes'
+                : snapshot.error.message,
+            )
+          }),
+      ], { spacing: 8 }),
+    ], { spacing: 12, align_items: AlignItems.START })
+
+    return Shortcuts({
+      'escape': @{
+        self.set_state(@{
+          self.typed = ''
+        })
+      },
+    }, KeyListener(
+      Padding(sheet.padding, body),
+      {
+        on_key: @(event) {
+          if event.characters.length() == 1 and event.characters.is_number() {
+            self.set_state(@{
+              self.typed += event.characters
+            })
+            return true
+          }
+
+          return false
+        },
+      }))
+  }
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Services',
+    windows: [Window('Services', Services(), { size: Size(460, 300) })],
+  }))
+}

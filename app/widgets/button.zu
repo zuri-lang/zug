@@ -1,0 +1,299 @@
+/**
+ * Push buttons.
+ *
+ * A button with no `on_pressed` is disabled, so a button that cannot do
+ * anything yet says so.
+ *
+ * ```zuri
+ * import zug { Button, ButtonRole, ButtonVariant }
+ *
+ * var save = Button('Save', { role: ButtonRole.PRIMARY, on_pressed: @{ echo 'saving' } })
+ * var cancel = Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{ echo 'cancelled' } })
+ * var key = Button('7', { variant: ButtonVariant.FLEXIBLE, on_pressed: @{ echo 7 } })
+ * ```
+ */
+
+import ..foundation { Color, check_options }
+import ..painting { TextStyle }
+import .host { HostWidget, host_options, common_props }
+
+/**
+ * What a button looks like.
+ */
+class ButtonVariant {
+
+  /**
+   * The standard rounded push button, of a fixed height.
+   */
+  static var PUSH = 'push'
+
+  /**
+   * A rounded button that grows to any height it is given.
+   */
+  static var FLEXIBLE = 'flexible'
+
+  /**
+   * A square-cornered button that grows to any size.
+   */
+  static var SQUARE = 'square'
+
+  /**
+   * A button for a toolbar.
+   */
+  static var TOOLBAR = 'toolbar'
+
+  /**
+   * A small rounded button for use inside other controls.
+   */
+  static var INLINE = 'inline'
+
+  /**
+   * A round button, usually for an icon.
+   */
+  static var CIRCULAR = 'circular'
+
+  /**
+   * Only the title or icon, with no bezel.
+   */
+  static var BORDERLESS = 'borderless'
+
+  /**
+   * The round help button with a question mark.
+   */
+  static var HELP = 'help'
+}
+
+/**
+ * The part a button plays in a form or dialog.
+ */
+class ButtonRole {
+
+  /**
+   * An ordinary button.
+   */
+  static var NORMAL = 'normal'
+
+  /**
+   * The button Return presses, drawn in the accent colour.
+   */
+  static var PRIMARY = 'primary'
+
+  /**
+   * The button Escape presses.
+   */
+  static var CANCEL = 'cancel'
+
+  /**
+   * A button that destroys something, drawn as a warning.
+   */
+  static var DESTRUCTIVE = 'destructive'
+}
+
+/**
+ * The sizes of native controls.
+ */
+class ControlSize {
+  static var MINI = 'mini'
+  static var SMALL = 'small'
+  static var REGULAR = 'regular'
+  static var LARGE = 'large'
+}
+
+var _VARIANTS = [
+  'push', 'flexible', 'square', 'toolbar', 'inline', 'circular', 'borderless',
+  'help',
+]
+var _ROLES = ['normal', 'primary', 'cancel', 'destructive']
+var _SIZES = ['mini', 'small', 'regular', 'large']
+
+/**
+ * Raises `ValueError` unless `size` is one of `ControlSize`'s values.
+ *
+ * @internal
+ * @param string size
+ * @param string owner
+ */
+def check_control_size(size: string, owner: string) {
+  if !_SIZES.contains(size) {
+    raise ValueError("size of ${owner} must be one of ControlSize's values (${', '.join(_SIZES)}), got '${size}'")
+  }
+}
+
+var _BUTTON_OPTIONS = host_options({
+  on_pressed: 'function',
+  variant: 'string',
+  role: 'string',
+  shortcut: 'string',
+  size: 'string',
+  enabled: 'bool',
+  style: TextStyle,
+  selected: 'bool',
+  on_selected_changed: 'function',
+  tint: Color,
+})
+
+/**
+ * A push button with a title.
+ *
+ * Set `selected` to make it a toggle that stays in once pressed; the
+ * button then calls `on_selected_changed` with the new state, and shows
+ * whatever `selected` the next build declares.
+ */
+class Button < HostWidget {
+
+  /**
+   * @type string
+   */
+  var label = ''
+
+  /**
+   * @type ?function
+   */
+  var on_pressed
+
+  /**
+   * See `ButtonVariant`.
+   *
+   * @type string
+   */
+  var variant = 'push'
+
+  /**
+   * See `ButtonRole`.
+   *
+   * @type string
+   */
+  var role = 'normal'
+
+  /**
+   * A key that presses the button, such as `cmd+s` or `escape`.
+   *
+   * @type ?string
+   */
+  var shortcut
+
+  /**
+   * See `ControlSize`.
+   *
+   * @type string
+   */
+  var size = 'regular'
+
+  /**
+   * @type bool
+   */
+  var enabled = true
+
+  /**
+   * The title's style.
+   *
+   * @type ?TextStyle
+   */
+  var style
+
+  /**
+   * For a toggle, whether it is in.
+   *
+   * @type ?bool
+   */
+  var selected
+
+  /**
+   * @type ?function
+   */
+  var on_selected_changed
+
+  /**
+   * The colour of the bezel, for buttons that stand out, such as the
+   * operator keys of a calculator.
+   *
+   * @type ?Color
+   */
+  var tint
+
+  /**
+   * @param string label
+   * @param ?dict options: `on_pressed`, `variant`, `role`, `shortcut`,
+   *    `size`, `enabled`, `style`, `selected`, `on_selected_changed`,
+   *    `tint` and the options every host widget takes.
+   * @constructor
+   */
+  @new(label: string, options: ?dict) {
+    var o = check_options(options, 'Button', _BUTTON_OPTIONS)
+    self.key = o.get('key')
+    self.common = common_props(o)
+    self.label = label
+    self.on_pressed = o.get('on_pressed')
+    self.variant = o.get('variant', 'push')
+    self.role = o.get('role', 'normal')
+    self.shortcut = o.get('shortcut')
+    self.size = o.get('size', 'regular')
+    self.enabled = o.get('enabled', true)
+    self.style = o.get('style')
+    self.selected = o.get('selected')
+    self.on_selected_changed = o.get('on_selected_changed')
+    self.tint = o.get('tint')
+
+    if !_VARIANTS.contains(self.variant) {
+      raise ValueError("variant of Button must be one of ButtonVariant's values (${', '.join(_VARIANTS)}), got '${self.variant}'")
+    }
+
+    if !_ROLES.contains(self.role) {
+      raise ValueError("role of Button must be one of ButtonRole's values (${', '.join(_ROLES)}), got '${self.role}'")
+    }
+
+    check_control_size(self.size, 'Button')
+  }
+
+  /**
+   * Whether the button responds to presses: it must be enabled and have
+   * something to call.
+   *
+   * @returns bool
+   */
+  is_interactive() {
+    return self.enabled
+      and (self.on_pressed != nil or self.on_selected_changed != nil)
+  }
+
+  kind() {
+    return 'button'
+  }
+
+  props(context) {
+    return {
+      title: self.label,
+      variant: self.variant,
+      role: self.role,
+      shortcut: self.shortcut,
+      control_size: self.size,
+      enabled: self.is_interactive(),
+      style: self.style == nil ? {} : self.style.to_data(),
+      selected: self.selected,
+      tint: self.tint,
+    }
+  }
+
+  handlers() {
+    var on_pressed = self.on_pressed
+    var on_selected_changed = self.on_selected_changed
+
+    return {
+      pressed: @(payload) {
+        if on_selected_changed != nil
+          and is_dict(payload)
+          and payload.contains('selected') {
+          on_selected_changed(payload.selected)
+        }
+
+        if on_pressed != nil {
+          on_pressed()
+        }
+      },
+    }
+  }
+
+  @to_string() {
+    return 'Button(${self.label})'
+  }
+}

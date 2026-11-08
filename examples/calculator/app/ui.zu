@@ -1,0 +1,779 @@
+/**
+ * The calculator's windows: the calculator itself, with its keys, its
+ * display, a box to type expressions into and a tape of past results, and
+ * a Settings window.
+ */
+
+import zug { * }
+import .engine { Calculator, Entry }
+import .expression { evaluate, ExpressionError }
+import .format { NumberFormat, format_number }
+import .settings { load_state, save_state, storage_dir }
+
+# The keys of the basic keypad, row by row: a label, the engine key it
+# presses, and what sort of key it is.
+var _BASIC_KEYS = [
+  ['MC', 'mc', 'memory'], ['M+', 'm+', 'memory'], ['M−', 'm-', 'memory'],
+  ['MR', 'mr', 'memory'], ['AC', 'clear', 'function'],
+  ['±', 'negate', 'function'], ['%', '%', 'function'], ['÷', '/', 'operator'],
+  ['7', '7', 'digit'], ['8', '8', 'digit'], ['9', '9', 'digit'],
+  ['×', '*', 'operator'], ['4', '4', 'digit'], ['5', '5', 'digit'],
+  ['6', '6', 'digit'], ['−', '-', 'operator'], ['1', '1', 'digit'],
+  ['2', '2', 'digit'], ['3', '3', 'digit'], ['+', '+', 'operator'],
+  ['0', '0', 'digit'], ['.', '.', 'digit'], ['=', '=', 'operator'],
+]
+
+var _SCIENTIFIC_KEYS = [
+  ['(', '('], [')', ')'], ['x²', 'square'], ['x³', 'cube'], ['xʸ', '^'],
+  ['√x', 'sqrt'], ['∛x', 'cbrt'], ['1/x', 'reciprocal'], ['x!', 'factorial'],
+  ['π', 'pi'], ['sin', 'sin'], ['cos', 'cos'], ['tan', 'tan'], ['ln', 'ln'],
+  ['log', 'log'], ['sin⁻¹', 'asin'], ['cos⁻¹', 'acos'], ['tan⁻¹', 'atan'],
+  ['eˣ', 'exp'], ['10ˣ', 'pow10'], ['e', 'e'], ['Rand', 'rand'],
+  ['⌫', 'backspace'],
+]
+
+# Keys typed on the keyboard, by the character they type, to the engine
+# key they press.
+var _TYPED = {
+  '.': '.',
+  ',': '.',
+  '+': '+',
+  '-': '-',
+  '*': '*',
+  'x': '*',
+  '/': '/',
+  '^': '^',
+  '(': '(',
+  ')': ')',
+  '%': '%',
+  '=': '=',
+}
+
+var _KEY_HEIGHT = 40
+
+/**
+ * The calculator application.
+ */
+class CalculatorApp < StatefulWidget {
+
+  /**
+   * Where settings are kept.
+   *
+   * @type string
+   */
+  var dir
+
+  /**
+   * @param ?string dir: where settings are kept; `storage_dir()` when left
+   *    out.
+   * @constructor
+   */
+  @new(dir: ?string) {
+    self.dir = dir == nil ? storage_dir() : dir
+  }
+
+  create_state() {
+    return CalculatorState()
+  }
+}
+
+/**
+ * The calculator's state, shared by its windows.
+ */
+class CalculatorState < State {
+
+  /**
+   * @type Settings
+   */
+  var settings
+
+  /**
+   * @type Calculator
+   */
+  var calculator
+
+  /**
+   * Whether the Settings window is open.
+   *
+   * @type bool
+   */
+  var settings_open = false
+
+  /**
+   * The text of the expression box.
+   *
+   * @type TextController
+   */
+  var input
+
+  /**
+   * Why the last expression typed could not be calculated, or `nil`.
+   *
+   * @type ?string
+   */
+  var input_error
+
+  /**
+   * Rows of the tape selected.
+   *
+   * @type list
+   */
+  var tape_selection = []
+
+  init_state() {
+    var loaded = load_state(self.widget.dir)
+    self.settings = loaded.settings
+    self.calculator = Calculator()
+    self.input = TextController()
+
+    for entry in loaded.history {
+      self.calculator.history.append(Entry(entry.expression, entry.result))
+    }
+
+    self._apply_settings()
+  }
+
+  dispose() {
+    self.input.dispose()
+  }
+
+  _apply_settings() {
+    self.calculator.angle = self.settings.angle
+    self.calculator.format = self.number_format()
+  }
+
+  /**
+   * How the display shows numbers, from the settings.
+   *
+   * @returns NumberFormat
+   */
+  number_format() {
+    return NumberFormat({
+      places: self.settings.places,
+      grouping: self.settings.grouping,
+      significant: self.settings.significant,
+    })
+  }
+
+  _save() {
+    var history = self.calculator.history.map(@(entry) => entry.to_dict())
+
+    catch {
+      save_state(self.widget.dir, self.settings, history)
+    } as error {
+      report_error(error, 'saving the settings')
+    }
+  }
+
+  /**
+   * Presses a key of the calculator.
+   *
+   * @param string key
+   */
+  press(key: string) {
+    var before = self.calculator.history.length()
+    self.set_state(@{
+      self.calculator.press(key)
+      self.input_error = nil
+    })
+
+    if self.calculator.history.length() != before
+      and self.settings.keep_history {
+      self._save()
+    }
+  }
+
+  /**
+   * Changes the settings with `change`, then applies and saves them.
+   *
+   * @param function change: called with the settings.
+   */
+  change_settings(change: function) {
+    self.set_state(@{
+      change(self.settings)
+      self._apply_settings()
+    })
+    self._save()
+  }
+
+  /**
+   * Calculates an expression typed into the expression box.
+   *
+   * @param string text
+   */
+  submit(text: string) {
+    var trimmed = text.trim()
+
+    if trimmed == '' {
+      return
+    }
+
+    var result = nil
+
+    catch {
+      result = evaluate(trimmed, self.settings.angle)
+    } as error {
+      if !instance_of(error, ExpressionError) {
+        raise error
+      }
+
+      self.set_state(@{
+        self.input_error = error.message
+      })
+      beep()
+      return
+    }
+
+    self.set_state(@{
+      self.calculator.enter_result(trimmed, result)
+      self.input_error = nil
+      var recents = [trimmed]
+
+      for previous in self.settings.recents {
+        if previous != trimmed and recents.length() < 10 {
+          recents.append(previous)
+        }
+      }
+
+      self.settings.recents = recents
+      self.input.clear()
+    })
+    self._save()
+    clear_focus(self.context())
+  }
+
+  /**
+   * Copies the value shown to the clipboard, without separators.
+   */
+  copy_result() {
+    var value = self.calculator.current()
+
+    if value != nil {
+      Clipboard.write_text(format_number(
+        value,
+        NumberFormat({
+          places: self.settings.places,
+          grouping: false,
+          significant: self.settings.significant,
+        }),
+      ))
+    }
+  }
+
+  /**
+   * Takes a number, or an expression, from the clipboard.
+   */
+  paste() {
+    var text = Clipboard.read_text()
+
+    if text == nil or text.trim() == '' {
+      beep()
+      return
+    }
+
+    var plain = text.trim().replace(',', '', false)
+
+    if plain.match('/^-?[0-9]*\.?[0-9]+(e[-+]?[0-9]+)?$/') {
+      self.set_state(@{
+        self.calculator.recall(plain.to_number())
+      })
+    } else {
+      self.submit(text)
+    }
+  }
+
+  /**
+   * Empties the tape.
+   */
+  clear_history() {
+    self.set_state(@{
+      self.calculator.history = []
+      self.tape_selection = []
+    })
+    self._save()
+  }
+
+  /**
+   * Switches between the `basic` and `scientific` keypads.
+   *
+   * @param string mode
+   */
+  set_mode(mode: string) {
+    self.change_settings(@(settings) {
+      settings.mode = mode
+    })
+  }
+
+  /**
+   * Shows the tape, or hides it.
+   */
+  toggle_tape() {
+    self.change_settings(@(settings) {
+      settings.show_tape = !settings.show_tape
+    })
+  }
+
+  _menu_bar() {
+    var scientific = self.settings.mode == 'scientific'
+
+    return MenuBar([
+      Menu('Edit', [
+        MenuItem('Undo', { role: 'undo', shortcut: 'cmd+z' }),
+        MenuItem('Redo', { role: 'redo', shortcut: 'cmd+shift+z' }),
+        MenuItem.separator(),
+        MenuItem('Cut', { role: 'cut', shortcut: 'cmd+x' }),
+        # With nothing focused to copy from or paste into, Copy and Paste
+        # work on the calculator's value.
+        MenuItem('Copy', { shortcut: 'cmd+c', on_selected: @{
+          if !perform_role('copy') {
+            self.copy_result()
+          }
+        } }),
+        MenuItem('Paste', { shortcut: 'cmd+v', on_selected: @{
+          if !perform_role('paste') {
+            self.paste()
+          }
+        } }),
+        MenuItem('Select All', { role: 'select_all', shortcut: 'cmd+a' }),
+        MenuItem.separator(),
+        MenuItem('Clear Tape', { on_selected: @{
+          self.clear_history()
+        } }),
+      ]),
+      Menu('View', [
+        MenuItem(
+          'Basic', { shortcut: 'cmd+1', checked: !scientific, on_selected: @{
+            self.set_mode('basic')
+          } },
+        ),
+        MenuItem(
+          'Scientific',
+          { shortcut: 'cmd+2', checked: scientific, on_selected: @{
+            self.set_mode('scientific')
+          } },
+        ),
+        MenuItem.separator(),
+        MenuItem(
+          'Show Tape',
+          { shortcut: 'cmd+t', checked: self.settings.show_tape, on_selected: @{
+            self.toggle_tape()
+          } },
+        ),
+      ]),
+    ], {
+      app_items: [MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{
+        self.set_state(@{
+          self.settings_open = true
+        })
+      } })],
+    })
+  }
+
+  build(context) {
+    var windows = [
+      Window('Calculator', CalculatorPage(self), {
+        key: ValueKey('main'),
+        size_to_content: true,
+        resizable: false,
+        on_closed: @{
+          quit_app()
+        },
+      }),
+    ]
+
+    if self.settings_open {
+      windows.append(Window('Settings', SettingsPage(self), {
+        key: ValueKey('settings'),
+        size_to_content: true,
+        resizable: false,
+        minimizable: false,
+        on_closed: @{
+          self.set_state(@{
+            self.settings_open = false
+          })
+        },
+      }))
+    }
+
+    return App({
+      title: 'Calculator',
+      menu_bar: self._menu_bar(),
+      quit_on_last_window_closed: false,
+      on_quit_request: @{
+        self._save()
+        return true
+      },
+      windows,
+    })
+  }
+}
+
+/**
+ * The calculator window's content.
+ */
+class CalculatorPage < StatelessWidget {
+
+  /**
+   * @type CalculatorState
+   */
+  var app
+
+  /**
+   * @param CalculatorState app
+   * @constructor
+   */
+  @new(app) {
+    self.app = app
+  }
+
+  _key(label: string, key: string, sort: string) {
+    var app = self.app
+    var tint = nil
+
+    if sort == 'operator' {
+      tint = Color.system('orange')
+    }
+
+    if key == 'clear' {
+      label = app.calculator.clear_label()
+    }
+
+    return Button(label, {
+      variant: ButtonVariant.FLEXIBLE,
+      style: TextStyle({
+        size: sort == 'memory' ? 14 : 18,
+        weight: sort == 'digit' ? FontWeight.REGULAR : FontWeight.MEDIUM,
+      }),
+      tint,
+      accessibility_identifier: 'key ${key}',
+      on_pressed: @{
+        app.press(key)
+      },
+    })
+  }
+
+  _keypad() {
+    var keys = _BASIC_KEYS.map(@(spec) => self._key(spec[0], spec[1], spec[2]))
+
+    # The 0 key spans two columns.
+    keys[20] = GridCell(keys[20], { column_span: 2 })
+    return Box({
+      width: 240,
+      child: Grid(keys, { columns: 4, spacing: 6, row_height: _KEY_HEIGHT }),
+    })
+  }
+
+  _scientific_keypad() {
+    var keys = _SCIENTIFIC_KEYS.map(
+      @(spec) => self._key(spec[0], spec[1], 'scientific'),
+    )
+    return Box({
+      width: 300,
+      child: Grid(keys, { columns: 5, spacing: 6, row_height: _KEY_HEIGHT }),
+    })
+  }
+
+  _display(context) {
+    var app = self.app
+    var calculator = app.calculator
+    var sheet = Style.of(context)
+
+    return Box({
+      color: Color.system('control_background'),
+      radius: 10,
+      border: Border.all(1, Color.system('separator')),
+      padding: EdgeInsets.symmetric({ horizontal: 12, vertical: 8 }),
+      child: Column([
+        Row([
+          Text(
+            calculator.has_memory() ? 'M' : '',
+            { style: sheet.caption, accessibility_identifier: 'memory' },
+          ),
+          Text(
+            app.settings.mode == 'scientific'
+              ? (app.settings.angle == 'deg' ? 'DEG' : 'RAD')
+              : '',
+            { style: sheet.caption },
+          ),
+          Expanded(Text(calculator.expression(), {
+            style: sheet.caption,
+            align: TextAlign.END,
+            max_lines: 1,
+            overflow: TextOverflow.ELLIPSIS,
+            accessibility_identifier: 'expression',
+          })),
+        ], { spacing: 6 }),
+        Text(calculator.display(), {
+          style: TextStyle({
+            size: 36,
+            weight: FontWeight.LIGHT,
+            monospaced_digits: true,
+          }),
+          align: TextAlign.END,
+          max_lines: 1,
+          overflow: TextOverflow.ELLIPSIS,
+          selectable: true,
+          accessibility_identifier: 'display',
+        }),
+      ], { spacing: 2, align_items: AlignItems.STRETCH }),
+    })
+  }
+
+  _tape(context) {
+    var app = self.app
+    var history = app.calculator.history
+    var count = history.length()
+    var format = app.number_format()
+
+    var entry_at = @(row) => history[count - 1 - row]
+
+    return Box({
+      width: 280,
+      child: Column([
+        Text('Tape', { style: Style.of(context).title }),
+        Expanded(DataTable([
+          DataColumn('expression', 'Expression'),
+          DataColumn('result', 'Result', { width: 100, align: 'end' }),
+        ], count, @(row, column) {
+          var entry = entry_at(row)
+          return column == 'expression'
+            ? entry.expression
+            : format_number(entry.result, format)
+        }, {
+          selected: app.tape_selection,
+          on_selection_changed: @(rows) {
+            app.set_state(@{
+              app.tape_selection = rows
+            })
+          },
+          on_activate: @(row) {
+            app.set_state(@{
+              app.calculator.recall(entry_at(row).result)
+            })
+          },
+          accessibility_identifier: 'tape',
+        })),
+        Row([
+          Button('Use Result', {
+            on_pressed: app.tape_selection.is_empty() ? nil : @{
+              app.set_state(@{
+                app.calculator.recall(entry_at(app.tape_selection[0]).result)
+              })
+            },
+          }),
+          Spacer(),
+          Button('Clear', { on_pressed: count == 0 ? nil : @{
+            app.clear_history()
+          } }),
+        ], { spacing: 8 }),
+      ], { spacing: 8, align_items: AlignItems.STRETCH }),
+    })
+  }
+
+  _keys(event) {
+    var app = self.app
+    var typed = event.characters
+
+    if typed.length() == 1 and typed.is_number() {
+      app.press(typed)
+      return true
+    }
+
+    if _TYPED.contains(typed) {
+      app.press(_TYPED[typed])
+      return true
+    }
+
+    using event.key {
+      when 'enter' {
+        app.press('=')
+        return true
+      }
+      when 'escape' {
+        app.press('clear')
+        return true
+      }
+      when 'backspace', 'delete' {
+        app.press('backspace')
+        return true
+      }
+    }
+
+    return false
+  }
+
+  build(context) {
+    var app = self.app
+    var scientific = app.settings.mode == 'scientific'
+
+    var header = Row([
+      SegmentedControl(['Basic', 'Scientific'], scientific ? 1 : 0, {
+        on_changed: @(index) {
+          app.set_mode(index == 1 ? 'scientific' : 'basic')
+        },
+        accessibility_identifier: 'mode',
+      }),
+      Visibility(RadioGroup({ deg: 'Deg', rad: 'Rad' }, app.settings.angle, {
+        axis: Axis.HORIZONTAL,
+        spacing: 10,
+        on_changed: @(angle) {
+          app.change_settings(@(settings) {
+            settings.angle = angle
+          })
+        },
+      }), { visible: scientific }),
+      Spacer(),
+      Button('Tape', {
+        selected: app.settings.show_tape,
+        on_selected_changed: @(on) {
+          app.toggle_tape()
+        },
+        size: ControlSize.SMALL,
+        accessibility_identifier: 'show tape',
+      }),
+    ], { spacing: 12 })
+
+    var input = Column([
+      ComboBox(app.settings.recents, {
+        controller: app.input,
+        placeholder: 'Type an expression, such as 2 × (3 + 4)^2',
+        on_submitted: @(text) {
+          app.submit(text)
+        },
+        on_selected: @(index, text) {
+          app.submit(text)
+        },
+        accessibility_identifier: 'expression input',
+      }),
+      Visibility(Text(app.input_error == nil ? '' : app.input_error, {
+        style: TextStyle({ size: 11, color: Color.system('red') }),
+        accessibility_identifier: 'input error',
+      }), { visible: app.input_error != nil }),
+    ], { spacing: 4, align_items: AlignItems.STRETCH })
+
+    var pads = scientific
+      ? Row(
+        [self._scientific_keypad(), self._keypad()],
+        { spacing: 12, align_items: AlignItems.START },
+      )
+      : self._keypad()
+
+    var main = FitContent(Column(
+      [header, input, self._display(context), pads],
+      { spacing: 12, align_items: AlignItems.STRETCH, shrink_wrap: true },
+    ))
+
+    var body = main
+
+    if app.settings.show_tape {
+      body = FitContent(
+        Row(
+          [main, Separator(), self._tape(context)],
+          { spacing: 16, align_items: AlignItems.STRETCH, shrink_wrap: true },
+        ),
+        { axis: Axis.VERTICAL },
+      )
+    }
+
+    return KeyListener(
+      Padding(EdgeInsets.all(16), body),
+      { on_key: @(event) => self._keys(event) },
+    )
+  }
+}
+
+/**
+ * The Settings window's content.
+ */
+class SettingsPage < StatelessWidget {
+
+  /**
+   * @type CalculatorState
+   */
+  var app
+
+  /**
+   * @param CalculatorState app
+   * @constructor
+   */
+  @new(app) {
+    self.app = app
+  }
+
+  _row(label: string, control) {
+    return Row([Text(label), Spacer(), control], { spacing: 12 })
+  }
+
+  build(context) {
+    var app = self.app
+    var settings = app.settings
+    var places = [DropdownItem(nil, 'Automatic'), DropdownItem.separator()]
+
+    iter var n = 0; n <= 10; n++ {
+      places.append(DropdownItem(n, n == 1 ? '1 place' : '${n} places'))
+    }
+
+    var display = GroupBox(Column([
+      self._row('Decimal places', Dropdown(places, settings.places, {
+        on_changed: @(value) {
+          app.change_settings(@(s) {
+            s.places = value
+          })
+        },
+        accessibility_identifier: 'places',
+      })),
+      self._row('Thousands separators', Switch(settings.grouping, {
+        on_changed: @(value) {
+          app.change_settings(@(s) {
+            s.grouping = value
+          })
+        },
+        accessibility_identifier: 'grouping',
+      })),
+      self._row('Significant digits', Row([
+        Text(
+          '${settings.significant}',
+          { style: TextStyle({ monospaced_digits: true }) },
+        ),
+        Stepper(settings.significant, {
+          min: 6,
+          max: 15,
+          on_changed: @(value) {
+            app.change_settings(@(s) {
+              s.significant = value
+            })
+          },
+          accessibility_identifier: 'significant',
+        }),
+      ], { spacing: 6, shrink_wrap: true })),
+    ], { spacing: 10, align_items: AlignItems.STRETCH }), { title: 'Display' })
+
+    var angles = GroupBox(
+      Align(RadioGroup({ deg: 'Degrees', rad: 'Radians' }, settings.angle, {
+        on_changed: @(value) {
+          app.change_settings(@(s) {
+            s.angle = value
+          })
+        },
+      }), { alignment: Alignment.CENTER_LEFT }), { title: 'Angles' },
+    )
+
+    return Box({
+      width: 340,
+      padding: EdgeInsets.all(20),
+      child: Column([
+        display,
+        angles,
+        Checkbox(settings.keep_history, {
+          label: 'Keep the tape between launches',
+          on_changed: @(value) {
+            app.change_settings(@(s) {
+              s.keep_history = value
+            })
+          },
+          accessibility_identifier: 'keep history',
+        }),
+      ], { spacing: 14, align_items: AlignItems.STRETCH, shrink_wrap: true }),
+    })
+  }
+}
