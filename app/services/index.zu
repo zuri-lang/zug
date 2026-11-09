@@ -1,8 +1,9 @@
 /**
  * Services of the running application: timers, the clipboard, dialogs,
- * and work done in the background.
+ * printing, and work done in the background.
  */
 
 import @.timer { * }
 import @.system { * }
 import @.background { * }
+import @.printing { * }

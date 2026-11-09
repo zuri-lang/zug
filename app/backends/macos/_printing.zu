@@ -1,0 +1,361 @@
+/**
+ * Printing: the page layout panel, the print panel, and PDF files.
+ *
+ * zug's pages are drawn by a view that AppKit prints: it says how many
+ * pages there are, where each lies, and draws each with a `MacPainter`
+ * when AppKit asks, for the preview as well as for the printer.
+ */
+
+import ffi
+import .. ..foundation { Size, Rect, EdgeInsets, BackendError, report_error }
+import .. ..painting { PageSetup }
+import ._runtime {
+  cls, sel, send, send_id, send_void, send_void_id, send_void_bool, typed,
+  define_class, create_with_frame, ns_string, zuri_string, release, rect,
+  CGRect, CGSize, Block,
+}
+import ._classes { register, unregister, host_for, B }
+import ._canvas { MacPainter }
+
+# NSPaperOrientation values.
+var _PORTRAIT = 0
+var _LANDSCAPE = 1
+
+# NSModalResponseOK.
+var _OK = 1
+
+# What the print panel shows: copies, the page range, the paper size,
+# the orientation and the preview.
+var _PANEL_OPTIONS = 1 | 2 | 4 | 8 | (1 << 17)
+
+var _paper_size = typed(CGSize, [])
+var _set_paper_size = typed(ffi.void, [CGSize])
+var _double = typed(ffi.double, [])
+var _set_double = typed(ffi.void, [ffi.double])
+var _long = typed(ffi.long, [])
+var _set_long = typed(ffi.void, [ffi.long])
+var _bool = typed(ffi.bool, [])
+var _set_object = typed(ffi.void, [ffi.ptr, ffi.ptr])
+var _with_view = typed(ffi.ptr, [ffi.ptr, ffi.ptr])
+var _run_sheet = typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr])
+var _layout_sheet = typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr])
+var _run_layout = typed(ffi.long, [ffi.ptr])
+
+def _symbol(name: string) {
+  return ffi.open().symbol(name).read(ffi.ptr)
+}
+
+# An NSPrintInfo of its own, set up as `setup` says.
+def _print_info(setup) {
+  var info = send(send(cls('NSPrintInfo'), 'sharedPrintInfo'), 'copy')
+  var page = setup.page_size()
+  var margins = setup.margins
+  _set_long(
+    info, sel('setOrientation:'),
+    setup.orientation == 'landscape' ? _LANDSCAPE : _PORTRAIT,
+  )
+  _set_paper_size(
+    info, sel('setPaperSize:'), { width: page.width, height: page.height },
+  )
+  _set_double(info, sel('setTopMargin:'), margins.top)
+  _set_double(info, sel('setLeftMargin:'), margins.left)
+  _set_double(info, sel('setBottomMargin:'), margins.bottom)
+  _set_double(info, sel('setRightMargin:'), margins.right)
+  send_void_bool(info, 'setHorizontallyCentered:', false)
+  send_void_bool(info, 'setVerticallyCentered:', false)
+  return info
+}
+
+# The `PageSetup` an NSPrintInfo describes.
+def _setup_of(info) {
+  var size = _paper_size(info, sel('paperSize'))
+  return PageSetup({
+    paper_size: Size(size.width, size.height),
+    orientation: _long(info, sel('orientation')) == _LANDSCAPE
+      ? 'landscape'
+      : 'portrait',
+    margins: EdgeInsets(
+      _double(info, sel('leftMargin')),
+      _double(info, sel('topMargin')),
+      _double(info, sel('rightMargin')),
+      _double(info, sel('bottomMargin')),
+    ),
+    paper_name: zuri_string(send(info, 'localizedPaperName')),
+  })
+}
+
+/**
+ * The page setup from the application's shared print settings.
+ *
+ * @returns PageSetup
+ */
+def default_page_setup() {
+  return _setup_of(send(cls('NSPrintInfo'), 'sharedPrintInfo'))
+}
+
+/**
+ * Shows the page layout panel, as a sheet on `window` when there is one,
+ * and passes the `PageSetup` chosen, or `nil`, to `done`.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function done
+ */
+def page_setup(backend, window, spec: dict, done: function) {
+  var info = _print_info(spec.setup)
+  var layout = send(cls('NSPageLayout'), 'pageLayout')
+  var finish = @(response) {
+    var chosen = response == _OK ? _setup_of(info) : nil
+    send_void(info, 'release')
+    backend.answer(done, chosen)
+  }
+
+  if window == nil or window.closed or window.destroyed {
+    finish(_run_layout(layout, sel('runModalWithPrintInfo:'), info))
+    return
+  }
+
+  var block = nil
+  block = Block(@(response) {
+    block.release()
+    finish(response)
+  }, [ffi.long])
+  _layout_sheet(
+    layout, sel('beginSheetUsingPrintInfo:onWindow:completionHandler:'), info,
+    window.native, block.pointer,
+  )
+}
+
+# One print job: how to count and paint its pages, and the printable size
+# AppKit last asked about.
+class _Job {
+  var count
+  var paint
+  var size
+  var pages = 1
+
+  @new(count: function, paint: function, size: Size) {
+    self.count = count
+    self.paint = paint
+    self.size = size
+  }
+}
+
+/**
+ * The view AppKit prints: the pages one below another, each the
+ * printable size.
+ *
+ * @type Pointer
+ */
+var ZugPrintView = define_class('ZugPrintView', 'NSView', {
+  isFlipped: ['${B}@:', ffi.bool, [], @(this) => true, true],
+  'knowsPageRange:': [
+    '${B}@:^{_NSRange=QQ}', ffi.bool, [ffi.ptr], @(this, range) {
+      var job = host_for(this)
+      var operation = send(cls('NSPrintOperation'), 'currentOperation')
+
+      if job == nil or operation == nil {
+        return false
+      }
+
+      var info = send(operation, 'printInfo')
+      var page = _paper_size(info, sel('paperSize'))
+      var across = _double(info, sel('leftMargin'))
+        + _double(info, sel('rightMargin'))
+      var down = _double(info, sel('topMargin'))
+        + _double(info, sel('bottomMargin'))
+      job.size = Size(page.width - across, page.height - down)
+
+      # Printing nothing is not something AppKit can do, so a job with no
+      # pages prints one blank page.
+      job.pages = job.count(MacPainter(nil, job.size)).max(1)
+      typed(ffi.void, [CGSize])(
+        this, sel('setFrameSize:'),
+        { width: job.size.width, height: job.size.height * job.pages },
+      )
+      range.write(ffi.ulong, 1)
+      range.write(ffi.ulong, job.pages, 8)
+      return true
+    }, false,
+  ],
+  'rectForPage:': [
+    '{CGRect={CGPoint=dd}{CGSize=dd}}@:q', CGRect, [ffi.long], @(this, page) {
+      var job = host_for(this)
+      var size = job == nil ? Size(0, 0) : job.size
+      return rect(0, (page - 1) * size.height, size.width, size.height)
+    },
+  ],
+  'drawRect:': [
+    'v@:{CGRect={CGPoint=dd}{CGSize=dd}}', ffi.void, [CGRect],
+    @(this, dirty) {
+      var job = host_for(this)
+      var operation = send(cls('NSPrintOperation'), 'currentOperation')
+
+      if job == nil or operation == nil {
+        return
+      }
+
+      var page = _long(operation, sel('currentPage')) - 1
+      var context = send(
+        send(cls('NSGraphicsContext'), 'currentContext'), 'CGContext',
+      )
+      var painter = MacPainter(context, job.size)
+      painter.save()
+      painter.translate(0, page * job.size.height)
+      painter.clip_rect(Rect(0, 0, job.size.width, job.size.height))
+
+      catch {
+        job.paint(painter, page)
+      } as error {
+        report_error(error, 'painting page ${page + 1} to print')
+      }
+
+      painter.restore()
+    },
+  ],
+})
+
+# The jobs printing as sheets, by the address of their operation, each
+# with the function that finishes it.
+var _running = {}
+
+/**
+ * Hears when a print operation run as a sheet ends.
+ *
+ * @type Pointer
+ */
+var ZugPrintDelegate = define_class('ZugPrintDelegate', 'NSObject', {
+  'printOperationDidRun:success:contextInfo:': [
+    'v@:@${B}^v', ffi.void, [ffi.ptr, ffi.bool, ffi.ptr],
+    @(this, operation, success, context) {
+      var finish = _running.get(operation.address())
+
+      if finish != nil {
+        _running.remove(operation.address())
+        finish(success)
+      }
+    },
+  ],
+})
+
+var _delegate = nil
+
+def _print_delegate() {
+  if _delegate == nil {
+    _delegate = send(send(ZugPrintDelegate, 'alloc'), 'init')
+  }
+
+  return _delegate
+}
+
+# A print operation for a job, with its view, which is released once
+# `finish` has been called.
+def _operation(spec: dict, count: function, paint: function, info) {
+  var setup = spec.setup
+  var job = _Job(count, paint, setup.printable_size())
+  var size = job.size
+  var view = create_with_frame(
+    'ZugPrintView', rect(0, 0, size.width, size.height),
+  )
+  register(view, job)
+
+  # Pages print as they would on screen in light mode, so text in the
+  # label colour comes out black, not white.
+  send_void_id(
+    view, 'setAppearance:',
+    send_id(
+      cls('NSAppearance'), 'appearanceNamed:', _symbol('NSAppearanceNameAqua'),
+    ),
+  )
+
+  var operation = _with_view(
+    cls('NSPrintOperation'), sel('printOperationWithView:printInfo:'), view,
+    info,
+  )
+  send_void_id(
+    operation, 'setJobTitle:', ns_string(spec.get('title', 'Untitled')),
+  )
+  return {
+    operation,
+    done: @{
+      unregister(view)
+      release(view)
+      send_void(info, 'release')
+    },
+  }
+}
+
+/**
+ * Shows the print panel for a job, as a sheet on `window` when there is
+ * one, and passes whether it printed to `done`.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function count
+ * @param function paint
+ * @param function done
+ */
+def print_pages(
+  backend, window, spec: dict, count: function, paint: function,
+  done: function,
+) {
+  var made = _operation(spec, count, paint, _print_info(spec.setup))
+  var operation = made.operation
+  send_void_bool(operation, 'setShowsPrintPanel:', true)
+  send_void_bool(operation, 'setShowsProgressPanel:', true)
+  _set_long(
+    send(operation, 'printPanel'), sel('setOptions:'), _PANEL_OPTIONS,
+  )
+  var finish = @(printed) {
+    made['done']()
+    backend.answer(done, printed == true)
+  }
+
+  if window == nil or window.closed or window.destroyed {
+    finish(_bool(operation, sel('runOperation')))
+    return
+  }
+
+  _running[operation.address()] = finish
+  _run_sheet(
+    operation,
+    sel('runOperationModalForWindow:delegate:didRunSelector:contextInfo:'),
+    window.native, _print_delegate(),
+    sel('printOperationDidRun:success:contextInfo:'), nil,
+  )
+}
+
+/**
+ * Writes a job's pages to a PDF file at `path`, with no panels.
+ *
+ * @param string path
+ * @param dict spec
+ * @param function count
+ * @param function paint
+ * @throws BackendError When the file was not written
+ */
+def save_pdf(path: string, spec: dict, count: function, paint: function) {
+  var info = _print_info(spec.setup)
+  var settings = send(info, 'dictionary')
+  _set_object(
+    settings, sel('setObject:forKey:'), _symbol('NSPrintSaveJob'),
+    _symbol('NSPrintJobDisposition'),
+  )
+  _set_object(
+    settings, sel('setObject:forKey:'),
+    send_id(cls('NSURL'), 'fileURLWithPath:', ns_string(path)),
+    _symbol('NSPrintJobSavingURL'),
+  )
+
+  var made = _operation(spec, count, paint, info)
+  send_void_bool(made.operation, 'setShowsPrintPanel:', false)
+  send_void_bool(made.operation, 'setShowsProgressPanel:', false)
+  var written = _bool(made.operation, sel('runOperation'))
+  made['done']()
+
+  if !written {
+    raise BackendError('could not write a PDF to ${path}')
+  }
+}

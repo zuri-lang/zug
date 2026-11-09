@@ -1,0 +1,177 @@
+/**
+ * Printing: the page setup dialog, the print dialog, and PDF files written
+ * without asking.
+ *
+ * Pages are drawn the way a `Canvas` is, with a `Painter`. Text wraps
+ * with the `max_width` of `text()`, and `measure_text()` says how much
+ * room it takes, which is how a document is split into pages.
+ *
+ * ```zuri,ignore
+ * print_pages(context, {
+ *   title: 'Invoice 1024',
+ *   pages: 1,
+ *   paint: @(painter, page) {
+ *     painter.text('Invoice 1024', Point(0, 0), TextStyle({ size: 24 }))
+ *   },
+ * }).then(@(printed) {
+ *   echo printed ? 'printed' : 'cancelled'
+ * })
+ * ```
+ */
+
+import ..foundation { Deferred, LifecycleError, check_options }
+import ..painting { PageSetup }
+import ..rendering { RenderWindow }
+import ..widgets { current_runtime }
+
+def _backend() {
+  var runtime = current_runtime()
+
+  if runtime == nil {
+    raise LifecycleError('printing needs a running application')
+  }
+
+  return runtime.backend
+}
+
+# The native window of the window `context` is in, or nil.
+def _window(context) {
+  if context == nil {
+    return nil
+  }
+
+  var node = context.find_render_object()
+
+  while node != nil and !instance_of(node, RenderWindow) {
+    node = node.render_parent
+  }
+
+  return node == nil ? nil : node.view
+}
+
+var _JOB_OPTIONS = {
+  title: 'string',
+  pages: ['number', 'function'],
+  paint: 'function',
+  setup: PageSetup,
+}
+
+# The checked options of a print job, as the backend takes them.
+def _job(options, owner: string) {
+  var o = check_options(options, owner, _JOB_OPTIONS)
+
+  if o.get('paint') == nil {
+    raise ValueError('${owner} needs paint, a function that draws a page')
+  }
+
+  var pages = o.get('pages', 1)
+
+  if is_number(pages) and (!is_int(pages) or pages < 0) {
+    raise ValueError('pages of ${owner} must be a whole number, got ${pages}')
+  }
+
+  var setup = o.get('setup')
+  var count = is_number(pages) ? @(painter) => pages : pages
+  return {
+    spec: {
+      title: o.get('title', 'Untitled'),
+      setup: setup == nil ? _backend().default_page_setup() : setup,
+    },
+    count: @(painter) {
+      var total = count(painter)
+
+      if !is_int(total) or total < 0 {
+        raise ValueError('pages of ${owner} gave ${total}, not a whole number of pages')
+      }
+
+      return total
+    },
+    paint: o.paint,
+  }
+}
+
+/**
+ * The page setup the system starts from: the paper chosen in its
+ * settings, and its usual margins.
+ *
+ * @returns PageSetup
+ * @throws LifecycleError When no application is running
+ */
+def default_page_setup() {
+  return _backend().default_page_setup()
+}
+
+/**
+ * Shows the page setup dialog, where the user picks the paper and which
+ * way round it goes. The promise is resolved with the `PageSetup` chosen,
+ * or `nil` when the user cancelled. Keep it and pass it to
+ * `print_pages()`.
+ *
+ * @param ?Context context
+ * @param ?dict options: `setup`, the `PageSetup` to start from; the
+ *    system's when left out.
+ * @returns Promise
+ */
+def page_setup(context, options: ?dict) {
+  var o = check_options(options, 'page_setup', { setup: PageSetup })
+  var setup = o.get('setup')
+  var deferred = Deferred()
+  var spec = {
+    setup: setup == nil ? _backend().default_page_setup() : setup,
+  }
+  _backend().page_setup(_window(context), spec, @(chosen) {
+    deferred.resolve(chosen)
+  })
+  return deferred.promise
+}
+
+/**
+ * Shows the print dialog for pages you draw, then prints them or saves
+ * them as the user chooses. On macOS the dialog previews the pages, and
+ * can save them as a PDF.
+ *
+ * `paint` is called with a `Painter` and a page number, from 0, and
+ * draws that page. The painter's `size()` is the area inside the
+ * margins, with the origin at its top left. It may be called more than
+ * once for a page, for the preview, so it should only draw.
+ *
+ * `pages` is how many pages there are. When that depends on the paper,
+ * as it does for text that flows from page to page, pass a function: it
+ * is called with a painter of the printable size, to measure text with,
+ * and returns the count. It is asked again if the user picks other
+ * paper.
+ *
+ * The promise is resolved with `true` once the pages were printed or
+ * saved, and `false` when the user cancelled.
+ *
+ * @param ?Context context
+ * @param dict options: `paint` (required), `pages` (1 when left out),
+ *    `title`, the job's name in the print queue and the PDF's name, and
+ *    `setup`, a `PageSetup`; the system's when left out.
+ * @returns Promise
+ * @throws ValueError When `paint` is missing or `pages` is not a count
+ */
+def print_pages(context, options: dict) {
+  var job = _job(options, 'print_pages')
+  var deferred = Deferred()
+  _backend().print_pages(
+    _window(context), job.spec, job.count, job.paint, @(printed) {
+      deferred.resolve(printed == true)
+    },
+  )
+  return deferred.promise
+}
+
+/**
+ * Writes pages to a PDF file at `path`, drawn as `print_pages()` draws
+ * them, without asking anyone.
+ *
+ * @param string path
+ * @param dict options: as `print_pages()` takes.
+ * @throws ValueError When `paint` is missing or `pages` is not a count
+ * @throws BackendError When the file cannot be written
+ */
+def save_pdf(path: string, options: dict) {
+  var job = _job(options, 'save_pdf')
+  _backend().save_pdf(path, job.spec, job.count, job.paint)
+}

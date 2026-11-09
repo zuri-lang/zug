@@ -103,17 +103,52 @@ def mouse_click(view) {
 # Sends a native window a key going down, as the keyboard does. It goes
 # to the window itself rather than through the application, which drops
 # keys while another application is active.
-def send_key(window, characters, code) {
+def _key_down(window, characters, code) {
   var string = _send_string_arg(
     _class('NSString'), _sel('stringWithUTF8String:'), characters,
   )
-  var event = _key_event(
+  return _key_event(
     _class('NSEvent'),
     _sel('keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:'),
     10, { x: 0, y: 0 }, 0, 0, _send_long(window, _sel('windowNumber')), nil,
     string, string, false, code,
   )
-  _send_void_id(window, _sel('sendEvent:'), event)
+}
+
+def send_key(window, characters, code) {
+  _send_void_id(window, _sel('sendEvent:'), _key_down(window, characters, code))
+}
+
+# The button in a native view, or the views inside it, whose key
+# equivalent is `characters`, or nil.
+def button_for_key(view, characters) {
+  if _send_bool_id(view, _sel('isKindOfClass:'), _class('NSButton'))
+    and native_string(view, 'keyEquivalent') == characters {
+    return view
+  }
+
+  var subviews = _send(view, _sel('subviews'))
+
+  iter var i = 0; i < _send_long(subviews, _sel('count')); i++ {
+    var found = button_for_key(
+      _send_long_arg(subviews, _sel('objectAtIndex:'), i), characters,
+    )
+
+    if found != nil {
+      return found
+    }
+  }
+
+  return nil
+}
+
+# Offers a key to the buttons of a native window whose shortcut it is, as
+# AppKit does for the key window. AppKit offers them only there, and the
+# test application need not be active while someone uses the machine.
+def press_key_equivalent(window, characters, code) {
+  return _send_bool_id(
+    window, _sel('performKeyEquivalent:'), _key_down(window, characters, code),
+  )
 }
 
 def native_string(object, name) {
@@ -424,7 +459,7 @@ suite('the macOS backend', @{
         var window = runtime.windows()[0].view.native
         send_key(window, '\u001b', 53)
         runtime.windows()[0].view.clear_focus()
-        send_key(window, '\u001b', 53)
+        press_key_equivalent(window, '\u001b', 53)
       },
     ])
 
@@ -543,7 +578,11 @@ suite('the macOS backend', @{
         var sheet = _send(main, _sel('attachedSheet'))
         seen['sheet'] = sheet != nil
           and sheet == runtime.windows()[1].view.native
-        send_key(sheet, '\r', 36)
+        # AppKit presses the button whose key equivalent is Return only
+        # while the application is active, which the test application need
+        # not be while someone uses the machine. So this clicks the button
+        # Return would press.
+        click(button_for_key(_send(sheet, _sel('contentView')), '\r'))
       },
       @(runtime) {
         var main = runtime.windows()[0].view.native
@@ -573,6 +612,123 @@ suite('the macOS backend', @{
     expect(seen.field_focused).to_be_true()
     expect(seen.after_escape).to_be_true()
     expect(results).to_equal(['renamed', 'cancelled'])
+  })
+
+  it('writes pages to a PDF, laid out for the printable size', @{
+    var seen = {}
+    var path = os.join_paths(os.create_temp_dir('zug-print-'), 'pages.pdf')
+    var style = TextStyle({ size: 12 })
+    var lines = []
+
+    iter var i = 0; i < 40; i++ {
+      lines.append(
+        'Line ${i} of a text that wraps across the printable width of the '
+          + 'page, and goes on long enough to need a second line there.',
+      )
+    }
+
+    # Which lines go on each page, and where.
+    var lay_out = @(painter) {
+      var width = painter.size().width
+      var pages = [[]]
+      var y = 0
+
+      for line in lines {
+        var height = painter.measure_text(line, style, width).height
+
+        if y + height > painter.size().height {
+          pages.append([])
+          y = 0
+        }
+
+        pages[-1].append([line, y])
+        y += height
+      }
+
+      return pages
+    }
+
+    run_steps(App({ windows: [Window('Print', Text('x'))] }), [
+      @(runtime) {
+        seen['printable'] = default_page_setup().printable_size()
+        save_pdf(path, {
+          title: 'Lines',
+          pages: @(painter) {
+            seen['measured'] = painter.size()
+            seen['pages'] = lay_out(painter).length()
+            return seen.pages
+          },
+          paint: @(painter, page) {
+            for item in lay_out(painter)[page] {
+              painter.text(
+                item[0], Point(0, item[1]), style, painter.size().width,
+              )
+            }
+          },
+        })
+      },
+    ])
+
+    ffi.open('/System/Library/Frameworks/PDFKit.framework/PDFKit')
+    var send_id = _objc.function(
+      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.ptr],
+    )
+    var url = send_id(
+      _class('NSURL'), _sel('fileURLWithPath:'),
+      _send_string_arg(_class('NSString'), _sel('stringWithUTF8String:'), path),
+    )
+    var pdf = send_id(
+      _send(_class('PDFDocument'), _sel('alloc')), _sel('initWithURL:'), url,
+    )
+    var text = native_string(pdf, 'string')
+
+    expect(reported).to_be_empty()
+    expect(seen.measured).to_equal(seen.printable)
+    expect(seen.pages > 1).to_be_true()
+    expect(_send_long(pdf, _sel('pageCount'))).to_be(seen.pages)
+    expect(text.contains('Line 0 of a text')).to_be_true()
+    expect(text.contains('Line 39 of a text')).to_be_true()
+  })
+
+  it('shows the page setup and print panels as sheets', @{
+    var results = []
+    var sheets = []
+    var end_sheet = @(runtime) {
+      var main = runtime.windows()[0].view.native
+      var sheet = _send(main, _sel('attachedSheet'))
+      sheets.append(sheet != nil)
+
+      # Cancels it, as its Cancel button does.
+      _objc.function(
+        'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.long],
+      )(main, _sel('endSheet:returnCode:'), sheet, 0)
+    }
+    var inside = nil
+
+    run_steps(App({ windows: [Window('Print', Builder(@(context) {
+      inside = context
+      return Text('x')
+    }), { size: Size(400, 300) })] }), [
+      @(runtime) {
+        page_setup(inside).then(@(setup) {
+          results.append(setup)
+        })
+      },
+      @(runtime) {},
+      end_sheet,
+      @(runtime) {
+        print_pages(inside, { paint: @(painter, page) {} }).then(@(printed) {
+          results.append(printed)
+        })
+      },
+      @(runtime) {},
+      end_sheet,
+      @(runtime) {},
+    ])
+
+    expect(reported).to_be_empty()
+    expect(sheets).to_equal([true, true])
+    expect(results).to_equal([nil, false])
   })
 
   it('keeps the backend contract', @{

@@ -39,6 +39,7 @@ var CAPABILITIES = [
   'hover',
   'tooltips',
   'native_dialogs',
+  'printing',
   'clipboard',
   'visual_effects',
   'appearance',
@@ -551,6 +552,65 @@ class Backend {
    */
   pick_color(window, spec: dict, changed: function, done: function) {
     raise NotImplementedError('pick_color')
+  }
+
+  /**
+   * The page setup the system starts from: the paper chosen in its
+   * settings, upright, and its usual margins.
+   *
+   * @returns PageSetup
+   */
+  default_page_setup() {
+    raise NotImplementedError('default_page_setup')
+  }
+
+  /**
+   * Shows the platform's page setup dialog starting from `spec.setup`, and
+   * calls `done` with the `PageSetup` chosen, or `nil` when the user
+   * cancelled.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `setup`, a `PageSetup`.
+   * @param function done
+   */
+  page_setup(window, spec: dict, done: function) {
+    raise NotImplementedError('page_setup')
+  }
+
+  /**
+   * Shows the platform's print dialog for pages zug draws, and prints them
+   * or saves them as the user asks. `count` is called with a `Painter`
+   * whose `size()` is the printable area, to measure with, and returns how
+   * many pages there are; it is asked again when the user picks other
+   * paper. `paint` is called with a painter of the same size and a page
+   * number from 0 to draw that page, as often as the platform needs it,
+   * for a preview too. `done` is called with `true` once the pages were
+   * printed or saved, and `false` when the user cancelled.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `title`, the job's name, and `setup`, a `PageSetup`.
+   * @param function count
+   * @param function paint
+   * @param function done
+   */
+  print_pages(
+    window, spec: dict, count: function, paint: function, done: function,
+  ) {
+    raise NotImplementedError('print_pages')
+  }
+
+  /**
+   * Writes pages to a PDF file at `path` without asking anyone, drawn as
+   * `print_pages()` draws them.
+   *
+   * @param string path
+   * @param dict spec: `title` and `setup`.
+   * @param function count
+   * @param function paint
+   * @throws BackendError When the file cannot be written
+   */
+  save_pdf(path: string, spec: dict, count: function, paint: function) {
+    raise NotImplementedError('save_pdf')
   }
 
   /**

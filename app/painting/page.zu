@@ -1,0 +1,199 @@
+/**
+ * Pages to print on: the paper, which way round it goes, and the margins
+ * kept clear around what is drawn.
+ */
+
+import ..foundation { Size, EdgeInsets, check_options }
+
+/**
+ * Which way round a page is printed.
+ */
+class PageOrientation {
+
+  /**
+   * Taller than it is wide.
+   */
+  static var PORTRAIT = 'portrait'
+
+  /**
+   * Wider than it is tall.
+   */
+  static var LANDSCAPE = 'landscape'
+}
+
+var _ORIENTATIONS = ['portrait', 'landscape']
+
+/**
+ * The sizes of common papers, upright, in points of 1/72 inch.
+ */
+class PaperSize {
+
+  /**
+   * ISO A3, 297 by 420 millimetres.
+   */
+  static var A3 = Size(842, 1191)
+
+  /**
+   * ISO A4, 210 by 297 millimetres.
+   */
+  static var A4 = Size(595, 842)
+
+  /**
+   * ISO A5, 148 by 210 millimetres.
+   */
+  static var A5 = Size(420, 595)
+
+  /**
+   * US Letter, 8.5 by 11 inches.
+   */
+  static var LETTER = Size(612, 792)
+
+  /**
+   * US Legal, 8.5 by 14 inches.
+   */
+  static var LEGAL = Size(612, 1008)
+}
+
+/**
+ * How pages are laid out on paper: the paper's size, which way round it
+ * goes, and the margins kept clear on each side. A paint function draws
+ * in the area inside the margins, which `printable_size()` gives.
+ *
+ * ```zuri
+ * import zug { PageSetup, PaperSize, PageOrientation, EdgeInsets }
+ *
+ * var setup = PageSetup({
+ *   paper_size: PaperSize.LETTER,
+ *   orientation: PageOrientation.LANDSCAPE,
+ *   margins: EdgeInsets.all(36),
+ * })
+ * echo setup.printable_size().width
+ * ```
+ */
+class PageSetup {
+
+  /**
+   * The paper's size, upright.
+   *
+   * @type Size
+   */
+  var paper_size
+
+  /**
+   * See `PageOrientation`.
+   *
+   * @type string
+   */
+  var orientation = 'portrait'
+
+  /**
+   * The space kept clear on each side of the page, as it is printed.
+   *
+   * @type EdgeInsets
+   */
+  var margins
+
+  /**
+   * The paper's name as the system shows it, such as A4 or US Letter, or
+   * `nil`. It is only for showing; the size is what is printed on.
+   *
+   * @type ?string
+   */
+  var paper_name
+
+  /**
+   * @param ?dict options: `paper_size` (A4 when left out), `orientation`,
+   *    `margins` (an inch on every side when left out) and `paper_name`.
+   * @throws ValueError When the orientation is unknown, or the margins
+   *    leave no room to print
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'PageSetup',
+      {
+        paper_size: Size,
+        orientation: 'string',
+        margins: EdgeInsets,
+        paper_name: 'string',
+      },
+    )
+    var size = o.get('paper_size', PaperSize.A4)
+
+    # Upright, whichever way round it was given.
+    self.paper_size = size.width > size.height
+      ? Size(size.height, size.width)
+      : size
+    self.orientation = o.get('orientation', 'portrait')
+    self.margins = o.get('margins', EdgeInsets.all(72))
+    self.paper_name = o.get('paper_name')
+
+    if !_ORIENTATIONS.contains(self.orientation) {
+      raise ValueError("orientation of PageSetup must be one of PageOrientation's values (portrait, landscape), got '${self.orientation}'")
+    }
+
+    var printable = self.printable_size()
+
+    if printable.width <= 0 or printable.height <= 0 {
+      raise ValueError('the margins of a PageSetup leave no room to print')
+    }
+  }
+
+  /**
+   * The page's size as it is printed: the paper, turned for landscape.
+   *
+   * @returns Size
+   */
+  page_size() {
+    var size = self.paper_size
+    return self.orientation == 'landscape'
+      ? Size(size.height, size.width)
+      : size
+  }
+
+  /**
+   * The size of the area inside the margins, which is what a paint
+   * function draws in.
+   *
+   * @returns Size
+   */
+  printable_size() {
+    var page = self.page_size()
+    return Size(
+      page.width - self.margins.horizontal(),
+      page.height - self.margins.vertical(),
+    )
+  }
+
+  /**
+   * A copy with the options given replaced.
+   *
+   * @param dict options: as the constructor takes.
+   * @returns PageSetup
+   */
+  copy_with(options: dict) {
+    var all = {
+      paper_size: self.paper_size,
+      orientation: self.orientation,
+      margins: self.margins,
+      paper_name: self.paper_name,
+    }
+
+    for name, value in options {
+      all[name] = value
+    }
+
+    if options.contains('paper_size') and !options.contains('paper_name') {
+      all.remove('paper_name')
+    }
+
+    return PageSetup(all.filter(@(value, name) => value != nil))
+  }
+
+  @eq(other) {
+    return instance_of(other, PageSetup)
+      and self.paper_size == other.paper_size
+      and self.orientation == other.orientation
+      and self.margins == other.margins
+  }
+}

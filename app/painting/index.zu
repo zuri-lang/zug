@@ -6,3 +6,4 @@ import @.text_style { * }
 import @.decoration { * }
 
 import @.drawing { * }
+import @.page { * }

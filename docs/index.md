@@ -37,6 +37,8 @@ application uses, roughly in the order you'll need it.
 - [Applications, windows and menus](apps-windows-and-menus.md): the
   `App`, opening and closing windows, the menu bar, and keyboard
   shortcuts.
+- [Printing](printing.md): printing pages you draw, the page setup
+  and print dialogs, and PDF files.
 - [Timers, promises and the system](services.md): promises, timers, the
   clipboard, alerts, file dialogs, dialogs of your own, font and colour
   choosers, and work on other isolates.

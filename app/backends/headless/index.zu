@@ -19,6 +19,7 @@ import .. ..foundation {
   Size, Rect, Point, EdgeInsets, Constraints, INFINITY, UnsupportedError,
   BackendError,
 }
+import .. ..painting { PageSetup }
 
 /**
  * The text size rule, shared by every view that shows text.
@@ -895,12 +896,23 @@ class HeadlessBackend < Backend {
   var menu_dispatch
 
   /**
-   * Alerts, file pickers and save panels waiting for an answer, oldest
-   * first, each `{ type, window, spec, done }`.
+   * Dialogs waiting for an answer, oldest first, each `{ type, window,
+   * spec, done }`. The type is `alert`, `pick_files`, `save_file`,
+   * `pick_font`, `pick_color`, `page_setup` or `print`.
    *
    * @type list
    */
   var dialogs = []
+
+  /**
+   * What was printed, or saved as a PDF, oldest first, each `{ title,
+   * setup, pages, path }`. Each page is the list of calls its painter got,
+   * as a `RecordingPainter` records them, and `path` is `nil` for a job
+   * that was printed.
+   *
+   * @type list
+   */
+  var printed = []
 
   /**
    * URLs `open_url()` was given.
@@ -1272,6 +1284,41 @@ class HeadlessBackend < Backend {
     self.dialogs.append({ type: 'pick_color', window, spec, changed, done })
   }
 
+  default_page_setup() {
+    return PageSetup({ paper_name: 'A4' })
+  }
+
+  page_setup(window, spec: dict, done: function) {
+    self.dialogs.append({ type: 'page_setup', window, spec, done })
+  }
+
+  print_pages(
+    window, spec: dict, count: function, paint: function, done: function,
+  ) {
+    self.dialogs.append({ type: 'print', window, spec, count, paint, done })
+  }
+
+  save_pdf(path: string, spec: dict, count: function, paint: function) {
+    var job = self._render(spec, count, paint)
+    job['path'] = path
+    self.printed.append(job)
+  }
+
+  # Draws every page of a job with recording painters.
+  _render(spec: dict, count: function, paint: function) {
+    var size = spec.setup.printable_size()
+    var pages = []
+    var total = count(RecordingPainter(size))
+
+    iter var page = 0; page < total; page++ {
+      var painter = RecordingPainter(size)
+      paint(painter, page)
+      pages.append(painter.calls)
+    }
+
+    return { title: spec.get('title'), setup: spec.setup, pages, path: nil }
+  }
+
   # A font or colour chooser opened again finishes the one already open,
   # with the last value picked there.
   _replace_dialog(type: string) {
@@ -1309,7 +1356,9 @@ class HeadlessBackend < Backend {
   /**
    * Answers the oldest waiting dialog with `answer`, as the user would. A
    * font or colour chooser given a value picks it and closes; given `nil`,
-   * it closes with the last value `change_dialog()` picked.
+   * it closes with the last value `change_dialog()` picked. A print dialog
+   * given `true` prints every page into `printed`, and given `false` is
+   * cancelled. A page setup dialog takes a `PageSetup`, or `nil`.
    *
    * @param any answer
    * @throws BackendError When no dialog is waiting
@@ -1320,6 +1369,17 @@ class HeadlessBackend < Backend {
     }
 
     var dialog = self.dialogs.shift()
+
+    # Printing given true prints every page, and given false cancels.
+    if dialog.type == 'print' {
+      if answer == true {
+        self.printed.append(
+          self._render(dialog.spec, dialog['count'], dialog['paint']),
+        )
+      }
+
+      answer = answer == true
+    }
 
     # A font or colour chooser given a value picks it and closes. Given
     # nil, it closes with the last value picked.

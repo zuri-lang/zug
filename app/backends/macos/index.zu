@@ -36,6 +36,7 @@ import ._canvas { MacCanvas, MacPointer, measure_attributed }
 import ._window { MacWindow }
 import ._menus { build_menu_bar, default_menus, role_action }
 import ._dialogs { show_alert, pick_files, save_file, pick_font, pick_color }
+import ._printing { default_page_setup, page_setup, print_pages, save_pdf }
 
 var _responds = typed(ffi.bool, [ffi.ptr])
 
@@ -414,6 +415,24 @@ class MacBackend < Backend {
 
   pick_color(window, spec: dict, changed: function, done: function) {
     pick_color(self, window, spec, changed, done)
+  }
+
+  default_page_setup() {
+    return default_page_setup()
+  }
+
+  page_setup(window, spec: dict, done: function) {
+    page_setup(self, window, spec, done)
+  }
+
+  print_pages(
+    window, spec: dict, count: function, paint: function, done: function,
+  ) {
+    print_pages(self, window, spec, count, paint, done)
+  }
+
+  save_pdf(path: string, spec: dict, count: function, paint: function) {
+    save_pdf(path, spec, count, paint)
   }
 
   /**

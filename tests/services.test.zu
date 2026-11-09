@@ -534,3 +534,115 @@ describe('show_dialog', @{
     t.dispose()
   })
 })
+
+describe('printing', @{
+  it('describes pages with PageSetup', @{
+    var setup = PageSetup({
+      paper_size: PaperSize.LETTER,
+      orientation: PageOrientation.LANDSCAPE,
+      margins: EdgeInsets.all(36),
+    })
+    expect(setup.page_size()).to_equal(Size(792, 612))
+    expect(setup.printable_size()).to_equal(Size(720, 540))
+    expect(PageSetup({ paper_size: Size(842, 595) }).paper_size).to_equal(
+      PaperSize.A4,
+    )
+    expect(setup.copy_with({ orientation: PageOrientation.PORTRAIT })
+      .page_size()).to_equal(PaperSize.LETTER)
+    expect(@{
+      PageSetup({ margins: EdgeInsets.all(400) })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      PageSetup({ orientation: 'sideways' })
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('resolves the page setup dialog with what was chosen', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var results = []
+    var landscape = PageSetup({ orientation: PageOrientation.LANDSCAPE })
+    page_setup(nil).then(@(setup) {
+      results.append(setup)
+    })
+    expect(t.backend.dialogs[0].spec.setup).to_equal(default_page_setup())
+    t.backend.answer_dialog(landscape)
+    page_setup(nil, { setup: landscape }).then(@(setup) {
+      results.append(setup)
+    })
+    t.backend.answer_dialog(nil)
+    t.pump()
+    expect(results).to_equal([landscape, nil])
+    t.dispose()
+  })
+
+  it('prints the pages counted for the printable size', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var results = []
+    var setup = PageSetup({ margins: EdgeInsets.all(50) })
+    var asked = nil
+    print_pages(nil, {
+      title: 'Report',
+      setup,
+      pages: @(painter) {
+        asked = painter.size()
+        return 3
+      },
+      paint: @(painter, page) {
+        painter.text('page ${page + 1}', Point(0, 0), nil)
+      },
+    }).then(@(printed) {
+      results.append(printed)
+    })
+    t.backend.answer_dialog(true)
+    t.pump()
+    expect(results).to_equal([true])
+    expect(asked).to_equal(setup.printable_size())
+    var job = t.backend.printed[0]
+    expect(job.title).to_be('Report')
+    expect(job.pages.length()).to_be(3)
+    expect(job.pages[2]).to_equal([['text', 'page 3', Point(0, 0)]])
+    t.dispose()
+  })
+
+  it('prints nothing when the dialog is cancelled', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var results = []
+    print_pages(nil, { pages: 2, paint: @(painter, page) {} }).then(
+      @(printed) {
+        results.append(printed)
+      },
+    )
+    t.backend.answer_dialog(false)
+    t.pump()
+    expect(results).to_equal([false])
+    expect(t.backend.printed).to_be_empty()
+    t.dispose()
+  })
+
+  it('saves pages as a PDF without asking', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    save_pdf('/reports/q3.pdf', { pages: 2, paint: @(painter, page) {
+      painter.fill_rect(Rect(0, 0, 10, 10), Color.RED)
+    } })
+    expect(t.backend.dialogs).to_be_empty()
+    expect(t.backend.printed[0].path).to_be('/reports/q3.pdf')
+    expect(t.backend.printed[0].pages.length()).to_be(2)
+    t.dispose()
+  })
+
+  it('refuses a job without paint, or with a page count that is not one', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    expect(@{
+      print_pages(nil, { pages: 2 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      save_pdf('/x.pdf', { pages: 1.5, paint: @(painter, page) {} })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      save_pdf(
+        '/x.pdf', { pages: @(painter) => -1, paint: @(painter, page) {} },
+      )
+    }).to_raise_instance_of(ValueError)
+    t.dispose()
+  })
+})
