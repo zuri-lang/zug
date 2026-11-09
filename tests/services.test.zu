@@ -294,6 +294,40 @@ describe('Style and Appearance', @{
     expect(t.find_text('mode dark')).to_have_length(1)
     t.dispose()
   })
+
+  it('show the appearance the App chose, whatever the system shows', @{
+    var chosen = ObservableValue(Appearance.DARK)
+    var t = WidgetTester().pump_app(Observer(chosen, @(context) => App({
+      appearance: chosen.value(),
+      windows: [Window('One', Builder(
+        @(inner) => Text('mode ${Appearance.of(inner)}'),
+      ))],
+    })))
+    expect(t.find_text('mode dark')).to_have_length(1)
+
+    # The system changing does not change what the App chose.
+    t.backend.set_appearance('dark')
+    t.backend.set_appearance('light')
+    expect(t.find_text('mode dark')).to_have_length(1)
+
+    chosen.set(Appearance.LIGHT)
+    t.pump()
+    expect(t.find_text('mode light')).to_have_length(1)
+
+    # Following the system again shows the system's.
+    t.backend.set_appearance('dark')
+    expect(t.find_text('mode light')).to_have_length(1)
+    chosen.set(Appearance.SYSTEM)
+    t.pump()
+    expect(t.find_text('mode dark')).to_have_length(1)
+    t.dispose()
+  })
+
+  it('refuse an appearance that is not one', @{
+    expect(@{
+      App({ appearance: 'sepia', windows: [] })
+    }).to_raise_instance_of(ValueError)
+  })
 })
 
 describe('dialogs and the clipboard', @{

@@ -817,6 +817,51 @@ suite('the macOS backend', @{
     expect(seen.turned).to_equal(['red', 'blue'])
   })
 
+  it('shows the appearance the App chose', @{
+    var chosen = ObservableValue(Appearance.DARK)
+    var seen = []
+    var names = _objc.function('objc_msgSend', ffi.string, [ffi.ptr, ffi.ptr])
+
+    # The appearance AppKit gives a native view: dark or light.
+    var view_appearance = @(runtime) {
+      var name = names(
+        _send(
+          _send(
+            hosts(runtime, 'text')[0].view.native, _sel('effectiveAppearance'),
+          ),
+          _sel('name'),
+        ),
+        _sel('UTF8String'),
+      )
+      return name.contains('Dark') ? 'dark' : 'light'
+    }
+    var record = @(runtime) {
+      seen.append([runtime.appearance, view_appearance(runtime)])
+    }
+
+    run_steps(Observer(chosen, @(context) => App({
+      appearance: chosen.value(),
+      windows: [Window('Look', Builder(
+        @(inner) => Text('mode ${Appearance.of(inner)}'),
+      ))],
+    })), [
+      record,
+      @(runtime) {
+        chosen.set(Appearance.LIGHT)
+      },
+      record,
+      @(runtime) {
+        chosen.set(Appearance.SYSTEM)
+      },
+      @(runtime) {
+        seen.append(runtime.appearance == runtime.backend.appearance())
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(seen).to_equal([['dark', 'dark'], ['light', 'light'], true])
+  })
+
   it('keeps the backend contract', @{
     var report = check_backend(create_backend('macos'))
     expect(report

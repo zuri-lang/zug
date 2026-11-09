@@ -528,6 +528,23 @@ class _Checker {
         'appearance() gave ${appearance}',
       )
     })
+
+    if self.backend.has_capability('appearance') {
+      self.check('shows the appearance the application chooses', @{
+        var shown = []
+
+        for appearance in ['dark', 'light'] {
+          self.backend.set_app_appearance(appearance)
+          shown.append(self.backend.appearance())
+        }
+
+        self.backend.set_app_appearance('system')
+        _require(
+          shown == ['dark', 'light'],
+          'choosing dark and then light showed ${shown}',
+        )
+      })
+    }
     self.check('describes its screens', @{
       var screens = self.backend.screens()
       _require(

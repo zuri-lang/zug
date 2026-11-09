@@ -73,11 +73,13 @@ class Runtime < BackendDelegate {
   var root
 
   /**
-   * The system appearance, `light` or `dark`.
+   * The appearance the application shows, `light` or `dark`.
    *
    * @type string
    */
   var appearance = 'light'
+
+  var _app_appearance = 'system'
 
   /**
    * Whether closing the last window quits the application.
@@ -420,6 +422,25 @@ class Runtime < BackendDelegate {
   on_event_handled() {
     run_microtasks()
     self._check_windows()
+  }
+
+  /**
+   * Shows the application light or dark whatever the system is, or, with
+   * `system`, as the system is.
+   *
+   * @internal
+   * @param string appearance: `system`, `light` or `dark`.
+   */
+  set_app_appearance(appearance: string) {
+    if appearance == self._app_appearance {
+      return
+    }
+
+    self._app_appearance = appearance
+
+    if self.backend.has_capability('appearance') {
+      self.backend.set_app_appearance(appearance)
+    }
   }
 
   on_appearance_changed(appearance: string) {

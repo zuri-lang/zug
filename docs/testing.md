@@ -115,7 +115,8 @@ Windows and the system can be acted on too:
 - `window().resize(Size(400, 300))` resizes it, and `click_close()`
   clicks its close button.
 - `choose_menu('File', 'New')` chooses a menu item.
-- `backend.set_appearance('dark')` switches the appearance.
+- `backend.set_appearance('dark')` switches the system's appearance. An
+  `App` that chose its own appearance keeps showing it.
 
 ## Time, timers and animations
 

@@ -971,6 +971,14 @@ class HeadlessBackend < Backend {
   var quits = 0
 
   var _clipboard
+  /**
+   * The appearance the application chose, or `system` to follow the
+   * system's.
+   *
+   * @type string
+   */
+  var app_appearance = 'system'
+
   var _appearance = 'light'
   var _frame_requested = false
   var _running = false
@@ -1428,19 +1436,35 @@ class HeadlessBackend < Backend {
   }
 
   appearance() {
-    return self._appearance
+    return self.app_appearance == 'system'
+      ? self._appearance
+      : self.app_appearance
+  }
+
+  set_app_appearance(appearance: string) {
+    var before = self.appearance()
+    self.app_appearance = appearance
+    self._appearance_shown(before)
   }
 
   /**
-   * Switches the appearance, as the user would in the system settings.
+   * Switches the system's appearance, as the user would in the system
+   * settings. An application that chose its own appearance keeps it.
    *
    * @param string appearance: `light` or `dark`.
    */
   set_appearance(appearance: string) {
+    var before = self.appearance()
     self._appearance = appearance
+    self._appearance_shown(before)
+  }
 
-    if self.delegate != nil {
-      self.delegate.on_appearance_changed(appearance)
+  # Tells the delegate when what the application shows has changed.
+  _appearance_shown(before: string) {
+    var now = self.appearance()
+
+    if now != before and self.delegate != nil {
+      self.delegate.on_appearance_changed(now)
       self.event_handled()
     }
   }

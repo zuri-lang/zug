@@ -53,7 +53,10 @@ var _APP_OPTIONS = {
   quit_on_last_window_closed: 'bool',
   on_quit_request: 'function',
   on_reopen: 'function',
+  appearance: 'string',
 }
+
+var _APPEARANCES = ['system', 'light', 'dark']
 
 /**
  * The application: its name, its windows, and how it ends.
@@ -113,9 +116,18 @@ class App < StatefulWidget {
   var style
 
   /**
+   * Light or dark, whatever the system is, or `system` to follow it. See
+   * `Appearance`.
+   *
+   * @type string
+   */
+  var appearance = 'system'
+
+  /**
    * @param dict options: `windows` (required), `title`, `menu_bar`,
-   *    `style`, `quit_on_last_window_closed` (true when left out),
-   *    `on_quit_request`, `on_reopen` and `key`.
+   *    `style`, `appearance` (`Appearance.SYSTEM` when left out),
+   *    `quit_on_last_window_closed` (true when left out), `on_quit_request`,
+   *    `on_reopen` and `key`.
    * @constructor
    */
   @new(options: dict) {
@@ -133,6 +145,11 @@ class App < StatefulWidget {
     self.on_reopen = o.get('on_reopen')
     self.menu_bar = o.get('menu_bar')
     self.style = o.get('style')
+    self.appearance = o.get('appearance', 'system')
+
+    if !_APPEARANCES.contains(self.appearance) {
+      raise ValueError("appearance of App must be one of Appearance's values (system, light, dark), got '${self.appearance}'")
+    }
   }
 
   create_state() {
@@ -236,6 +253,7 @@ class AppState < State {
     runtime.on_reopen_handler = widget.on_reopen == nil
       ? nil
       : @(payload) => widget.on_reopen()
+    runtime.set_app_appearance(widget.appearance)
   }
 
   build(context) {

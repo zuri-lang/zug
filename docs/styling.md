@@ -120,3 +120,41 @@ Canvas(@(painter, size) {
   painter.line(Point(0, 0), Point(size.width, size.height), Paint({ color: ink }))
 }, { repaint: Appearance.of(context) })
 ```
+
+An application follows the system's appearance unless it chooses one.
+`App`'s `appearance` option is `Appearance.LIGHT`, `Appearance.DARK` or
+`Appearance.SYSTEM`, the default. It's an option like any other, so to
+let people pick, keep their choice in state and build the `App` with it:
+
+```zuri,ignore
+var LOOKS = [Appearance.SYSTEM, Appearance.LIGHT, Appearance.DARK]
+
+class Editor < StatefulWidget {
+  create_state() {
+    return EditorState()
+  }
+}
+
+class EditorState < State {
+  var look = Appearance.SYSTEM
+
+  build(context) {
+    var picker = SegmentedControl(['System', 'Light', 'Dark'], LOOKS.index_of(self.look), {
+      on_changed: @(index) {
+        self.set_state(@{
+          self.look = LOOKS[index]
+        })
+      },
+    })
+
+    return App({
+      title: 'Editor',
+      appearance: self.look,
+      windows: [Window('Editor', Center(picker))],
+    })
+  }
+}
+```
+
+The whole application switches at once, open windows, sheets and panels
+included, and `Appearance.of(context)` reports the appearance shown.

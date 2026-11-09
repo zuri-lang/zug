@@ -69,7 +69,8 @@ class BackendDelegate {
   }
 
   /**
-   * The system switched between light and dark.
+   * The application switched between light and dark, because the system
+   * did or because `set_app_appearance()` chose the other.
    *
    * @param string appearance: `light` or `dark`.
    */
@@ -632,12 +633,24 @@ class Backend {
   }
 
   /**
-   * The system appearance: `light` or `dark`.
+   * The appearance the application shows: `light` or `dark`. It is the
+   * system's, unless `set_app_appearance()` chose one.
    *
    * @returns string
    */
   appearance() {
     raise NotImplementedError('appearance')
+  }
+
+  /**
+   * Shows the whole application light or dark whatever the system is, or,
+   * with `system`, as the system is. Calls the delegate's
+   * `on_appearance_changed()` when that changes what it shows.
+   *
+   * @param string appearance: `system`, `light` or `dark`.
+   */
+  set_app_appearance(appearance: string) {
+    raise NotImplementedError('set_app_appearance')
   }
 
   /**

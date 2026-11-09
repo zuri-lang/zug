@@ -234,15 +234,19 @@ class AppearanceScope < Inherited {
 }
 
 /**
- * The system's light or dark appearance.
+ * Light or dark. `LIGHT` and `DARK` are what an application shows, and
+ * `App`'s `appearance` option takes either, or `SYSTEM` to show whatever
+ * the system does, which is the default.
  */
 class Appearance {
   static var LIGHT = 'light'
   static var DARK = 'dark'
+  static var SYSTEM = 'system'
 
   /**
-   * `light` or `dark`, as the system is now. The widget asking is rebuilt
-   * when it changes.
+   * `light` or `dark`, as the application shows now: as the system is,
+   * unless the `App` chose one. The widget asking is rebuilt when it
+   * changes.
    *
    * @param Context context
    * @returns string

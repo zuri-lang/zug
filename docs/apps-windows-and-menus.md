@@ -24,6 +24,7 @@ run_app(App({
 | `title` | The application's name, shown in its menu. |
 | `menu_bar` | Its menus; see below. |
 | `style` | A `StyleSheet` for everything in it; see [Styling](styling.md). |
+| `appearance` | `Appearance.LIGHT` or `DARK` to show the application that way whatever the system does, or `SYSTEM` (the default) to follow it; see [Styling](styling.md#light-and-dark). |
 | `quit_on_last_window_closed` | Whether closing the last window quits (true). |
 | `on_quit_request` | Asked before quitting; return `false` to keep running, say to ask about unsaved changes first. |
 | `on_reopen` | Called when the dock icon is clicked with no windows open. |

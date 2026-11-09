@@ -466,6 +466,29 @@ class MacBackend < Backend {
     )
   }
 
+  set_app_appearance(appearance: string) {
+    var name = nil
+
+    if appearance == 'light' {
+      name = 'NSAppearanceNameAqua'
+    } else if appearance == 'dark' {
+      name = 'NSAppearanceNameDarkAqua'
+    }
+
+    # With no appearance of its own, the application follows the system.
+    # AppKit then reports the change of effectiveAppearance, which is how
+    # zug hears of it.
+    send_void_id(
+      self.app, 'setAppearance:',
+      name == nil
+        ? nil
+        : send_id(
+          cls('NSAppearance'), 'appearanceNamed:',
+          ffi.open().symbol(name).read(ffi.ptr),
+        ),
+    )
+  }
+
   appearance() {
     var current = send(self.app, 'effectiveAppearance')
     var aqua = ffi.open().symbol('NSAppearanceNameAqua').read(ffi.ptr)
