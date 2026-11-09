@@ -87,7 +87,13 @@ function draws with.
 4. Register it in `app/backends/index.zu` with a loader and a test of the
    running platform. The loader imports the backend only when it is
    chosen, so nothing of one platform is loaded on another.
-5. Run zug's tests on it with `ZUG_BACKEND=<name> zuri test` once it can
+5. Check it against the contract with `zuri run tools/check_backend.zu
+   <name>`, adding `--load <file>` when the backend registers itself from
+   outside zug. It works every view kind through the contract, times the
+   timers and frames, and builds, changes and tears down a gallery of
+   every widget, listing what did not pass. `check_backend()` in
+   `zug.testing` does the same from a test.
+6. Run zug's tests on it with `ZUG_BACKEND=<name> zuri test` once it can
    run without a display, and write tests like `tests/macos.test.zu` that
    check its native views directly.
 

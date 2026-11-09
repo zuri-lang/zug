@@ -1,0 +1,762 @@
+/**
+ * Checks a backend against the contract in `zug.backend`.
+ *
+ * The checks run inside the backend's own event loop, the way an
+ * application uses it. They ask the backend about itself, then create a
+ * window and one view of every kind it supports and work each through
+ * the contract, then time its timers and frames, and last build a gallery
+ * of every widget, change nearly every prop of it, change it back and tear
+ * it down, failing on any error zug reports along the way.
+ *
+ * Dialogs, `open_url()` and `beep()` need a person to see them, and native
+ * events need a person to make them, so the backend's own tests check
+ * those.
+ *
+ * ```zuri,ignore
+ * import zug { create_backend }
+ * import zug.testing { check_backend }
+ *
+ * var report = check_backend(create_backend('macos'))
+ * echo report.summary()
+ * ```
+ */
+
+import ..foundation {
+  Point, Size, Rect, EdgeInsets, Constraints, INFINITY, ObservableValue,
+  UnsupportedError, ZugError, set_error_handler, check_options,
+}
+import ..backend { CAPABILITIES, kind_names, kind_spec }
+import ..widgets { Runtime }
+import .gallery { gallery_app }
+
+/**
+ * The outcome of one check.
+ *
+ * @printable
+ */
+class ConformanceResult {
+
+  /**
+   * What was checked, as a sentence about the backend.
+   *
+   * @type string
+   */
+  var name
+
+  /**
+   * `passed`, `failed` or `skipped`.
+   *
+   * @type string
+   */
+  var outcome
+
+  /**
+   * Why it failed or was skipped.
+   *
+   * @type ?string
+   */
+  var detail
+
+  /**
+   * @param string name
+   * @param string outcome
+   * @param ?string detail
+   * @constructor
+   */
+  @new(name: string, outcome: string, detail: ?string) {
+    self.name = name
+    self.outcome = outcome
+    self.detail = detail
+  }
+
+  @to_string() {
+    var text = '${self.outcome}: ${self.name}'
+    return self.detail == nil ? text : '${text} (${self.detail})'
+  }
+}
+
+/**
+ * Every result of checking one backend.
+ */
+class ConformanceReport {
+
+  /**
+   * The backend's name.
+   *
+   * @type string
+   */
+  var backend
+
+  /**
+   * The results, in the order the checks ran.
+   *
+   * @type list
+   */
+  var results = []
+
+  /**
+   * @param string backend
+   * @constructor
+   */
+  @new(backend: string) {
+    self.backend = backend
+  }
+
+  /**
+   * Whether no check failed.
+   *
+   * @returns bool
+   */
+  passed() {
+    return self.failures().is_empty()
+  }
+
+  /**
+   * The results that failed.
+   *
+   * @returns list
+   */
+  failures() {
+    return self.results.filter(@(result) => result.outcome == 'failed')
+  }
+
+  /**
+   * How many results have `outcome`.
+   *
+   * @param string outcome
+   * @returns number
+   */
+  count(outcome: string) {
+    return self.results.filter(@(result) => result.outcome == outcome).length()
+  }
+
+  /**
+   * One line such as `macos: 52 passed, 0 failed, 3 skipped`.
+   *
+   * @returns string
+   */
+  summary() {
+    return '${self.backend}: ${self.count("passed")} passed, ${self.count("failed")} failed, ${self.count("skipped")} skipped'
+  }
+}
+
+/**
+ * Checks `backend` against the contract, running its event loop until the
+ * checks are done, and returns what it found. The backend must not have
+ * been started.
+ *
+ * @param Backend backend
+ * @param ?dict options: `gallery` (true) to build the widget gallery;
+ *    `advance`, for a backend whose clock moves only when told, such as
+ *    the headless one: a function that moves it on by a number of
+ *    seconds; and `on_result`, called with each result as it comes.
+ * @returns ConformanceReport
+ */
+def check_backend(backend, options: ?dict) {
+  var o = check_options(
+    options, 'check_backend',
+    { gallery: 'bool', advance: 'function', on_result: 'function' },
+  )
+  return _Checker(backend, o).run()
+}
+
+# Raised by a check to fail with a reason.
+class _Unmet < ZugError {
+  @new(message: string) {
+    parent(message)
+    self.type = '_Unmet'
+  }
+}
+
+def _require(condition: bool, message: string) {
+  if !condition {
+    raise _Unmet(message)
+  }
+}
+
+def _is_size(value) {
+  return instance_of(value, Size)
+    and value.width.is_finite()
+    and value.height.is_finite()
+    and value.width >= 0
+    and value.height >= 0
+}
+
+def _is_insets(value) {
+  if !instance_of(value, EdgeInsets) {
+    return false
+  }
+
+  for side in [value.left, value.top, value.right, value.bottom] {
+    if !side.is_finite() or side < 0 {
+      return false
+    }
+  }
+
+  return true
+}
+
+# The distinct errors among `errors`, the five most frequent first, as
+# `3 errors, 2 kinds: ...`. Repeats of one error are counted once.
+def _describe_errors(errors: list) {
+  var counts = {}
+  var order = []
+
+  for error in errors {
+    if !counts.contains(error) {
+      counts[error] = 0
+      order.append(error)
+    }
+
+    counts[error] = counts[error] + 1
+  }
+
+  order.sort(@(a, b) => counts[b] - counts[a])
+  var shown = order.length() > 5 ? order[0, 5] : order
+  var lines = shown.map(@(error) => '${counts[error]} × ${error}')
+  var more = order.length() > 5
+    ? '; and ${_count(order.length() - 5, "other")}'
+    : ''
+  return '${_count(errors.length(), "error")}, ${_count(order.length(), "kind")}: ${"; ".join(lines)}${more}'
+}
+
+def _count(number: number, noun: string) {
+  return number == 1 ? '1 ${noun}' : '${number} ${noun}s'
+}
+
+# Kinds whose children go in slots the view's props make, so they are
+# checked through the gallery rather than alone.
+var _SLOTTED = ['tabs', 'split']
+
+# Seconds between steps, so a real event loop runs between them.
+var _STEP = 0.15
+
+class _Checker {
+  var backend
+  var report
+  var options = {}
+  var runtime
+  var errors = []
+  var changed
+  var steps = []
+  var finished = false
+  var supported = []
+
+  # What the timer and frame steps measure.
+  var timing = {}
+
+  @new(backend, options: dict) {
+    self.backend = backend
+    self.options = options
+    self.changed = ObservableValue(false)
+    self.report = ConformanceReport('backend')
+  }
+
+  run() {
+    self.check('has a name', @{
+      var name = self.backend.name()
+      _require(is_string(name) and !name.is_empty(), 'name() gave ${name}')
+      self.report.backend = name
+    })
+    self._capabilities()
+    self._kinds()
+
+    set_error_handler(@(error, context) {
+      self.errors.append('${context}: ${typeof(error)}: ${error.message}')
+    })
+
+    catch {
+      self._run_loop()
+    } as error {
+      self.fail('runs its event loop', '${typeof(error)}: ${error.message}')
+    }
+
+    set_error_handler(nil)
+
+    if !self.finished {
+      self.fail(
+        'finishes the checks', 'the event loop ended before the last step',
+      )
+    }
+
+    return self.report
+  }
+
+  _run_loop() {
+    self.runtime = Runtime(self.backend)
+    self.runtime.start()
+    var with_gallery = self.options.get('gallery', true)
+
+    if with_gallery {
+      self.runtime.attach(gallery_app(
+        self.changed, self.backend.has_capability('menu_bar'),
+        self.backend.has_capability('multiple_windows'),
+      ))
+    }
+
+    self.steps = [
+      @{
+        self._contract()
+      },
+      @{
+        self._start_timers()
+      },
+      @{
+        self._check_timers()
+      },
+    ]
+
+    if with_gallery {
+      self.steps.extend([
+        @{
+          self._gallery_built()
+        },
+        @{
+          self._gallery_changed()
+        },
+        @{
+          self._gallery_restored()
+        },
+      ])
+    }
+
+    self.steps.append(@{
+      self._finish()
+    })
+    self._next(0.4)
+    var advance = self.options.get('advance')
+
+    if advance == nil {
+      # A loop that never reaches the last step ends here instead, and
+      # the report says the checks did not finish.
+      self.backend.start_timer(60, false, @{
+        if !self.finished {
+          self.backend.quit()
+        }
+      })
+      self.backend.run()
+      return
+    }
+
+    self.backend.run()
+
+    iter var i = 0; i < 400 and !self.finished; i++ {
+      advance(0.05)
+    }
+  }
+
+  # Runs the next step after `delay` seconds on the backend's own timer.
+  _next(delay: number) {
+    if self.steps.is_empty() {
+      return
+    }
+
+    var step = self.steps.remove_at(0)
+    self.backend.start_timer(delay, false, @{
+      catch {
+        step()
+      } as error {
+        self.fail('runs every step', '${typeof(error)}: ${error.message}')
+      }
+
+      self._next(_STEP)
+    })
+  }
+
+  /**
+   * Runs `fn` as the check `name`: it passes unless `fn` raises.
+   */
+  check(name: string, fn: function) {
+    catch {
+      fn()
+      self._record(ConformanceResult(name, 'passed', nil))
+    } as error {
+      var detail = instance_of(error, _Unmet)
+        ? error.message
+        : 'raised ${typeof(error)}: ${error.message}'
+      self._record(ConformanceResult(name, 'failed', detail))
+    }
+  }
+
+  fail(name: string, detail: string) {
+    self._record(ConformanceResult(name, 'failed', detail))
+  }
+
+  skip(name: string, reason: string) {
+    self._record(ConformanceResult(name, 'skipped', reason))
+  }
+
+  _record(result) {
+    self.report.results.append(result)
+    var on_result = self.options.get('on_result')
+
+    if on_result != nil {
+      on_result(result)
+    }
+  }
+
+  _capabilities() {
+    self.check('lists only capabilities zug knows', @{
+      var listed = self.backend.capabilities()
+      _require(is_list(listed), 'capabilities() gave a ${typeof(listed)}')
+
+      for capability in listed {
+        _require(
+          CAPABILITIES.contains(capability),
+          "'${capability}' is not one of ${CAPABILITIES}",
+        )
+      }
+    })
+    self.check('answers has_capability() as capabilities() lists', @{
+      var listed = self.backend.capabilities()
+
+      for capability in CAPABILITIES {
+        _require(
+          self.backend.has_capability(capability)
+            == listed.contains(capability),
+          "has_capability('${capability}') disagrees with capabilities()",
+        )
+      }
+    })
+  }
+
+  _kinds() {
+    var missing = []
+
+    for kind in kind_names() {
+      if self.backend.supports_kind(kind) {
+        self.supported.append(kind)
+      } else {
+        missing.append(kind)
+      }
+    }
+
+    self.check('supports every view kind', @{
+      _require(missing.is_empty(), 'missing ${", ".join(missing)}')
+    })
+  }
+
+  # Everything that runs at once inside the event loop.
+  _contract() {
+    self._clock()
+    self._text()
+    self._system()
+    self._window()
+
+    for kind in self.supported {
+      if kind != 'window' {
+        self._view(kind)
+      }
+    }
+
+    for kind in kind_names() {
+      if !self.supported.contains(kind) {
+        self.check("refuses to make a '${kind}' view it does not support", @{
+          catch {
+            self.backend.create_view(
+              kind, kind_spec(kind).initial_props(), @(event, payload) => nil,
+            )
+          } as error {
+            _require(
+              instance_of(error, UnsupportedError),
+              'raised ${typeof(error)} rather than UnsupportedError',
+            )
+            return
+          }
+
+          raise _Unmet('create_view() made one')
+        })
+      }
+    }
+  }
+
+  _clock() {
+    self.check('has a clock that only moves forwards', @{
+      var last = self.backend.now()
+      _require(is_number(last) and last.is_finite(), 'now() gave ${last}')
+
+      iter var i = 0; i < 100; i++ {
+        var next = self.backend.now()
+        _require(next >= last, 'now() went back from ${last} to ${next}')
+        last = next
+      }
+    })
+    self.check('says how often the display refreshes', @{
+      var interval = self.backend.frame_interval()
+      _require(
+        is_number(interval) and interval > 0 and interval <= 0.1,
+        'frame_interval() gave ${interval}',
+      )
+    })
+  }
+
+  _text() {
+    self.check('measures text', @{
+      var style = { size: 13 }
+      var empty = self.backend.measure_text('', style, nil)
+      var short = self.backend.measure_text('zug', style, nil)
+      var long = self.backend.measure_text('zug draws native views', style, nil)
+      var big = self.backend.measure_text('zug', { size: 26 }, nil)
+      _require(
+        _is_size(empty) and _is_size(short) and _is_size(long),
+        'sizes must be finite and not negative',
+      )
+      _require(long.width > short.width, 'longer text was not wider')
+      _require(big.height > short.height, 'larger text was not taller')
+    })
+    self.check('wraps text to a width', @{
+      var text = 'zug draws native views from widgets, and lays them out itself'
+      var line = self.backend.measure_text(text, { size: 13 }, nil)
+      var wrapped = self.backend.measure_text(
+        text, { size: 13 }, line.width / 3,
+      )
+      _require(
+        wrapped.width <= line.width / 3 + 1,
+        'wrapped to ${wrapped.width} wide, more than ${line.width / 3}',
+      )
+      _require(wrapped.height > line.height, 'wrapped text was not taller')
+    })
+  }
+
+  _system() {
+    self.check('reports a light or dark appearance', @{
+      var appearance = self.backend.appearance()
+      _require(
+        appearance == 'light' or appearance == 'dark',
+        'appearance() gave ${appearance}',
+      )
+    })
+    self.check('describes its screens', @{
+      var screens = self.backend.screens()
+      _require(
+        is_list(screens) and !screens.is_empty(), 'screens() gave no screens',
+      )
+
+      for screen in screens {
+        _require(
+          instance_of(screen.get('frame'), Rect), 'a screen has no frame Rect',
+        )
+        _require(
+          instance_of(screen.get('visible_frame'), Rect),
+          'a screen has no visible_frame Rect',
+        )
+        _require(
+          is_number(screen.get('scale')) and screen.scale > 0,
+          'a screen has no scale',
+        )
+      }
+    })
+
+    if self.backend.has_capability('clipboard') {
+      self.check('keeps text on the clipboard', @{
+        var saved = self.backend.read_clipboard()
+        var text = 'zug conformance ✓ ${self.backend.now()}'
+        self.backend.write_clipboard(text)
+        var read = self.backend.read_clipboard()
+        self.backend.write_clipboard(saved == nil ? '' : saved)
+        _require(read == text, 'read back ${read}')
+      })
+    } else {
+      self.skip('keeps text on the clipboard', 'no clipboard capability')
+    }
+
+    if self.backend.has_capability('native_dialogs') {
+      self.skip('shows dialogs', 'they need a person to answer them')
+    }
+
+    self.skip('opens URLs and beeps', 'they need a person to notice them')
+  }
+
+  _window() {
+    var events = []
+    var window = nil
+    self.check('makes a window', @{
+      var props = kind_spec('window').initial_props()
+      props['title'] = 'zug conformance'
+      window = self.backend.create_window(props, @(event, payload) {
+        events.append(event)
+      })
+      _require(window.kind() == 'window', 'its kind() is ${window.kind()}')
+    })
+
+    if window == nil {
+      return
+    }
+
+    self.check('sizes a window', @{
+      window.set_content_size_to(Size(320, 200))
+      var size = window.content_size()
+      _require(_is_size(size), 'content_size() gave ${size}')
+      _require(
+        (size.width - 320).abs() <= 1 and (size.height - 200).abs() <= 1,
+        'asked for 320 by 200, got ${size}',
+      )
+    })
+    self.check('puts views in a window', @{
+      var box = self.backend.create_view(
+        'box', kind_spec('box').initial_props(), @(event, payload) => nil,
+      )
+      box.set_frame(Rect(10, 10, 50, 50))
+      window.insert_child(box, 0, nil)
+      window.show()
+      window.clear_focus()
+      window.remove_child(box)
+      box.destroy()
+    })
+    self.check('closes a window', @{
+      window.close()
+      window.destroy()
+    })
+  }
+
+  _view(kind: string) {
+    var spec = kind_spec(kind)
+    var dispatch = @(event, payload) => nil
+    var view = nil
+
+    self.check("makes a '${kind}' view", @{
+      view = self.backend.create_view(kind, spec.initial_props(), dispatch)
+      _require(view.kind() == kind, 'its kind() is ${view.kind()}')
+    })
+
+    if view == nil {
+      return
+    }
+
+    self.check("measures a '${kind}' view, and takes its frame", @{
+      var size = view.measure(Constraints(0, 400, 0, 300))
+      _require(_is_size(size), 'measure() gave ${size}')
+      var free = view.measure(Constraints(0, INFINITY, 0, INFINITY))
+      _require(_is_size(free), 'measure() without bounds gave ${free}')
+      var line = view.baseline()
+      _require(
+        line == nil or (is_number(line) and line.is_finite() and line >= 0),
+        'baseline() gave ${line}',
+      )
+      _require(
+        _is_insets(view.content_insets(nil)),
+        'content_insets() gave no EdgeInsets',
+      )
+      view.set_frame(Rect(0, 0, size.width, size.height))
+      view.update(spec.initial_props())
+      view.invalidate()
+    })
+
+    if spec.container and !_SLOTTED.contains(kind) {
+      self.check("holds children in a '${kind}' view", @{
+        var first = self.backend.create_view(
+          'box', kind_spec('box').initial_props(), dispatch,
+        )
+        var second = self.backend.create_view(
+          'box', kind_spec('box').initial_props(), dispatch,
+        )
+        view.insert_child(first, 0, nil)
+        view.insert_child(second, 0, nil)
+        view.insert_child(first, 1, nil)
+        view.remove_child(first)
+        view.remove_child(second)
+        first.destroy()
+        second.destroy()
+      })
+    }
+
+    self.check("destroys a '${kind}' view", @{
+      view.destroy()
+    })
+  }
+
+  _start_timers() {
+    var start = self.backend.now()
+    self.timing = {
+      start,
+      once: [],
+      repeats: 0,
+      cancelled: 0,
+      frames: self.runtime.frames(),
+    }
+    self.timing['once_timer'] = self.backend.start_timer(0.05, false, @{
+      self.timing.once.append(self.backend.now() - start)
+    })
+    self.timing['repeating'] = self.backend.start_timer(0.03, true, @{
+      self.timing['repeats'] = self.timing.repeats + 1
+    })
+    var never = self.backend.start_timer(0.05, false, @{
+      self.timing['cancelled'] = self.timing.cancelled + 1
+    })
+    never.cancel()
+    self.check('reports a cancelled timer inactive', @{
+      _require(!never.is_active(), 'is_active() is true after cancel()')
+    })
+    self.runtime.request_frame()
+  }
+
+  _check_timers() {
+    var t = self.timing
+    self.check('fires a timer once, after its delay', @{
+      _require(t.once.length() == 1, 'it fired ${t.once.length()} times')
+      _require(
+        t.once[0] >= 0.045, 'it fired after ${t.once[0]} seconds, before 0.05',
+      )
+      _require(!t.once_timer.is_active(), 'is_active() is true after it fired')
+    })
+    self.check('fires a repeating timer until cancelled', @{
+      _require(
+        t.repeats >= 2, 'it fired ${t.repeats} times in ${_STEP} seconds',
+      )
+      t.repeating.cancel()
+      t['repeats_at_cancel'] = t.repeats
+    })
+    self.check('never fires a cancelled timer', @{
+      _require(t.cancelled == 0, 'it fired ${t.cancelled} times')
+    })
+    self.check('draws a frame when asked', @{
+      _require(self.runtime.frames() > t.frames, 'on_frame() was not called')
+    })
+  }
+
+  _gallery_built() {
+    var t = self.timing
+    self.check('stops a repeating timer when cancelled', @{
+      _require(
+        t.repeats == t.repeats_at_cancel,
+        'it fired ${t.repeats - t.repeats_at_cancel} times after cancel()',
+      )
+    })
+    self._gallery_check('builds every widget')
+    self.changed.set(true)
+  }
+
+  _gallery_changed() {
+    self._gallery_check('rebuilds every widget with its options changed')
+
+    if self.backend.has_capability('multiple_windows') {
+      self.check('opens a second window', @{
+        var open = self.runtime
+          .windows()
+          .filter(@(window) => window.view != nil)
+        _require(open.length() == 2, '${open.length()} windows are open')
+      })
+    }
+
+    self.changed.set(false)
+  }
+
+  _gallery_restored() {
+    self._gallery_check('changes every widget back')
+  }
+
+  _gallery_check(name: string) {
+    var errors = self.errors
+    self.errors = []
+    self.check(name, @{
+      _require(errors.is_empty(), _describe_errors(errors))
+    })
+  }
+
+  _finish() {
+    self.runtime.shutdown()
+    self._gallery_check('tears every widget down')
+    self.finished = true
+    self.backend.quit()
+  }
+}

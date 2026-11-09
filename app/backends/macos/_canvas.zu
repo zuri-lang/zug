@@ -50,13 +50,70 @@ var _curve = typed(ffi.void, [CGPoint, CGPoint, CGPoint])
 var _arc = typed(
   ffi.void, [CGPoint, ffi.double, ffi.double, ffi.double, ffi.bool],
 )
-var _dash = typed(ffi.void, [ffi.ptr, ffi.long, ffi.double])
+var _dash = typed(ffi.void, [ffi.pointer(ffi.double), ffi.long, ffi.double])
 var _draw_at = typed(ffi.void, [CGPoint])
 var _draw_image = typed(
   ffi.void, [CGRect, CGRect, ffi.ulong, ffi.double, ffi.bool, ffi.ptr],
 )
 var _attributed = typed(ffi.ptr, [ffi.ptr, ffi.ptr])
 var _set_object = typed(ffi.void, [ffi.ptr, ffi.ptr])
+var _bounding = typed(CGRect, [CGSize, ffi.ulong, ffi.ptr])
+
+# NSStringDrawingUsesLineFragmentOrigin | NSStringDrawingUsesFontLeading,
+# which measure wrapped lines as a text view lays them out.
+var _MEASURE_OPTIONS = 3
+
+/**
+ * An attributed string of `text` in the font and colour `style`
+ * describes, owned by the caller.
+ *
+ * @internal
+ * @param string text
+ * @param dict style: a `TextStyle` as data.
+ * @returns Pointer
+ */
+def attributed_text(text: string, style: dict) {
+  var attributes = send(cls('NSMutableDictionary'), 'dictionary')
+  var font_key = ffi.open().symbol('NSFontAttributeName').read(ffi.ptr)
+  var color_key = ffi
+    .open()
+    .symbol('NSForegroundColorAttributeName')
+    .read(ffi.ptr)
+  _set_object(
+    attributes, sel('setObject:forKey:'), ns_font(style, nil), font_key,
+  )
+  var color = style.get('color')
+  _set_object(
+    attributes, sel('setObject:forKey:'),
+    color == nil ? send(cls('NSColor'), 'labelColor') : ns_color(color),
+    color_key,
+  )
+  return _attributed(
+    send(cls('NSAttributedString'), 'alloc'),
+    sel('initWithString:attributes:'), ns_string(text), attributes,
+  )
+}
+
+/**
+ * The size `text` takes in `style`, wrapped to `max_width` when it is
+ * given, rounded up to whole points.
+ *
+ * @internal
+ * @param string text
+ * @param dict style
+ * @param ?number max_width
+ * @returns Size
+ */
+def measure_attributed(text: string, style: dict, max_width: ?number) {
+  var string = attributed_text(text, style)
+  var bounds = _bounding(
+    string, sel('boundingRectWithSize:options:context:'),
+    { width: max_width == nil ? 10000000 : max_width, height: 10000000 },
+    _MEASURE_OPTIONS, nil,
+  )
+  release(string)
+  return Size(bounds.size.width.ceil(), bounds.size.height.ceil())
+}
 
 # NSLineCapStyle and NSLineJoinStyle values.
 var _CAPS = { butt: 0, round: 1, square: 2 }
@@ -271,27 +328,7 @@ class MacPainter < Painter {
   }
 
   _text(text: string, style) {
-    var data = style == nil ? {} : style.to_data()
-    var attributes = send(cls('NSMutableDictionary'), 'dictionary')
-    var font_key = ffi.open().symbol('NSFontAttributeName').read(ffi.ptr)
-    var color_key = ffi
-      .open()
-      .symbol('NSForegroundColorAttributeName')
-      .read(ffi.ptr)
-    _set_object(
-      attributes, sel('setObject:forKey:'), ns_font(data, nil), font_key,
-    )
-    var color = data.get('color')
-    _set_object(
-      attributes, sel('setObject:forKey:'),
-      color == nil ? send(cls('NSColor'), 'labelColor') : ns_color(color),
-      color_key,
-    )
-    var string = _attributed(
-      send(cls('NSAttributedString'), 'alloc'),
-      sel('initWithString:attributes:'), ns_string(text), attributes,
-    )
-    return string
+    return attributed_text(text, style == nil ? {} : style.to_data())
   }
 
   text(text: string, at: Point, style) {

@@ -8,6 +8,7 @@ import test { * }
 import os
 import ffi
 import ..app { * }
+import ..app.testing { check_backend }
 
 var enabled = os.platform == 'macos' and os.get_env('ZUG_MACOS_TESTS') == '1'
 var suite = enabled ? describe : describe_skip
@@ -265,5 +266,12 @@ suite('the macOS backend', @{
     expect(seen.row).to_be(2)
     expect(editor_notes.text()).to_be('one two')
     expect(seen.text).to_be('one two')
+  })
+
+  it('keeps the backend contract', @{
+    var report = check_backend(create_backend('macos'))
+    expect(report
+      .failures()
+      .map(@(result) => '${result.name}: ${result.detail}')).to_be_empty()
   })
 })

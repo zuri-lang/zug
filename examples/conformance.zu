@@ -1,0 +1,31 @@
+/**
+ * Checks this platform's backend against zug's backend contract. While it
+ * runs, a window shows every widget zug has, first with one set of
+ * options, then with nearly all of them changed, then back again, and
+ * each check prints as it finishes.
+ *
+ *     zuri run examples/conformance.zu
+ *
+ * An application outside this repository writes `import zug { * }` and
+ * `import zug.testing { check_backend }`. `tools/check_backend.zu` does the
+ * same from the command line, for any backend.
+ */
+
+import ..app { create_backend }
+import ..app.testing { check_backend }
+
+def symbol(outcome: string) {
+  return outcome == 'passed' ? '✓' : outcome == 'failed' ? '✗' : '-'
+}
+
+if __root__ == __file__ {
+  var backend = create_backend(nil)
+  echo 'Checking the ${backend.name()} backend'
+
+  var report = check_backend(backend, { on_result: @(result) {
+    var line = '  ${symbol(result.outcome)} ${result.name}'
+    echo result.detail == nil ? line : '${line}: ${result.detail}'
+  } })
+
+  echo report.summary()
+}

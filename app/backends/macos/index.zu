@@ -32,7 +32,7 @@ import ._controls {
 }
 import ._text_input { MacTextField, MacTextArea }
 import ._containers { MacScroll, MacTabs, MacSplit, MacTable, MacVisualEffect }
-import ._canvas { MacCanvas, MacPointer }
+import ._canvas { MacCanvas, MacPointer, measure_attributed }
 import ._window { MacWindow }
 import ._menus { build_menu_bar, default_menus, role_action }
 import ._dialogs { show_alert, pick_files, save_file }
@@ -472,7 +472,7 @@ class MacBackend < Backend {
   }
 
   measure_text(text: string, style: dict, max_width: ?number) {
-    raise UnsupportedError('macos', 'measure_text')
+    return measure_attributed(text, style, max_width)
   }
 
   open_url(url: string) {

@@ -1,0 +1,95 @@
+import test { * }
+
+import ..app { * }
+import ..app.backends.headless { HeadlessBackend }
+import ..app.testing { check_backend }
+
+def check(backend) {
+  return check_backend(backend, {
+    advance: @(seconds) => backend.advance(seconds),
+  })
+}
+
+def failed_names(report) {
+  return report.failures().map(@(result) => result.name)
+}
+
+# A headless backend with faults a real one could have.
+class FaultyBackend < HeadlessBackend {
+  frame_interval() {
+    return 0
+  }
+
+  capabilities() {
+    return ['clipboard', 'telepathy']
+  }
+
+  measure_text(text: string, style: dict, max_width: ?number) {
+    return Size(10, 10)
+  }
+
+  supports_kind(kind: string) {
+    return kind != 'level' and parent.supports_kind(kind)
+  }
+
+  read_clipboard() {
+    return 'stale'
+  }
+}
+
+# A headless backend that cannot make sliders, though it says it can.
+class BrokenBackend < HeadlessBackend {
+  create_view(kind: string, props: dict, dispatch: function) {
+    if kind == 'slider' {
+      raise ValueError('no sliders here')
+    }
+
+    return parent.create_view(kind, props, dispatch)
+  }
+}
+
+describe('check_backend', @{
+  it('passes the headless backend, the reference', @{
+    var report = check(HeadlessBackend())
+    expect(failed_names(report)).to_be_empty()
+    expect(report.count('passed')).to_be_greater_than(100)
+    expect(report.summary()).to_match('/^headless: \\d+ passed, 0 failed, 2 skipped$/')
+  })
+
+  it('finds what a faulty backend gets wrong', @{
+    var report = check(FaultyBackend())
+    var failed = failed_names(report)
+    expect(failed).to_contain('lists only capabilities zug knows')
+    expect(failed).to_contain('says how often the display refreshes')
+    expect(failed).to_contain('measures text')
+    expect(failed).to_contain('keeps text on the clipboard')
+    expect(failed).to_contain('supports every view kind')
+    expect(report.passed()).to_be_false()
+
+    var kinds = report.failures().filter(
+      @(result) => result.name == 'supports every view kind',
+    )
+    expect(kinds[0].detail).to_be('missing level')
+  })
+
+  it('reports the errors a widget raises while the gallery is built', @{
+    var report = check(BrokenBackend())
+    var built = report.failures().filter(
+      @(result) => result.name == 'builds every widget',
+    )
+    expect(built).to_have_length(1)
+    expect(built[0].detail).to_contain('ValueError: no sliders here')
+  })
+
+  it('can leave out the gallery', @{
+    var backend = HeadlessBackend()
+    var report = check_backend(backend, {
+      gallery: false,
+      advance: @(seconds) => backend.advance(seconds),
+    })
+    expect(report.passed()).to_be_true()
+    expect(report.results.filter(
+      @(result) => result.name == 'builds every widget',
+    )).to_be_empty()
+  })
+})

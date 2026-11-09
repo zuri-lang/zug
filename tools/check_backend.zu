@@ -1,0 +1,73 @@
+/**
+ * Checks a backend against zug's backend contract, printing what did not
+ * pass, and exits with status 1 when anything failed.
+ *
+ *     zuri run tools/check_backend.zu             # the platform's own backend
+ *     zuri run tools/check_backend.zu headless
+ *     zuri run tools/check_backend.zu gtk --load ../zug-gtk/register.zu
+ *
+ * `--load` imports a file before anything else, for a backend registered
+ * from outside zug. A backend with a window system opens a window of
+ * every widget for a few seconds while it is checked.
+ */
+
+import io
+import os
+import args
+import zuri
+import ..app { create_backend }
+import ..app.testing { check_backend }
+
+var parser = args.Parser('check_backend', false)
+parser.add_index(
+  'backend', "The backend to check, the platform's own when left out",
+  { type: args.STRING },
+)
+parser.add_option(
+  'load', 'A file to import first, which registers the backend',
+  { type: args.STRING },
+)
+parser.add_option('all', 'Print every check, not only those that did not pass')
+parser.add_option(
+  'quick', 'Check the contract alone, without the widget gallery',
+)
+var parsed = parser.parse()
+var o = parsed.options
+
+if o.contains('load') {
+  zuri.import_file(o.load)
+}
+
+var name = parsed.indexes.is_empty() ? nil : parsed.indexes[0]
+var backend = nil
+
+catch {
+  backend = create_backend(name)
+} as error {
+  io.stderr.write('error: ${error.message}\n')
+  os.exit(1)
+}
+var options = {
+  gallery: !o.contains('quick'),
+  on_result: @(result) {
+    if result.outcome == 'passed' {
+      if o.contains('all') {
+        echo '  ✓ ${result.name}'
+      }
+    } else if result.outcome == 'failed' {
+      echo '  ✗ ${result.name}: ${result.detail}'
+    } else {
+      echo '  - ${result.name}: ${result.detail}'
+    }
+  },
+}
+
+# The headless backend's clock moves only when told.
+if backend.name() == 'headless' {
+  options['advance'] = @(seconds) => backend.advance(seconds)
+}
+
+echo 'Checking the ${backend.name()} backend'
+var report = check_backend(backend, options)
+echo report.summary()
+os.exit(report.passed() ? 0 : 1)

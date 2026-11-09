@@ -26,6 +26,7 @@
 import ..foundation { Size, Duration, ZugError }
 import ..backends.headless { HeadlessBackend }
 import ..widgets { Runtime, App, Window, Widget }
+import @.conformance { check_backend, ConformanceReport, ConformanceResult }
 
 /**
  * Runs widgets on the headless backend and acts on them.
