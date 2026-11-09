@@ -63,6 +63,13 @@ class Settings {
   var show_tape = false
 
   /**
+   * `system`, `light` or `dark`.
+   *
+   * @type string
+   */
+  var appearance = 'system'
+
+  /**
    * Expressions typed recently, newest first.
    *
    * @type list
@@ -83,6 +90,7 @@ class Settings {
       keep_history: self.keep_history,
       mode: self.mode,
       show_tape: self.show_tape,
+      appearance: self.appearance,
       recents: self.recents,
     }
   }
@@ -126,6 +134,10 @@ class Settings {
 
     if is_bool(data.get('show_tape')) {
       settings.show_tape = data.show_tape
+    }
+
+    if ['system', 'light', 'dark'].contains(data.get('appearance')) {
+      settings.appearance = data.appearance
     }
 
     if is_list(data.get('recents')) {

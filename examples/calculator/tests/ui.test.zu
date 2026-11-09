@@ -156,6 +156,18 @@ describe('the calculator window', @{
     t.one('places').fire('changed', { selected: 4 })
     expect(display(t)).to_be('1234.00')
   })
+
+  it('shows itself light or dark as Settings says, and keeps the choice', @{
+    t.choose_menu('Calculator', 'Settings…')
+    expect(t.backend.appearance()).to_be('light')
+    t.one('appearance').fire('changed', { selected: [2] })
+    t.pump()
+    expect(t.backend.appearance()).to_be('dark')
+    t.dispose()
+
+    t = start(dir)
+    expect(t.backend.appearance()).to_be('dark')
+  })
 })
 
 describe('keeping the tape', @{

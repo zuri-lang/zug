@@ -51,6 +51,9 @@ var _TYPED = {
 
 var _KEY_HEIGHT = 40
 
+# The appearances Settings offers, in the order it shows them.
+var _LOOKS = [Appearance.SYSTEM, Appearance.LIGHT, Appearance.DARK]
+
 /**
  * The calculator application.
  */
@@ -399,6 +402,7 @@ class CalculatorState < State {
 
     return App({
       title: 'Calculator',
+      appearance: self.settings.appearance,
       menu_bar: self._menu_bar(),
       quit_on_last_window_closed: false,
       on_quit_request: @{
@@ -724,6 +728,17 @@ class SettingsPage < StatelessWidget {
     }
 
     var display = GroupBox(Column([
+      self._row('Appearance', SegmentedControl(
+        ['System', 'Light', 'Dark'], _LOOKS.index_of(settings.appearance), {
+          on_changed: @(index) {
+            app.change_settings(@(s) {
+              s.appearance = _LOOKS[index]
+            })
+          },
+          size: ControlSize.SMALL,
+          accessibility_identifier: 'appearance',
+        },
+      )),
       self._row('Decimal places', Dropdown(places, settings.places, {
         on_changed: @(value) {
           app.change_settings(@(s) {

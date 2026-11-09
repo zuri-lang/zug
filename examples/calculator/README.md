@@ -33,10 +33,10 @@ What it does:
   you typed, hands the keyboard back to the keypad. Copy and Paste work
   on the value shown when no text field has focus.
 - **A tape** of past calculations; double-click one to use its result.
-- **Settings**: decimal places, thousands separators, significant digits,
-  the angle unit, and whether the tape is kept between launches. They are
-  kept in `~/Library/Application Support/zug Calculator`, or wherever
-  `CALCULATOR_HOME` names.
+- **Settings**: light or dark, decimal places, thousands separators,
+  significant digits, the angle unit, and whether the tape is kept
+  between launches. They are kept in `~/Library/Application Support/zug
+  Calculator`, or wherever `CALCULATOR_HOME` names.
 
 The code:
 

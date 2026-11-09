@@ -24,11 +24,13 @@ describe('settings', @{
     settings.places = 2
     settings.angle = 'rad'
     settings.keep_history = true
+    settings.appearance = 'dark'
     settings.recents = ['1+1']
     save_state(dir, settings, [{ expression: '1 + 1', result: 2 }])
     var state = load_state(dir)
     expect(state.settings.places).to_be(2)
     expect(state.settings.angle).to_be('rad')
+    expect(state.settings.appearance).to_be('dark')
     expect(state.settings.recents).to_equal(['1+1'])
     expect(state.history).to_equal([{ expression: '1 + 1', result: 2 }])
   })
@@ -45,12 +47,14 @@ describe('settings', @{
       angle: 'grad',
       mode: 'quantum',
       grouping: 'yes',
+      appearance: 'sepia',
     })
     expect(settings.places).to_be_nil()
     expect(settings.significant).to_be(12)
     expect(settings.angle).to_be('deg')
     expect(settings.mode).to_be('basic')
     expect(settings.grouping).to_be_true()
+    expect(settings.appearance).to_be('system')
   })
 
   it('move an unreadable file aside rather than overwrite it', @{
