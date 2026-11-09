@@ -1,6 +1,6 @@
 # zug
 
-zug is a toolkit for desktop applications in Zuri. An interface is a tree
+Zug is a toolkit for desktop applications in Zuri. An interface is a tree
 of widgets built from the application's state, in the manner of Flutter;
 zug works out what changed and updates the native views to match. Every
 control is the platform's own: on macOS a zug button is an `NSButton`, a
@@ -42,80 +42,31 @@ application bundles with `zuri bundle --format app` as it is.
 
 ## Installing
 
-Until zug is published, depend on it by path:
+Zug installs from its git repository:
+
+```console
+$ zuri install --git https://github.com/zuri-lang/zug.git
+```
+
+That adds it to `project.toml`:
 
 ```toml
 [dependencies]
-zug = { path = "../zug" }
+zug = { git = "https://github.com/zuri-lang/zug.git", branch = "main" }
 ```
 
-then `zuri install`.
+The lock file holds the commit that was installed, so `zuri restore`
+installs the same one; `zuri update` moves to the newest commit on the
+branch. `--rev` with a commit pins one instead of following the branch.
 
-## The pieces
+## Documentation
 
-**Widgets and state.** `StatelessWidget`, `StatefulWidget` with its
-`State` and `set_state()`, `Inherited` for data shared down the tree,
-read through the `Context` every `build()` receives. Keys (`ValueKey`,
-`ObjectKey`, `UniqueKey`, `GlobalKey`) keep state with a child as it
-moves. `Observable`, `ObservableValue` and the `Observer` widget hold
-state several widgets show.
-
-**Layout**, done by zug the same way on every platform: `Row`, `Column`
-and `Flex` with `justify`, `align_items`, `spacing` and `shrink_wrap`;
-`Expanded`, `Flexible`, `Spacer`, `Gap`; `Padding`, `Align`, `Center`;
-`Box` for size, spacing, alignment and decoration; `Stack` and
-`Positioned`; `Wrap`; `Grid` and `GridCell`; `AspectRatio`, `FitContent`,
-`Visibility` and `Responsive`.
-
-**Native controls.** `Text`, `Button`, `Checkbox`, `Radio` and
-`RadioGroup`, `Switch`, `TextField`, `TextArea`, `SearchField`,
-`ComboBox`, `Dropdown`, `Slider`, `Stepper`, `ProgressBar`, `Spinner`,
-`SegmentedControl`, `DatePicker`, `ColorWell`, `LevelIndicator`,
-`Separator`, `GroupBox`, `Image`, `Icon`. Controls are controlled: each
-shows the value it is given and reports the user's choice through
-`on_changed`; a choice the application does not accept is undone. A
-control with nothing to call is disabled.
-
-**Containers.** `ScrollView`, `ListView` and the virtualized
-`ListView.builder`, `TabView`, `SplitView`, `DataTable`, `VisualEffect`.
-
-**Drawing and pointer input.** `Canvas` paints with a `Painter`: shapes,
-paths, text and images. `PointerArea` reports clicks, drags, scrolling
-and hovering, sets the cursor, and opens a `ContextMenu`.
-
-**The application.** `App` lists the open `Window`s and the `MenuBar`.
-`Shortcuts` and `KeyListener` handle keys no control used. `Style` and
-`StyleSheet` set text styles and the accent colour; `Appearance.of()`
-says whether the system is light or dark. `Timer`, `Clipboard`,
-`show_alert()`, `pick_files()`, `save_file()`, `perform_role()` and
-`clear_focus()` reach the system. `run_in_background()` and `Worker`
-move work to isolates, and their results arrive as `Promise`s, which
-`PromiseBuilder` shows.
-
-## Testing
-
-`zug.testing` runs widgets on a headless backend with no display, where
-every native view is a record that can be found and acted on:
-
-```zuri
-import test { * }
-import zug { * }
-import zug.testing { WidgetTester }
-
-describe('the counter', @{
-  it('counts presses', @{
-    var tester = WidgetTester()
-    tester.pump_widget(Counter())
-    tester.tap('Press')
-    expect(tester.find_text('Pressed 1 times')).to_have_length(1)
-    tester.dispose()
-  })
-})
-```
-
-`zuri test` runs zug's own tests the same way. The tests in
-`tests/macos.test.zu` drive real AppKit views; they open windows, so they
-run only with `ZUG_MACOS_TESTS=1`.
+The [documentation](docs/index.md) covers every part of zug an
+application uses. [Getting started](docs/getting-started.md) is the
+place to begin; after that, the pages most people reach for are
+[Layout](docs/layout.md), [Controls](docs/controls.md),
+[Widgets and state](docs/widgets-and-state.md) and
+[Testing](docs/testing.md).
 
 ## Examples
 
@@ -125,17 +76,28 @@ Single scripts, each run with `zuri run`:
 - `examples/controls.zu`: every control that chooses a value.
 - `examples/containers.zu`: scrolling, tabs, split panes, a table,
   drawing and pointer input.
+- `examples/animation.zu`: a panel that eases open, a value that glides
+  to new settings, and a pulse.
 - `examples/services.zu`: keys, an alert, a timer, the clipboard and
   background work.
+- `examples/conformance.zu`: checks this platform's backend, showing a
+  window of every widget as it goes.
 
 And a whole application, `examples/calculator`, its own project with its
 own tests: keyed and typed calculations, a scientific keypad, memory, a
 tape, and settings that persist. It bundles into a macOS application.
 
+## Testing
+
+`zuri test` runs zug's tests on the headless backend, with no display.
+The tests in `tests/macos.test.zu` drive real AppKit views and open
+windows, so they run only with `ZUG_MACOS_TESTS=1`. Your own
+application's tests use `zug.testing` the same way; see
+[Testing](docs/testing.md).
+
 ## Other platforms
 
-Everything platform-specific is a backend. The core never refers to a
-platform, so a backend for Linux, Windows, the web or a phone is a new
-directory under `app/backends` and nothing else. `docs/backends.md`
-describes the contract and how to write one; the headless backend is the
-reference.
+Everything platform-specific is a backend, so bringing zug to Linux,
+Windows or anywhere else means writing a backend and nothing more.
+[Writing a backend](docs/backends.md) describes the contract, and
+`tools/check_backend.zu` checks a new backend against it.
