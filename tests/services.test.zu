@@ -23,6 +23,31 @@ def echo_worker(inbox, outbox) {
   }
 }
 
+class Windowed < StatefulWidget {
+  create_state() {
+    return WindowedState()
+  }
+}
+
+# An application whose state is above its window, with the context of a
+# widget inside the window kept in `inside`.
+class WindowedState < State {
+  var inside
+
+  build(context) {
+    return App({ windows: [Window('One', Column([
+      TextField({
+        controller: TextController(),
+        accessibility_identifier: 'field',
+      }),
+      Builder(@(inner) {
+        self.inside = inner
+        return Text('x')
+      }),
+    ]))] })
+  }
+}
+
 describe('Promise', @{
   it('runs then() after the call that resolved it', @{
     var seen = []
@@ -183,6 +208,22 @@ describe('keys', @{
     t.pump()
     expect(t.window().press_key('a')).to_be_false()
     expect(seen).to_be_empty()
+    t.dispose()
+  })
+
+  it('go to the window once clear_focus() takes the focus away', @{
+    var t = WidgetTester().pump_app(Windowed())
+    t.one('field').focus()
+    clear_focus(t.state_of(WindowedState).inside)
+    expect(t.backend.focused).to_be_nil()
+    t.dispose()
+  })
+
+  it('cannot be given back to the window from above it', @{
+    var t = WidgetTester().pump_app(Windowed())
+    expect(@{
+      clear_focus(t.state_of(WindowedState).context())
+    }).to_raise_instance_of(ValueError)
     t.dispose()
   })
 

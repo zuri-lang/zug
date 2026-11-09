@@ -156,7 +156,11 @@ MenuItem('Copy', { shortcut: 'cmd+c', on_selected: @{
 The focused control gets keys first: a text field takes what's typed
 into it, a button takes Space. Keys it doesn't use go to the
 `Shortcuts` and `KeyListener` widgets in the window, the deepest first,
-until one handles the key.
+until one handles the key. Text the user can select but not edit, such
+as a `Text` with `selectable: true`, keeps only the keys that move its
+selection or the focus: the arrows, `home`, `end`, `page_up`,
+`page_down`, `tab`, and anything with `cmd` or `ctrl`. A digit or Return
+typed while it's selected still reaches your shortcuts.
 
 ```zuri
 import zug { * }
@@ -194,4 +198,7 @@ without modifiers), `characters` (what the key typed), `modifiers`,
 
 Keys typed into a text field never reach shortcuts. When you want a
 window's keys to go to its shortcuts, such as after the user presses
-Return in a field, call `clear_focus(context)`.
+Return in a field, call `clear_focus(context)` with the context of a
+widget inside that window. The context of a widget above the windows,
+such as the one that builds your `App`, has no window, so it raises a
+`ValueError`.

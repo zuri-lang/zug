@@ -27,8 +27,10 @@ What it does:
   is typed into it, such as `2 * (3 + 4)^2` or `sin(30) + pi`, says what
   is wrong with one it cannot, and offers the recent ones.
 - **The keyboard**: digits, operators, Return, Escape and Delete work
-  without clicking, and Copy and Paste work on the value shown when no
-  text field has focus.
+  without clicking, whatever was clicked last. The expression box keeps
+  them only while you type in it: clicking a key, or calculating what
+  you typed, hands the keyboard back to the keypad. Copy and Paste work
+  on the value shown when no text field has focus.
 - **A tape** of past calculations; double-click one to use its result.
 - **Settings**: decimal places, thousands separators, significant digits,
   the angle unit, and whether the tape is kept between launches. They are

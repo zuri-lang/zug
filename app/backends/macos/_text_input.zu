@@ -279,11 +279,33 @@ class MacTextField < MacView {
     }
 
     var text = zuri_string(send(self.native, 'objectValueOfSelectedItem'))
-    self.fire('selected', { index, text: text == nil ? '' : text })
+    self._keeping_focus_away(@{
+      self.fire('selected', { index, text: text == nil ? '' : text })
+    })
   }
 
   on_action() {
-    self.fire('submitted', nil)
+    self._keeping_focus_away(@{
+      self.fire('submitted', nil)
+    })
+  }
+
+  # AppKit selects a field's text again after Return or a combo box choice
+  # has been handled, which would bring back focus the handler took away.
+  # When `fire` took focus away, it is taken away again once AppKit is
+  # done, unless something else has been focused by then.
+  _keeping_focus_away(fire: function) {
+    var window = host_for(send(self.native, 'window'))
+    var clears = window == nil ? 0 : window.focus_clears
+    fire()
+
+    if window != nil and window.focus_clears != clears {
+      self.backend.start_timer(0, false, @{
+        if !self.destroyed and send(self.native, 'currentEditor') != nil {
+          window.clear_focus()
+        }
+      })
+    }
   }
 }
 

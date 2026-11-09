@@ -197,15 +197,17 @@ class CalculatorState < State {
   }
 
   /**
-   * Calculates an expression typed into the expression box.
+   * Calculates an expression typed into the expression box. Returns
+   * whether it could be calculated.
    *
    * @param string text
+   * @returns bool
    */
   submit(text: string) {
     var trimmed = text.trim()
 
     if trimmed == '' {
-      return
+      return false
     }
 
     var result = nil
@@ -221,7 +223,7 @@ class CalculatorState < State {
         self.input_error = error.message
       })
       beep()
-      return
+      return false
     }
 
     self.set_state(@{
@@ -239,7 +241,7 @@ class CalculatorState < State {
       self.input.clear()
     })
     self._save()
-    clear_focus(self.context())
+    return true
   }
 
   /**
@@ -426,7 +428,7 @@ class CalculatorPage < StatelessWidget {
     self.app = app
   }
 
-  _key(label: string, key: string, sort: string) {
+  _key(context, label: string, key: string, sort: string) {
     var app = self.app
     var tint = nil
 
@@ -446,14 +448,19 @@ class CalculatorPage < StatelessWidget {
       }),
       tint,
       accessibility_identifier: 'key ${key}',
+      # A key clicked means the keypad is in use, so the keyboard goes
+      # back to it from the expression box.
       on_pressed: @{
         app.press(key)
+        clear_focus(context)
       },
     })
   }
 
-  _keypad() {
-    var keys = _BASIC_KEYS.map(@(spec) => self._key(spec[0], spec[1], spec[2]))
+  _keypad(context) {
+    var keys = _BASIC_KEYS.map(
+      @(spec) => self._key(context, spec[0], spec[1], spec[2]),
+    )
 
     # The 0 key spans two columns.
     keys[20] = GridCell(keys[20], { column_span: 2 })
@@ -463,9 +470,9 @@ class CalculatorPage < StatelessWidget {
     })
   }
 
-  _scientific_keypad() {
+  _scientific_keypad(context) {
     var keys = _SCIENTIFIC_KEYS.map(
-      @(spec) => self._key(spec[0], spec[1], 'scientific'),
+      @(spec) => self._key(context, spec[0], spec[1], 'scientific'),
     )
     return Box({
       width: 300,
@@ -633,15 +640,21 @@ class CalculatorPage < StatelessWidget {
       }),
     ], { spacing: 12 })
 
+    # Once an expression is calculated, the keyboard goes back to the
+    # keypad. One that cannot be calculated keeps the box focused to fix.
+    var calculate = @(text) {
+      if app.submit(text) {
+        clear_focus(context)
+      }
+    }
+
     var input = Column([
       ComboBox(app.settings.recents, {
         controller: app.input,
         placeholder: 'Type an expression, such as 2 × (3 + 4)^2',
-        on_submitted: @(text) {
-          app.submit(text)
-        },
+        on_submitted: calculate,
         on_selected: @(index, text) {
-          app.submit(text)
+          calculate(text)
         },
         accessibility_identifier: 'expression input',
       }),
@@ -653,10 +666,10 @@ class CalculatorPage < StatelessWidget {
 
     var pads = scientific
       ? Row(
-        [self._scientific_keypad(), self._keypad()],
+        [self._scientific_keypad(context), self._keypad(context)],
         { spacing: 12, align_items: AlignItems.START },
       )
-      : self._keypad()
+      : self._keypad(context)
 
     var main = FitContent(Column(
       [header, input, self._display(context), pads],

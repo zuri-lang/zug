@@ -50,6 +50,70 @@ def type_into(text_view, text) {
   _send_void_id(text_view, _sel('insertText:'), string)
 }
 
+var _Point = ffi.struct('KeyPoint').add_field('x', ffi.double).add_field(
+  'y', ffi.double,
+)
+var _key_event = _objc.function('objc_msgSend', ffi.ptr, [
+  ffi.ptr, ffi.ptr, ffi.ulong, _Point, ffi.ulong, ffi.double, ffi.long, ffi.ptr,
+  ffi.ptr, ffi.ptr, ffi.bool, ffi.ushort,
+])
+var _send_bool_id = _objc.function(
+  'objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr],
+)
+var _Bounds = ffi
+  .struct('KeyBounds')
+  .add_field('x', ffi.double)
+  .add_field('y', ffi.double)
+  .add_field('w', ffi.double)
+  .add_field('h', ffi.double)
+var _bounds = _objc.function('objc_msgSend', _Bounds, [ffi.ptr, ffi.ptr])
+var _convert = _objc.function(
+  'objc_msgSend', _Point, [ffi.ptr, ffi.ptr, _Point, ffi.ptr],
+)
+var _mouse_event = _objc.function('objc_msgSend', ffi.ptr, [
+  ffi.ptr, ffi.ptr, ffi.ulong, _Point, ffi.ulong, ffi.double, ffi.long, ffi.ptr,
+  ffi.long, ffi.long, ffi.float,
+])
+var _post_event = _objc.function(
+  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.bool],
+)
+
+# Clicks the middle of a native view with the mouse. The button goes up
+# from the event queue, where the view's tracking looks for it.
+def mouse_click(view) {
+  var window = _send(view, _sel('window'))
+  var b = _bounds(view, _sel('bounds'))
+  var at = _convert(
+    view, _sel('convertPoint:toView:'),
+    { x: b.x + b.w / 2, y: b.y + b.h / 2 }, nil,
+  )
+  var number = _send_long(window, _sel('windowNumber'))
+  var make = @(type, pressure) => _mouse_event(
+    _class('NSEvent'),
+    _sel('mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:'),
+    type, at, 0, 0, number, nil, 0, 1, pressure,
+  )
+  _post_event(
+    _send(_class('NSApplication'), _sel('sharedApplication')),
+    _sel('postEvent:atStart:'), make(2, 0.0), false,
+  )
+  _send_void_id(window, _sel('sendEvent:'), make(1, 1.0))
+}
+
+# Sends a native window a key going down, as the keyboard does.
+def send_key(window, characters, code) {
+  var string = _send_string_arg(
+    _class('NSString'), _sel('stringWithUTF8String:'), characters,
+  )
+  var event = _key_event(
+    _class('NSEvent'),
+    _sel('keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:'),
+    10, { x: 0, y: 0 }, 0, 0, _send_long(window, _sel('windowNumber')), nil,
+    string, string, false, code,
+  )
+  _send_void_id(window, _sel('sendEvent:'), event)
+}
+
 def native_string(object, name) {
   return _utf8(_send(object, _sel(name)), _sel('UTF8String'))
 }
@@ -266,6 +330,68 @@ suite('the macOS backend', @{
     expect(seen.row).to_be(2)
     expect(editor_notes.text()).to_be('one two')
     expect(seen.text).to_be('one two')
+  })
+
+  it('passes keys that focused read-only text has no use for to the window', @{
+    var keys = []
+    var seen = {}
+
+    run_steps(App({ windows: [Window('Keys', KeyListener(Column([
+      Text('42', { selectable: true }),
+    ]), { on_key: @(event) {
+      keys.append(event.key)
+      return true
+    } }), { size: Size(200, 100) })] }), [
+      @(runtime) {
+        mouse_click(hosts(runtime, 'text')[0].view.native)
+      },
+      @(runtime) {
+        var window = runtime.windows()[0].view.native
+        seen['text_focused'] = _send_bool_id(
+          _send(window, _sel('firstResponder')), _sel('isKindOfClass:'),
+          _class('NSTextView'),
+        )
+        send_key(window, '7', 26)
+        send_key(window, '', 123)
+        send_key(window, '\r', 36)
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(seen.text_focused).to_be_true()
+    expect(keys).to_equal(['7', 'enter'])
+  })
+
+  it('keeps focus away once a field submitted with Return takes it', @{
+    var submitted = []
+    var seen = {}
+
+    run_steps(App({ windows: [Window('Submit', Builder(@(context) => Column([
+      TextField({ on_submitted: @(text) {
+        submitted.append(text)
+        clear_focus(context)
+      } }),
+    ])), { size: Size(200, 100) })] }), [
+      @(runtime) {
+        mouse_click(hosts(runtime, 'text_field')[0].view.native)
+      },
+      @(runtime) {
+        var window = runtime.windows()[0].view.native
+        send_key(window, '4', 21)
+        send_key(window, '\r', 36)
+      },
+      @(runtime) {
+        var window = runtime.windows()[0].view.native
+        seen['focused'] = _send_bool_id(
+          _send(window, _sel('firstResponder')), _sel('isKindOfClass:'),
+          _class('NSTextView'),
+        )
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(submitted).to_equal(['4'])
+    expect(seen.focused).to_be_false()
   })
 
   it('keeps the backend contract', @{

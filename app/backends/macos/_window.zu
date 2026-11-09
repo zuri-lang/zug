@@ -3,14 +3,16 @@
  */
 
 import ffi
-import .. ..foundation { Size, Rect, EdgeInsets, Constraints, BackendError }
+import .. ..foundation {
+  Size, Rect, EdgeInsets, Constraints, BackendError, report_error,
+}
 import .. ..backend { WindowHost, kind_spec }
 import ._runtime {
   cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
   send_void_int, send_void_uint, send_void_size, send_void_point, send_size,
-  send_rect, send_uint, typed, typed_super, super_of, define_class, ns_string,
-  zuri_string, retain, release, rect, create_with_frame, CGRect, CGSize,
-  CGPoint,
+  send_rect, send_uint, send_bool, typed, typed_super, super_of, define_class,
+  ns_string, zuri_string, retain, release, rect, create_with_frame, CGRect,
+  CGSize, CGPoint,
 }
 import ._classes { register, unregister, host_for, shared_window_delegate }
 import ._cocoa { ns_color, finite }
@@ -46,13 +48,39 @@ var _NAMED_KEYS = {
   111: 'f12',
 }
 
+var _KEY_DOWN = 10
+
+# Keys that text the user can select but not edit uses, to move the
+# selection or the focus.
+var _SELECTION_KEYS = [
+  'left', 'right', 'up', 'down', 'home', 'end', 'page_up', 'page_down', 'tab',
+]
+
 /**
  * zug's windows: an `NSWindow` that offers keys no control used to its
- * host before AppKit beeps at them.
+ * host before AppKit beeps at them. Text the user can select but not edit
+ * swallows every key typed into it, so while it has focus, a key it has
+ * no use for is offered to the host first.
  *
  * @type Pointer
  */
 var ZugWindow = define_class('ZugWindow', 'NSWindow', {
+  'sendEvent:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
+    var used = false
+
+    catch {
+      var host = host_for(this)
+      used = host != nil and host.read_only_key(event)
+    } as error {
+      report_error(error, 'handling a key')
+    }
+
+    if !used {
+      typed_super(
+        ffi.void, [ffi.ptr],
+      )(super_of(this, cls('NSWindow')), sel('sendEvent:'), event)
+    }
+  }],
   'keyDown:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
     var host = host_for(this)
 
@@ -161,6 +189,15 @@ class MacWindow < WindowHost {
   var children = []
 
   var _shown = false
+
+  /**
+   * How many times focus has been taken away, for a text field to see
+   * whether its action took it.
+   *
+   * @internal
+   * @type number
+   */
+  var focus_clears = 0
 
   /**
    * @param MacBackend backend
@@ -445,6 +482,7 @@ class MacWindow < WindowHost {
 
   clear_focus() {
     if !self.closed and !self.destroyed {
+      self.focus_clears++
       typed(ffi.bool, [ffi.ptr])(self.native, sel('makeFirstResponder:'), nil)
     }
   }
@@ -471,6 +509,42 @@ class MacWindow < WindowHost {
     }
 
     return self.backend.deliver(self, 'key', key_payload(event)) == true
+  }
+
+  /**
+   * A key about to go to the focused view. When that view is text the
+   * user can select but not edit, and the key is one such text has no use
+   * for, such as a typed character or Return, zug sees it first. Returns
+   * whether zug used it.
+   *
+   * @internal
+   * @param Pointer event
+   * @returns bool
+   */
+  read_only_key(event) {
+    if self.destroyed or send_uint(event, 'type') != _KEY_DOWN {
+      return false
+    }
+
+    var responder = send(self.native, 'firstResponder')
+
+    if responder == nil
+      or !typed(ffi.bool, [ffi.ptr])(
+        responder, sel('isKindOfClass:'), cls('NSTextView'),
+      )
+      or send_bool(responder, 'isEditable') {
+      return false
+    }
+
+    var payload = key_payload(event)
+
+    if payload.modifiers.contains('cmd')
+      or payload.modifiers.contains('ctrl')
+      or _SELECTION_KEYS.contains(payload.key) {
+      return false
+    }
+
+    return self.backend.deliver(self, 'key', payload) == true
   }
 
   # What the delegate reports.

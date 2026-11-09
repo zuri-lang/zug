@@ -63,6 +63,31 @@ describe('the calculator window', @{
     expect(display(t)).to_be('0')
   })
 
+  it('gives the keyboard back to the keys when one is clicked', @{
+    t.one('expression input').focus()
+    tap_keys(t, ['7'])
+    expect(t.backend.focused).to_be_nil()
+    t.window().press_key('8')
+    expect(display(t)).to_be('78')
+  })
+
+  it('gives the keyboard back to the keys once an expression is calculated', @{
+    var input = t.one('expression input')
+    input.focus()
+    input.fire('changed', { text: '6 * 7' })
+    input.fire('submitted', nil)
+    expect(display(t)).to_be('42')
+    expect(t.backend.focused).to_be_nil()
+  })
+
+  it('keeps the expression box focused while its expression is wrong', @{
+    var input = t.one('expression input')
+    input.focus()
+    input.fire('changed', { text: '2 +' })
+    input.fire('submitted', nil)
+    expect(t.backend.focused == t.one('expression input')).to_be_true()
+  })
+
   it('calculates a typed expression and remembers it', @{
     var input = t.one('expression input')
     input.fire('changed', { text: '2 * (3 + 4)^2' })

@@ -66,8 +66,8 @@ class AlertStyle {
   static var CRITICAL = 'critical'
 }
 
-# The native window of the window `context` is in, or nil.
-def _window_host(context) {
+# The window `context` is in, or nil.
+def _window_node(context) {
   if context == nil {
     return nil
   }
@@ -78,6 +78,12 @@ def _window_host(context) {
     node = node.render_parent
   }
 
+  return node
+}
+
+# The native window of the window `context` is in, or nil.
+def _window_host(context) {
+  var node = _window_node(context)
   return node == nil ? nil : node.view
 }
 
@@ -191,15 +197,28 @@ def save_file(context, options: ?dict) {
 
 /**
  * Takes keyboard focus away from the controls in the window of `context`,
- * so keys go to the window's `Shortcuts` and `KeyListener`s.
+ * so keys go to the window's `Shortcuts` and `KeyListener`s. `context`
+ * must be that of a widget inside the window: a widget above the windows,
+ * such as the one that builds the `App`, has no window to clear, and
+ * raises a `ValueError`.
  *
  * @param Context context
  */
 def clear_focus(context) {
-  var window = _window_host(context)
+  var node = _window_node(context)
 
-  if window != nil {
-    window.clear_focus()
+  if node == nil {
+    if context != nil and context.mounted() {
+      raise ValueError(
+        'clear_focus() needs the context of a widget inside a window, and this one is above the windows',
+      )
+    }
+
+    return
+  }
+
+  if node.view != nil {
+    node.view.clear_focus()
   }
 }
 
