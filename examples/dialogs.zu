@@ -1,0 +1,372 @@
+/**
+ * A small notes editor that uses every kind of dialog: an open panel to
+ * open a note, a save panel to save it, an alert before changes are
+ * thrown away, the font and colour choosers to restyle it as you pick,
+ * and a sheet of its own to rename it.
+ *
+ *     zuri run examples/dialogs.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import os
+import ..app { * }
+
+class Notes < StatefulWidget {
+  create_state() {
+    return NotesState()
+  }
+}
+
+class NotesState < State {
+  var text
+  var title = 'Untitled'
+  var path
+  var edited = false
+  var ask_before_discarding = true
+  var style = TextStyle({ size: 14 })
+  var status = 'A new note.'
+
+  init_state() {
+    self.text = TextController()
+  }
+
+  dispose() {
+    self.text.dispose()
+  }
+
+  say(status: string) {
+    self.set_state(@{
+      self.status = status
+    })
+  }
+
+  # A dialog can answer after the note has gone, as when the application
+  # quits with one open, so what acts on an answer checks first.
+  if_open(fn: function) {
+    return @(value) {
+      if self.mounted() {
+        fn(value)
+      }
+    }
+  }
+
+  # Starts a fresh note, asking first when that would lose changes.
+  new_note(context) {
+    if !self.edited or !self.ask_before_discarding {
+      self.start_over()
+      return
+    }
+
+    show_alert(context, {
+      title: 'Discard your changes to “${self.title}”?',
+      message: 'They have not been saved, and you can’t get them back.',
+      style: AlertStyle.WARNING,
+      buttons: ['Discard', 'Cancel'],
+      suppression: 'Don’t ask again',
+    }).then(self.if_open(@(answer) {
+      if answer.button != 0 {
+        self.say('Kept your changes.')
+        return
+      }
+
+      if answer.suppressed {
+        self.ask_before_discarding = false
+      }
+
+      self.start_over()
+    }))
+  }
+
+  start_over() {
+    self.text.clear()
+    self.set_state(@{
+      self.title = 'Untitled'
+      self.path = nil
+      self.edited = false
+      self.status = 'A new note.'
+    })
+  }
+
+  open_note(context) {
+    pick_files(context, {
+      title: 'Choose a note to open.',
+      types: ['txt', 'md'],
+    }).then(self.if_open(@(paths) {
+      if paths == nil {
+        self.say('Opened nothing.')
+        return
+      }
+
+      var path = paths[0]
+      var contents = nil
+
+      catch {
+        contents = file(path).read()
+      } as error {
+        self.problem(context, 'Couldn’t open “${os.base_name(path)}”', error)
+        return
+      }
+
+      self.text.set_text(contents)
+      self.set_state(@{
+        self.path = path
+        self.title = _without_extension(os.base_name(path))
+        self.edited = false
+        self.status = 'Opened ${path}.'
+      })
+    }))
+  }
+
+  save_note(context) {
+    save_file(context, {
+      title: 'Save the note.',
+      name: '${self.title}.txt',
+      types: ['txt'],
+      directory: self.path == nil ? nil : os.dir_name(self.path),
+    }).then(self.if_open(@(path) {
+      if path == nil {
+        self.say('Saved nothing.')
+        return
+      }
+
+      catch {
+        file(path, 'w').write(self.text.text())
+      } as error {
+        self.problem(context, 'Couldn’t save “${os.base_name(path)}”', error)
+        return
+      }
+
+      self.set_state(@{
+        self.path = path
+        self.title = _without_extension(os.base_name(path))
+        self.edited = false
+        self.status = 'Saved to ${path}.'
+      })
+    }))
+  }
+
+  problem(context, title: string, error) {
+    show_alert(context, {
+      title,
+      message: error.message,
+      style: AlertStyle.CRITICAL,
+    })
+    self.say('${title}.')
+  }
+
+  # The note changes font as the user picks in the chooser.
+  choose_font(context) {
+    pick_font(context, {
+      style: self.style,
+      on_changed: self.if_open(@(style) {
+        self.set_state(@{
+          self.style = style
+        })
+      }),
+    }).then(self.if_open(@(style) {
+      self.say(style == nil ? 'Kept the font.' : 'Set the font.')
+    }))
+  }
+
+  choose_colour(context) {
+    pick_color(context, {
+      color: self.style.color == nil ? Color.BLACK : self.style.color,
+      on_changed: self.if_open(@(color) {
+        self.set_state(@{
+          self.style = self.style.copy_with({ color })
+        })
+      }),
+    }).then(self.if_open(@(color) {
+      self.say(
+        color == nil
+          ? 'Kept the colour.'
+          : 'Coloured the text ${color.to_hex()}.',
+      )
+    }))
+  }
+
+  rename(context) {
+    show_dialog(
+      context, @(close) => RenameSheet(self.title, close), { title: 'Rename' },
+    ).then(self.if_open(@(title) {
+      if title == nil or title.trim() == '' {
+        self.say('Kept the title.')
+        return
+      }
+
+      self.set_state(@{
+        self.title = title.trim()
+        self.status = 'Renamed the note “${self.title}”.'
+      })
+    }))
+  }
+
+  build(context) {
+    var tools = Row(
+      [
+        Button('New', {
+          shortcut: 'cmd+n',
+          on_pressed: @{
+            self.new_note(context)
+          },
+        }),
+        Button('Open…', {
+          shortcut: 'cmd+o',
+          on_pressed: @{
+            self.open_note(context)
+          },
+        }),
+        Button('Save…', {
+          shortcut: 'cmd+s',
+          on_pressed: @{
+            self.save_note(context)
+          },
+        }),
+        Separator({ axis: Axis.VERTICAL }),
+        Button('Font…', {
+          shortcut: 'cmd+t',
+          on_pressed: @{
+            self.choose_font(context)
+          },
+        }),
+        Button('Colour…', {
+          on_pressed: @{
+            self.choose_colour(context)
+          },
+        }),
+        Button('Rename…', {
+          on_pressed: @{
+            self.rename(context)
+          },
+        }),
+      ],
+      {
+        spacing: 8,
+      },
+    )
+
+    var heading = Row([
+      Text(self.title, {
+        style: Style.of(context).title,
+      }),
+      Text(self.edited ? 'Edited' : '', {
+        style: TextStyle({
+          color: Color.system('secondary_label'),
+        }),
+      }),
+    ], { spacing: 8 })
+
+    return Padding(
+      EdgeInsets.all(12),
+      Column(
+        [
+          tools,
+          heading,
+          Expanded(TextArea({
+            controller: self.text,
+            style: self.style,
+            on_changed: @(text) {
+              if !self.edited {
+                self.set_state(@{
+                  self.edited = true
+                })
+              }
+            },
+            accessibility_identifier: 'note',
+          })),
+          Text(self.status, {
+            style: TextStyle({
+              size: 11,
+              color: Color.system('secondary_label'),
+            }),
+            max_lines: 1,
+            overflow: TextOverflow.ELLIPSIS,
+            accessibility_identifier: 'status',
+          }),
+        ],
+        {
+          spacing: 10,
+          align_items: AlignItems.STRETCH,
+        },
+      ),
+    )
+  }
+}
+
+# A sheet that asks for a new title.
+class RenameSheet < StatefulWidget {
+  var title
+  var close
+
+  @new(title: string, close: function) {
+    self.title = title
+    self.close = close
+  }
+
+  create_state() {
+    return RenameState()
+  }
+}
+
+class RenameState < State {
+  var field
+
+  init_state() {
+    self.field = TextController(self.widget.title)
+    self.field.select_all()
+  }
+
+  dispose() {
+    self.field.dispose()
+  }
+
+  build(context) {
+    var close = self.widget.close
+    return Box({
+      width: 320,
+      padding: EdgeInsets.all(20),
+      child: Column([
+        Text('Rename the note', { style: Style.of(context).headline }),
+        TextField({
+          controller: self.field,
+          autofocus: true,
+          on_submitted: @(text) {
+            close(text)
+          },
+          accessibility_identifier: 'new title',
+        }),
+        Row([
+          Spacer(),
+          Button('Cancel', {
+            role: ButtonRole.CANCEL,
+            on_pressed: @{
+              close(nil)
+            },
+          }),
+          Button('Rename', {
+            role: ButtonRole.PRIMARY,
+            on_pressed: @{
+              close(self.field.text())
+            },
+          }),
+        ], { spacing: 8 }),
+      ], { spacing: 12, align_items: AlignItems.STRETCH }),
+    })
+  }
+}
+
+def _without_extension(name: string) {
+  var dot = name.last_index_of('.')
+  return dot > 0 ? name[0, dot] : name
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Notes',
+    windows: [Window('Notes', Notes(), {
+      size: Size(560, 420),
+      min_size: Size(420, 260),
+    })],
+  }))
+}

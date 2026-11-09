@@ -92,6 +92,9 @@ place to begin; after that, the pages most people reach for are
   to new settings, and a pulse.
 - `examples/services.zu`: keys, an alert, a timer, the clipboard and
   background work.
+- `examples/dialogs.zu`: a notes editor that opens and saves files, asks
+  before throwing changes away, restyles its text from the font and
+  colour choosers, and renames the note in a sheet of its own.
 - `examples/conformance.zu`: every widget zug has in one working window,
   the gallery the backend conformance check builds, with a switch that
   swaps every widget to a second set of options.
@@ -104,8 +107,7 @@ tape, and settings that persist.
 
 `zuri test` runs zug's tests on the headless backend, with no display.
 
-The platform tests such as `tests/macos.test.zu` which drives real AppKit views and open
-windows, will only run only when environment `ZUG_MACOS_TESTS=1` is set. 
+The platform tests, such as `tests/macos.test.zu`, which drives real AppKit views and opens windows, run only when `ZUG_MACOS_TESTS=1` is set.
 
 When you build applications with zug, your
 application's tests should also use `zug.testing` the same way. See
