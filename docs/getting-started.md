@@ -7,26 +7,15 @@ You need Zuri 0.1 or later and macOS 11 or later.
 
 ## A new project
 
-Start the way every Zuri project starts, with `zuri init`, then add zug
-from its git repository:
-
 ```console
 $ zuri init counter
 $ cd counter
 $ zuri install --git https://github.com/zuri-lang/zug.git
 ```
 
-`zuri install` records zug in `project.toml` and installs it into
-`.zuri/libs`, following the repository's default branch, `main`. The lock
-file holds the exact commit, so everyone who runs `zuri restore` on your
-project gets the same zug you have, and `zuri update` moves you to the
-newest commit when you want it. `--rev` with a commit pins that commit
-instead.
-
 ## The first window
 
-`zuri init` gave you an `app/index.zu` with a `main()` that the project's
-`index.zu` calls when you run it. Replace `app/index.zu` with this:
+Replace `app/index.zu` with this:
 
 ```zuri
 import zug { * }
@@ -63,13 +52,7 @@ def main() {
 }
 ```
 
-and run it:
-
-```console
-$ zuri run
-```
-
-A window opens with a heading and a real macOS button. Each click
+and run it with `zuri run`. A window opens with a heading and a real macOS button. Each click
 updates the heading.
 
 ## What just happened

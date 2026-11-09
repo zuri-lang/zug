@@ -42,12 +42,10 @@ application uses, roughly in the order you'll need it.
 - [When something goes wrong](errors.md): how zug reports mistakes and
   errors, and how to handle them yourself.
 
-## Testing and shipping
+## Testing and performance
 
 - [Testing](testing.md): testing widgets without a display, with
   `WidgetTester`.
-- [Shipping an application](shipping.md): bundling, signing and
-  notarizing a macOS application.
 - [Performance](performance.md): what things cost, measured, and how to
   keep an application fast.
 

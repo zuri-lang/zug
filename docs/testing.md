@@ -46,7 +46,7 @@ describe('the counter', @{
 })
 ```
 
-Put it in `tests/` and run `zuri test`. `pump_widget(widget)` shows a
+`pump_widget(widget)` shows a
 widget in a window, 800 by 600 unless you pass `{ size }`, and draws it.
 `pump_app(app)` takes a whole `App` instead, for testing menus and
 several windows. Call `dispose()` at the end, so the next test starts

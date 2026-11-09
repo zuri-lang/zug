@@ -11,62 +11,10 @@ $ zuri test
 
 ## Building the application
 
-`zuri bundle` packages the calculator with a Zuri runtime into a macOS
-application that runs on a Mac without Zuri installed:
-
 ```console
-$ zuri install
 $ zuri bundle --format app
-Built …/examples/calculator/dist/calculator.app (28.6 MiB)
 $ open dist/calculator.app
 ```
-
-`zuri install` comes first because the bundle takes zug as it is
-installed in `.zuri/libs`, and installing copies it afresh from this
-repository. The `[bundle]` section of `project.toml` names the
-application and gives it its identifier:
-
-```toml
-[bundle]
-name = "Calculator"
-identifier = "dev.zug.calculator"
-```
-
-`name` is what Finder and the menu bar show, and `identifier` is
-required, in reverse domain form. An `icon` key naming an `.icns` file in
-the project gives the application its own icon. `exclude` in `[project]`
-keeps the tests out of the bundle; the rest of the project goes in.
-
-To install it, drag `dist/calculator.app` into `/Applications`, or:
-
-```console
-$ cp -R dist/calculator.app /Applications/Calculator.app
-```
-
-The bundle is signed ad hoc, which is all a Mac needs to run an
-application built on it. To give it to others, sign it with a Developer
-ID and notarize it. That needs the hardened runtime, under which Zuri's
-JIT needs the `com.apple.security.cs.allow-jit` entitlement, so sign with
-an entitlements file granting it:
-
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>com.apple.security.cs.allow-jit</key>
-  <true/>
-</dict>
-</plist>
-```
-
-```console
-$ codesign --force --options runtime --entitlements entitlements.plist \
-    --sign "Developer ID Application: Your Name" dist/calculator.app
-```
-
-then submit it with `xcrun notarytool` as for any application. `zuri
-bundle --help` lists the other options, such as `--output` and `--name`.
 
 What it does:
 
