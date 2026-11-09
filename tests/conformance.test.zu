@@ -2,7 +2,7 @@ import test { * }
 
 import ..app { * }
 import ..app.backends.headless { HeadlessBackend }
-import ..app.testing { check_backend }
+import ..app.testing { check_backend, gallery_app, WidgetTester }
 
 def check(backend) {
   return check_backend(backend, {
@@ -79,6 +79,46 @@ describe('check_backend', @{
     )
     expect(built).to_have_length(1)
     expect(built[0].detail).to_contain('ValueError: no sliders here')
+  })
+
+  it('keeps what the user does in the gallery until the set changes', @{
+    var changed = ObservableValue(false)
+    var t = WidgetTester().pump_app(gallery_app(changed))
+    var reported = []
+    set_error_handler(@(error, context) {
+      reported.append('${context}: ${error.message}')
+    })
+
+    var box = t.find_kind('checkbox')[0]
+    box.fire('changed', { value: true })
+    t.pump()
+    expect(t.find_kind('checkbox')[0].props.value).to_be_true()
+    expect(t.find_text('check: true')).to_have_length(1)
+
+    var field = t.find_kind('text_field')[0]
+    field.fire('changed', { text: 'typed' })
+    t.pump()
+    expect(t.find_kind('text_field')[0].props.text).to_be('typed')
+
+    t.tap('push')
+    expect(t.find_text('pressed push')).to_have_length(1)
+
+    changed.set(true)
+    t.pump()
+    expect(t.find_kind('checkbox')[0].props.value).to_be_true()
+    expect(t.find_kind('text_field')[0].props.text).to_be('second text')
+    expect(t.backend.windows.filter(
+      @(window) => !window.closed,
+    )).to_have_length(2)
+
+    changed.set(false)
+    t.pump()
+    expect(t.find_kind('checkbox')[0].props.value).to_be_false()
+    expect(t.find_kind('text_field')[0].props.text).to_be('text')
+
+    set_error_handler(nil)
+    expect(reported).to_be_empty()
+    t.dispose()
   })
 
   it('can leave out the gallery', @{

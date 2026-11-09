@@ -80,8 +80,9 @@ Single scripts, each run with `zuri run`:
   to new settings, and a pulse.
 - `examples/services.zu`: keys, an alert, a timer, the clipboard and
   background work.
-- `examples/conformance.zu`: checks this platform's backend, showing a
-  window of every widget as it goes.
+- `examples/conformance.zu`: every widget zug has in one working window,
+  the gallery the backend conformance check builds, with a switch that
+  swaps every widget to a second set of options.
 
 And a whole application, `examples/calculator`, its own project with its
 own tests: keyed and typed calculations, a scientific keypad, memory, a

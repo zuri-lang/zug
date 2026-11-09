@@ -288,10 +288,10 @@ class _Checker {
     var with_gallery = self.options.get('gallery', true)
 
     if with_gallery {
-      self.runtime.attach(gallery_app(
-        self.changed, self.backend.has_capability('menu_bar'),
-        self.backend.has_capability('multiple_windows'),
-      ))
+      self.runtime.attach(gallery_app(self.changed, {
+        menus: self.backend.has_capability('menu_bar'),
+        second_window: self.backend.has_capability('multiple_windows'),
+      }))
     }
 
     self.steps = [

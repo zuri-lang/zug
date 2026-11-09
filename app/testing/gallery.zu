@@ -1,7 +1,11 @@
 /**
- * Every widget zug has, with its options set two ways, for checking a
- * backend: building the gallery uses every view kind, and switching it
- * changes nearly every prop of every kind.
+ * Every widget zug has, in one window, with two sets of options.
+ *
+ * `check_backend()` builds the gallery to check a backend: building it
+ * uses every view kind, and switching to the other set of options changes
+ * nearly every prop of every kind. It is also an application in its own
+ * right, where every control works and a switch at the top swaps the
+ * sets.
  */
 
 import date
@@ -14,359 +18,590 @@ var _ROWS = [
 ]
 
 /**
- * The gallery application. `changed` picks which of its two sets of
- * options it shows, and switching it rebuilds the gallery with the other.
- * With `multiple_windows` it opens a second window while changed.
+ * The gallery application: a window of every widget, which `changed`
+ * shows with its first set of options or, when true, its second. Every
+ * control keeps what the user does to it, until the set changes and puts
+ * the set's values back.
  *
- * @internal
+ * ```zuri,ignore
+ * import zug { ObservableValue, run_app }
+ * import zug.testing { gallery_app }
+ *
+ * run_app(gallery_app(ObservableValue(false)))
+ * ```
+ *
  * @param ObservableValue changed: holds a bool.
- * @param bool with_menus: whether to give the application a menu bar.
- * @param bool multiple_windows: whether to open a second window.
+ * @param ?dict options: `menus` (true) to give the application a menu
+ *    bar, and `second_window` (true) to open another window while the
+ *    second set is shown.
  * @returns Widget
  */
-def gallery_app(changed, with_menus: bool, multiple_windows: bool) {
+def gallery_app(changed, options: ?dict) {
+  var o = check_options(
+    options, 'gallery_app', { menus: 'bool', second_window: 'bool' },
+  )
+  var menus = o.get('menus', true)
+  var second_window = o.get('second_window', true)
+
   return Observer(changed, @(context) {
     var alt = changed.value()
     var windows = [Window(
-      alt ? 'zug gallery, changed' : 'zug gallery', ScrollView(Padding(
-        EdgeInsets.all(12), Column(_sections(alt), {
-          spacing: 12,
-          align_items: AlignItems.STRETCH,
-        }),
-      )), { size: Size(760, 640), resizable: !alt, min_size: Size(300, 200) },
+      alt ? 'zug gallery, second set' : 'zug gallery', Gallery(changed, alt), {
+        size: Size(780, 680),
+        resizable: !alt,
+        min_size: Size(300, 200),
+      },
     )]
 
-    if alt and multiple_windows {
+    if alt and second_window {
       windows.append(Window(
-        'zug gallery, second window', Center(Text('Second')), {
+        'zug gallery, second window', Center(Text('A second window')), {
           size: Size(240, 120),
+          on_closed: @{
+            changed.set(false)
+          },
         },
       ))
     }
 
     return App({
       title: 'zug gallery',
-      menu_bar: with_menus ? _menu_bar(alt) : nil,
-      quit_on_last_window_closed: false,
+      menu_bar: menus ? _menu_bar(changed, alt) : nil,
       windows,
     })
   })
 }
 
-def _menu_bar(alt: bool) {
+def _menu_bar(changed, alt: bool) {
   return MenuBar([Menu('Gallery', [
-    MenuItem('First', { shortcut: 'cmd+1', checked: alt, on_selected: @{} }),
+    MenuItem('First Set', {
+      shortcut: 'cmd+1',
+      checked: !alt,
+      on_selected: @{
+        changed.set(false)
+      },
+    }),
+    MenuItem('Second Set', {
+      shortcut: 'cmd+2',
+      checked: alt,
+      on_selected: @{
+        changed.set(true)
+      },
+    }),
     MenuItem.separator(),
-    MenuItem(alt ? 'Second, changed' : 'Second', {
+    MenuItem('More', { items: [MenuItem(alt ? 'Inner, second set' : 'Inner', {
       enabled: !alt,
       on_selected: @{},
-    }),
-    MenuItem('More', { items: [MenuItem('Inner', { on_selected: @{} })] }),
+    })] }),
   ])], { app_items: [MenuItem('Settings…', {
     shortcut: 'cmd+,',
     on_selected: @{},
   })] })
 }
 
-def _sections(alt: bool) {
-  return [
-    _text(alt), _buttons(alt), _choices(alt), _values(alt), _pickers(alt),
-    _indicators(alt), _media(alt), _inputs(alt), _containers(alt),
-    _table(alt), _drawing(alt), _layout(alt),
-  ]
+# The values the user can change, as each set starts them.
+def _start_values(alt: bool) {
+  return {
+    check: alt,
+    mixed: alt ? nil : true,
+    radio: alt ? 'Two' : 'One',
+    switch: alt,
+    segment: alt ? 2 : 1,
+    slider: alt ? 0.8 : 0.2,
+    vslider: alt ? 30 : 70,
+    stepper: alt ? 8 : 3,
+    level: alt ? 4 : 2,
+    toggle: alt,
+    colour_name: alt ? 'green' : 'red',
+    moment: date.from_time(alt ? 1800000000 : 1700000000),
+    colour: alt ? Color.hex('#0a84ff') : Color.RED,
+    field: alt ? 'second text' : 'text',
+    area: alt ? 'two\nlines' : 'one line',
+    search: alt ? 'query' : '',
+    combo: alt ? 'x' : 'a',
+    name: 'Ada',
+    tab: alt ? 1 : 0,
+    rows: alt ? [0, 1] : [1],
+    ascending: !alt,
+    taps: [],
+  }
 }
 
-def _text(alt: bool) {
-  return Column([
-    Text(alt ? 'Text, changed, long enough to be cut short' : 'Text', {
-      style: TextStyle({
-        size: alt ? 18 : 13,
-        weight: alt ? 700 : 400,
-        italic: alt,
-        underline: alt,
-        strikethrough: alt,
-        monospaced_digits: alt,
-        color: alt ? Color.system('accent') : nil,
-      }),
-      align: alt ? TextAlign.CENTER : TextAlign.START,
-      max_lines: alt ? 1 : nil,
-      overflow: alt ? TextOverflow.ELLIPSIS : TextOverflow.CLIP,
-      selectable: alt,
-      tooltip: alt ? 'A changed tooltip' : 'A tooltip',
-      accessibility_label: alt ? 'changed text' : 'text',
-      accessibility_identifier: 'gallery text',
-    }),
-    Text('Design ${alt ? 2 : 1}', {
-      style: TextStyle({
-        design: alt ? FontDesign.ROUNDED : FontDesign.MONOSPACED,
-        family: alt ? nil : 'Helvetica',
-      }),
-    }),
-  ], { spacing: 4, align_items: AlignItems.STRETCH })
+/**
+ * The gallery's window content.
+ *
+ * @internal
+ */
+class Gallery < StatefulWidget {
+  var changed
+  var alt = false
+
+  @new(changed, alt: bool) {
+    self.changed = changed
+    self.alt = alt
+  }
+
+  create_state() {
+    return GalleryState()
+  }
 }
 
-def _buttons(alt: bool) {
-  var buttons = []
+/**
+ * @internal
+ */
+class GalleryState < State {
+  var v = {}
+  var last = 'Nothing yet'
 
-  for variant in [
-    ButtonVariant.PUSH, ButtonVariant.FLEXIBLE, ButtonVariant.SQUARE,
-    ButtonVariant.TOOLBAR, ButtonVariant.INLINE, ButtonVariant.BORDERLESS,
-  ] {
-    buttons.append(Button(alt ? '${variant}!' : variant, {
-      variant,
-      on_pressed: @{},
-      size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+  init_state() {
+    self.v = _start_values(self.widget.alt)
+  }
+
+  did_update_widget(previous) {
+    if previous.alt != self.widget.alt {
+      self.v = _start_values(self.widget.alt)
+      self.last = self.widget.alt ? 'Second set' : 'First set'
+    }
+  }
+
+  # A handler that keeps the value under `name`.
+  keep(name: string) {
+    return @(value) {
+      self.set_state(@{
+        self.v[name] = value
+        self.last = '${name}: ${_shown(value)}'
+      })
+    }
+  }
+
+  # A handler that only says what happened.
+  note(what: string) {
+    return @{
+      self.set_state(@{
+        self.last = what
+      })
+    }
+  }
+
+  build(context) {
+    var alt = self.widget.alt
+    var header = Row([
+      Switch(alt, { on_changed: @(value) {
+        self.widget.changed.set(value)
+      } }),
+      Text('Second set of options'),
+      Spacer(),
+      Text(self.last, {
+        style: TextStyle({ color: Color.system('secondary_label') }),
+        max_lines: 1,
+        overflow: TextOverflow.ELLIPSIS,
+      }),
+    ], { spacing: 8 })
+
+    return Column([
+      Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 8 }), header),
+      Separator(),
+      Expanded(ScrollView(Padding(EdgeInsets.all(12), Column([
+        self.text(alt), self.buttons(alt), self.choices(alt),
+        self.values(alt), self.pickers(alt), self.indicators(alt),
+        self.media(alt), self.inputs(alt), self.containers(alt),
+        self.table(alt), self.drawing(alt), self.layout(alt),
+      ], { spacing: 12, align_items: AlignItems.STRETCH })))),
+    ], { align_items: AlignItems.STRETCH })
+  }
+
+  text(alt: bool) {
+    return Column([
+      Text(
+        alt
+          ? 'Text in its second set, long enough to be cut short at the end of the line'
+          : 'Text',
+        {
+          style: TextStyle({
+            size: alt ? 18 : 13,
+            weight: alt ? 700 : 400,
+            italic: alt,
+            underline: alt,
+            strikethrough: alt,
+            monospaced_digits: alt,
+            color: alt ? Color.system('accent') : nil,
+          }),
+          align: alt ? TextAlign.CENTER : TextAlign.START,
+          max_lines: alt ? 1 : nil,
+          overflow: alt ? TextOverflow.ELLIPSIS : TextOverflow.CLIP,
+          selectable: alt,
+          tooltip: alt ? 'The second tooltip' : 'A tooltip',
+          accessibility_label: alt ? 'second text' : 'text',
+          accessibility_identifier: 'gallery text',
+        },
+      ),
+      Text('Design ${alt ? "rounded" : "monospaced, in Helvetica"}', {
+        style: TextStyle({
+          design: alt ? FontDesign.ROUNDED : FontDesign.MONOSPACED,
+          family: alt ? nil : 'Helvetica',
+        }),
+      }),
+    ], { spacing: 4, align_items: AlignItems.STRETCH })
+  }
+
+  buttons(alt: bool) {
+    var buttons = []
+
+    for variant in [
+      ButtonVariant.PUSH, ButtonVariant.FLEXIBLE, ButtonVariant.SQUARE,
+      ButtonVariant.TOOLBAR, ButtonVariant.INLINE, ButtonVariant.BORDERLESS,
+    ] {
+      buttons.append(Button(alt ? '${variant}!' : variant, {
+        variant,
+        on_pressed: self.note('pressed ${variant}'),
+        size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+      }))
+    }
+
+    buttons.append(Button('+', {
+      variant: ButtonVariant.CIRCULAR,
+      on_pressed: self.note('pressed +'),
     }))
+    buttons.append(Button('', {
+      variant: ButtonVariant.HELP,
+      on_pressed: self.note('pressed help'),
+    }))
+
+    for role in [
+      ButtonRole.PRIMARY, ButtonRole.CANCEL, ButtonRole.DESTRUCTIVE,
+    ] {
+      buttons.append(Button(
+        role, { role, on_pressed: self.note('pressed ${role}') },
+      ))
+    }
+
+    buttons.append(Button(alt ? 'Shortcut ⇧⌘G' : 'Shortcut ⌘G', {
+      shortcut: alt ? 'cmd+shift+g' : 'cmd+g',
+      tint: alt ? Color.system('green') : nil,
+      on_pressed: self.note('pressed the shortcut button'),
+    }))
+    buttons.append(Button('Toggle', {
+      selected: self.v.toggle,
+      on_selected_changed: self.keep('toggle'),
+    }))
+    buttons.append(Button(alt ? 'Enabled' : 'Disabled', {
+      enabled: alt,
+      on_pressed: self.note('pressed the enabled button'),
+    }))
+    return Wrap(buttons, { spacing: 6, run_spacing: 6 })
   }
 
-  buttons.append(Button(
-    '+', { variant: ButtonVariant.CIRCULAR, on_pressed: @{} },
-  ))
-  buttons.append(Button('', { variant: ButtonVariant.HELP, on_pressed: @{} }))
-
-  for role in [ButtonRole.PRIMARY, ButtonRole.CANCEL, ButtonRole.DESTRUCTIVE] {
-    buttons.append(Button(role, { role, on_pressed: @{} }))
-  }
-
-  buttons.append(Button('Shortcut', {
-    shortcut: alt ? 'cmd+shift+g' : 'cmd+g',
-    tint: alt ? Color.system('green') : nil,
-    on_pressed: @{},
-  }))
-  buttons.append(Button('Toggle', {
-    selected: alt,
-    on_selected_changed: @(value) {},
-  }))
-  buttons.append(Button('Disabled', { enabled: alt }))
-  return Wrap(buttons, { spacing: 6, run_spacing: 6 })
-}
-
-def _choices(alt: bool) {
-  return Wrap([
-    Checkbox(alt, { label: 'Checkbox', on_changed: @(value) {} }),
-    Checkbox(alt ? nil : true, {
-      label: 'Mixed',
-      tristate: true,
-      on_changed: @(value) {},
-    }),
-    Checkbox(false, { label: 'Disabled' }),
-    RadioGroup(['One', 'Two'], alt ? 'Two' : 'One', {
-      axis: alt ? Axis.HORIZONTAL : Axis.VERTICAL,
-      on_changed: @(value) {},
-    }),
-    Switch(alt, {
-      on_changed: @(value) {},
-      size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-    }),
-    SegmentedControl(
-      ['A', Segment('B', { tooltip: 'The second' }), 'C'], alt ? 2 : 1, {
-        on_changed: @(value) {},
+  choices(alt: bool) {
+    return Wrap([
+      Checkbox(
+        self.v.check, { label: 'Checkbox', on_changed: self.keep('check') },
+      ),
+      Checkbox(self.v.mixed, {
+        label: 'Mixed',
+        tristate: true,
+        on_changed: self.keep('mixed'),
+      }),
+      Checkbox(false, { label: 'Disabled' }),
+      RadioGroup(['One', 'Two'], self.v.radio, {
+        axis: alt ? Axis.HORIZONTAL : Axis.VERTICAL,
+        on_changed: self.keep('radio'),
+      }),
+      Switch(self.v.switch, {
+        on_changed: self.keep('switch'),
         size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-      },
-    ),
-    SegmentedControl(['Back', 'Forward'], nil, {
-      mode: SegmentMode.MOMENTARY,
-      on_pressed: @(index) {},
-    }),
-  ], { spacing: 12, run_spacing: 8 })
-}
+      }),
+      SegmentedControl(
+        ['A', Segment('B', { tooltip: 'The second' }), 'C'], self.v.segment, {
+          on_changed: self.keep('segment'),
+          size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+        },
+      ),
+      SegmentedControl(['Back', 'Forward'], nil, {
+        mode: SegmentMode.MOMENTARY,
+        on_pressed: @(index) {
+          self.set_state(@{
+            self.last = index == 0 ? 'pressed Back' : 'pressed Forward'
+          })
+        },
+      }),
+    ], { spacing: 12, run_spacing: 8 })
+  }
 
-def _values(alt: bool) {
-  return Row([
-    Expanded(Slider(alt ? 0.8 : 0.2, {
-      divisions: alt ? 4 : nil,
-      on_changed: @(value) {},
-      on_change_end: @(value) {},
-    })),
-    Box({ height: 60, child: Slider(alt ? 30 : 70, {
-      min: 0,
-      max: 100,
-      vertical: true,
-      on_changed: @(value) {},
-    }) }),
-    Stepper(alt ? 8 : 3, {
-      min: 0,
-      max: 10,
-      step: alt ? 2 : 1,
-      wraps: alt,
-      on_changed: @(value) {},
-    }),
-    LevelIndicator(alt ? 4 : 2, {
-      style: alt ? LevelStyle.RATING : LevelStyle.CONTINUOUS,
-      warning: 3,
-      critical: 4,
-      on_changed: @(value) {},
-    }),
-  ], { spacing: 12 })
-}
+  values(alt: bool) {
+    return Row([
+      Expanded(Slider(self.v.slider, {
+        divisions: alt ? 4 : nil,
+        on_changed: self.keep('slider'),
+        on_change_end: @(value) {},
+      })),
+      Box({ height: 60, child: Slider(self.v.vslider, {
+        min: 0,
+        max: 100,
+        vertical: true,
+        on_changed: self.keep('vslider'),
+      }) }),
+      Stepper(self.v.stepper, {
+        min: 0,
+        max: 10,
+        step: alt ? 2 : 1,
+        wraps: alt,
+        on_changed: self.keep('stepper'),
+      }),
+      Text(
+        '${self.v.stepper}', { style: TextStyle({ monospaced_digits: true }) },
+      ),
+      LevelIndicator(self.v.level, {
+        style: alt ? LevelStyle.RATING : LevelStyle.CONTINUOUS,
+        warning: 3,
+        critical: 4,
+        on_changed: self.keep('level'),
+      }),
+    ], { spacing: 12 })
+  }
 
-def _pickers(alt: bool) {
-  return Wrap([
-    Dropdown(
+  pickers(alt: bool) {
+    return Wrap([
+      Dropdown(
+        [
+          DropdownItem('red', 'Red'), DropdownItem.separator(),
+          DropdownItem('green', 'Green'),
+          DropdownItem('blue', 'Blue', { enabled: !alt }),
+        ],
+        self.v.colour_name, { on_changed: self.keep('colour_name') },
+      ),
+      DatePicker(self.v.moment, {
+        mode: alt ? DateMode.DATE_TIME : DateMode.DATE,
+        style: alt ? DateStyle.COMPACT : DateStyle.FIELD,
+        on_changed: self.keep('moment'),
+      }),
+      ColorWell(self.v.colour, { on_changed: self.keep('colour') }),
+    ], { spacing: 12, run_spacing: 8 })
+  }
+
+  indicators(alt: bool) {
+    return Column([
+      ProgressBar({ value: alt ? nil : self.v.slider }),
+      ProgressBar({ value: self.v.vslider, min: 0, max: 100 }),
+      Row([
+        Spinner({ animating: !alt, size: alt ? 'small' : 'regular' }),
+        Box({ height: 24, child: Separator({ axis: Axis.VERTICAL }) }),
+        Expanded(Separator()),
+      ], { spacing: 8 }),
+    ], { spacing: 8, align_items: AlignItems.STRETCH })
+  }
+
+  media(alt: bool) {
+    return Row([
+      Image(ImageSource.symbol('star.fill', { size: alt ? 20 : 14 }), {
+        width: 28,
+        height: 28,
+        fit: alt ? ImageFit.FILL : ImageFit.CONTAIN,
+        tint: alt ? Color.system('orange') : nil,
+      }),
+      Icon(alt ? 'trash' : 'gearshape', {
+        size: alt ? 20 : 13,
+        weight: alt ? 700 : 400,
+        color: alt ? Color.system('red') : nil,
+      }),
+      GroupBox(Text(alt ? 'Inside, second set' : 'Inside'), {
+        title: alt ? 'Group, second set' : 'Group',
+      }),
+      VisualEffect(Padding(EdgeInsets.all(8), Text('Material')), {
+        material: alt ? Material.HUD : Material.SIDEBAR,
+        blending: alt ? 'within' : 'behind',
+      }),
+    ], { spacing: 12 })
+  }
+
+  inputs(alt: bool) {
+    return Column([
+      TextField({
+        text: self.v.field,
+        placeholder: 'A field',
+        obscure: alt,
+        bezel: alt ? FieldBezel.SQUARE : FieldBezel.ROUNDED,
+        align: alt ? 'end' : 'start',
+        style: TextStyle({ size: alt ? 15 : 13 }),
+        on_changed: self.keep('field'),
+        on_submitted: @(text) {
+          self.set_state(@{
+            self.last = 'submitted ${text}'
+          })
+        },
+      }),
+      TextField({ text: 'Read only', read_only: true }),
+      Box({ height: 60, child: TextArea({
+        text: self.v.area,
+        wrap: !alt,
+        bordered: !alt,
+        on_changed: self.keep('area'),
+      }) }),
+      Row([
+        Expanded(SearchField({
+          text: self.v.search,
+          placeholder: 'Search',
+          size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+          on_changed: self.keep('search'),
+        })),
+        Expanded(ComboBox(alt ? ['x', 'y'] : ['a', 'b', 'c'], {
+          text: self.v.combo,
+          completes: alt,
+          visible_items: alt ? 3 : 8,
+          on_changed: self.keep('combo'),
+          on_selected: @(index, text) {},
+        })),
+      ], { spacing: 8 }),
+    ], { spacing: 8, align_items: AlignItems.STRETCH })
+  }
+
+  containers(alt: bool) {
+    return Box({ height: 130, child: Row([
+      Expanded(ScrollView(Box({
+        width: 400,
+        height: 300,
+        color: Color.system('control_background'),
+        alignment: Alignment.TOP_LEFT,
+        padding: EdgeInsets.all(8),
+        child: Text('Scroll me'),
+      }), { axis: alt ? 'both' : 'vertical', bordered: alt })),
+      Expanded(ListView.builder(
+        alt ? 50 : 1000, @(context, index) => Text('Row ${index}'),
+        { item_extent: 20 },
+      )),
+      Expanded(TabView([
+        Tab('One', Center(Text('First'))), Tab('Two', Center(Text('Second'))),
+      ], self.v.tab, { on_changed: self.keep('tab') })),
+      Expanded(SplitView([Center(Text('Left')), Center(Text('Right'))], {
+        axis: alt ? Axis.VERTICAL : Axis.HORIZONTAL,
+        divider: alt ? SplitDivider.THICK : SplitDivider.THIN,
+        initial: [80],
+        on_resize: @(sizes) {},
+      })),
+    ], { spacing: 8 }) })
+  }
+
+  table(alt: bool) {
+    var rows = alt ? _ROWS[0, 2] : _ROWS.clone()
+    var ascending = self.v.ascending
+    rows.sort(@(a, b) => ascending ? a[0].compare(b[0]) : b[0].compare(a[0]))
+
+    return Box({ height: 120, child: DataTable(
       [
-        DropdownItem('red', 'Red'), DropdownItem.separator(),
-        DropdownItem('green', 'Green'),
-        DropdownItem('blue', 'Blue', { enabled: !alt }),
+        DataColumn('name', 'Name', { width: 140, sortable: true }),
+        DataColumn('age', 'Age', { width: 50, align: TextAlign.END }),
+        DataColumn('role', 'Role', { min_width: 60 }),
       ],
-      alt ? 'green' : 'red', { on_changed: @(value) {} },
-    ),
-    DatePicker(date.from_time(alt ? 1800000000 : 1700000000), {
-      mode: alt ? DateMode.DATE_TIME : DateMode.DATE,
-      style: alt ? DateStyle.COMPACT : DateStyle.FIELD,
-      on_changed: @(value) {},
-    }),
-    ColorWell(
-      alt ? Color.hex('#0a84ff') : Color.RED, { on_changed: @(value) {} },
-    ),
-  ], { spacing: 12, run_spacing: 8 })
-}
+      rows.length(), @(row, column) {
+        var person = rows[row]
+        return column == 'name'
+          ? person[0]
+          : column == 'age' ? person[1] : person[2]
+      }, {
+        selection: alt ? Selection.MULTIPLE : Selection.SINGLE,
+        selected: self.v.rows,
+        sort: ['name', ascending],
+        alternating: !alt,
+        grid: alt,
+        header: !alt,
+        on_selection_changed: self.keep('rows'),
+        on_activate: @(row) {
+          self.set_state(@{
+            self.last = 'opened ${rows[row][0]}'
+          })
+        },
+        on_sort: @(column, up) {
+          self.set_state(@{
+            self.v['ascending'] = up
+            self.last = up ? 'sorted A to Z' : 'sorted Z to A'
+          })
+        },
+      },
+    ) })
+  }
 
-def _indicators(alt: bool) {
-  return Column([
-    ProgressBar({ value: alt ? nil : 0.4 }),
-    ProgressBar({ value: alt ? 80 : 20, min: 0, max: 100 }),
-    Row([
-      Spinner({ animating: !alt, size: alt ? 'small' : 'regular' }),
-      Box({ height: 24, child: Separator({ axis: Axis.VERTICAL }) }),
-      Expanded(Separator()),
-    ], { spacing: 8 }),
-  ], { spacing: 8, align_items: AlignItems.STRETCH })
-}
+  drawing(alt: bool) {
+    var taps = self.v.taps
 
-def _media(alt: bool) {
-  return Row([
-    Image(ImageSource.symbol('star.fill', { size: alt ? 20 : 14 }), {
-      width: 28,
-      height: 28,
-      fit: alt ? ImageFit.FILL : ImageFit.CONTAIN,
-      tint: alt ? Color.system('orange') : nil,
-    }),
-    Icon(alt ? 'trash' : 'gearshape', {
-      size: alt ? 20 : 13,
-      weight: alt ? 700 : 400,
-      color: alt ? Color.system('red') : nil,
-    }),
-    GroupBox(Text(alt ? 'Inside, changed' : 'Inside'), {
-      title: alt ? 'Group, changed' : 'Group',
-    }),
-    VisualEffect(Padding(EdgeInsets.all(8), Text('Material')), {
-      material: alt ? Material.HUD : Material.SIDEBAR,
-      blending: alt ? 'within' : 'behind',
-    }),
-  ], { spacing: 12 })
-}
+    return Row([
+      Expanded(PointerArea(Canvas(@(painter, size) {
+        _paint(painter, size, alt)
 
-def _inputs(alt: bool) {
-  return Column([
-    TextField({
-      text: alt ? 'changed text' : 'text',
-      placeholder: 'A field',
-      obscure: alt,
-      bezel: alt ? FieldBezel.SQUARE : FieldBezel.ROUNDED,
-      align: alt ? 'end' : 'start',
-      style: TextStyle({ size: alt ? 15 : 13 }),
-      on_changed: @(text) {},
-      on_submitted: @(text) {},
-    }),
-    TextField({ text: 'read only', read_only: true }),
-    Box({ height: 60, child: TextArea({
-      text: alt ? 'two\nlines' : 'one line',
-      wrap: !alt,
-      bordered: !alt,
-      on_changed: @(text) {},
-    }) }),
-    Row([
-      Expanded(SearchField({
-        text: alt ? 'query' : '',
-        placeholder: 'Search',
-        size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-        on_changed: @(text) {},
+        for point in taps {
+          painter.fill_oval(
+            Rect(point.x - 4, point.y - 4, 8, 8), Color.system('accent'),
+          )
+        }
+      }, { repaint: [alt, taps.length()], height: 110 }), {
+        cursor: alt ? Cursor.CROSSHAIR : Cursor.POINTING_HAND,
+        on_tap: @(event) {
+          self.set_state(@{
+            self.v.taps.append(event.position)
+            self.last = 'tapped the canvas'
+          })
+        },
+        on_double_tap: @(event) {
+          self.set_state(@{
+            self.v['taps'] = []
+            self.last = 'cleared the canvas'
+          })
+        },
+        on_hover: @(event) {},
+        on_scroll: @(event) {},
+        on_drag: @(event) {},
+        menu: [MenuItem('Clear', { on_selected: @{
+          self.set_state(@{
+            self.v['taps'] = []
+            self.last = 'cleared the canvas'
+          })
+        } })],
       })),
-      Expanded(ComboBox(alt ? ['x', 'y'] : ['a', 'b', 'c'], {
-        text: alt ? 'x' : 'a',
-        completes: alt,
-        visible_items: alt ? 3 : 8,
-        on_changed: @(text) {},
-        on_selected: @(index, text) {},
-      })),
-    ], { spacing: 8 }),
-  ], { spacing: 8, align_items: AlignItems.STRETCH })
+      ContextMenu(Box({
+        width: 80,
+        height: 40,
+        color: alt ? Color.system('green') : Color.system('blue'),
+        border: Border.all(alt ? 2 : 1, Color.BLACK),
+        radius: alt ? 10 : 2,
+        shadow: alt ? Shadow({ blur: 6, y: 3 }) : nil,
+        opacity: alt ? 0.6 : 1,
+        clip: alt,
+        alignment: Alignment.CENTER,
+        child: Text('Box'),
+      }), [MenuItem(alt ? 'Second item' : 'Item', {
+        on_selected: self.note('chose the box menu item'),
+      })]),
+    ], { spacing: 8 })
+  }
+
+  layout(alt: bool) {
+    return Table([
+      [
+        Text('Name'),
+        TextField({ text: self.v.name, on_changed: self.keep('name') }),
+      ],
+      [Text('Visible'), Visibility(Text('Now you see it'), {
+        visible: !alt,
+        keep_state: true,
+      })],
+    ], {
+      columns: [ColumnWidth.fit(), ColumnWidth.flex()],
+      align_items: AlignItems.BASELINE,
+      column_spacing: 8,
+      row_spacing: 6,
+    })
+  }
 }
 
-def _containers(alt: bool) {
-  return Box({ height: 130, child: Row([
-    Expanded(ScrollView(Box({
-      width: 400,
-      height: 300,
-      color: Color.system('control_background'),
-    }), { axis: alt ? 'both' : 'vertical', bordered: alt })),
-    Expanded(ListView.builder(
-      alt ? 50 : 1000, @(context, index) => Text('Row ${index}'),
-      { item_extent: 20 },
-    )),
-    Expanded(TabView([
-      Tab('One', Center(Text('First'))), Tab('Two', Center(Text('Second'))),
-    ], alt ? 1 : 0, { on_changed: @(index) {} })),
-    Expanded(SplitView([Center(Text('Left')), Center(Text('Right'))], {
-      axis: alt ? Axis.VERTICAL : Axis.HORIZONTAL,
-      divider: alt ? SplitDivider.THICK : SplitDivider.THIN,
-      initial: [80],
-      on_resize: @(sizes) {},
-    })),
-  ], { spacing: 8 }) })
-}
+# A value as the status line shows it.
+def _shown(value) {
+  if value == nil
+    or is_string(value)
+    or is_number(value)
+    or is_bool(value)
+    or is_list(value) {
+    return '${value}'
+  }
 
-def _table(alt: bool) {
-  return Box({ height: 120, child: DataTable(
-    [
-      DataColumn('name', 'Name', { width: 140, sortable: true }),
-      DataColumn('age', 'Age', { width: 50, align: TextAlign.END }),
-      DataColumn('role', 'Role', { min_width: 60 }),
-    ],
-    alt ? 2 : 3, @(row, column) {
-      var person = _ROWS[row]
-      return column == 'name'
-        ? person[0]
-        : column == 'age' ? person[1] : person[2]
-    }, {
-      selection: alt ? Selection.MULTIPLE : Selection.SINGLE,
-      selected: alt ? [0, 1] : [1],
-      sort: ['name', !alt],
-      alternating: !alt,
-      grid: alt,
-      header: !alt,
-      on_selection_changed: @(rows) {},
-      on_activate: @(row) {},
-      on_sort: @(column, ascending) {},
-    },
-  ) })
-}
-
-def _drawing(alt: bool) {
-  return Row([
-    Expanded(PointerArea(Canvas(@(painter, size) {
-      _paint(painter, size, alt)
-    }, { repaint: alt, height: 110 }), {
-      cursor: alt ? Cursor.CROSSHAIR : Cursor.POINTING_HAND,
-      on_tap: @(event) {},
-      on_hover: @(event) {},
-      on_scroll: @(event) {},
-      on_drag: @(event) {},
-      menu: [MenuItem('Copy', { on_selected: @{} })],
-    })),
-    ContextMenu(Box({
-      width: 80,
-      height: 40,
-      color: alt ? Color.system('green') : Color.system('blue'),
-      border: Border.all(alt ? 2 : 1, Color.BLACK),
-      radius: alt ? 10 : 2,
-      shadow: alt ? Shadow({ blur: 6, y: 3 }) : nil,
-      opacity: alt ? 0.6 : 1,
-      clip: alt,
-      alignment: Alignment.CENTER,
-      child: Text('Box'),
-    }), [MenuItem(alt ? 'Changed' : 'Item', { on_selected: @{} })]),
-  ], { spacing: 8 })
+  return instance_of(value, Color) ? value.to_hex() : 'a new ${typeof(value)}'
 }
 
 # Draws with every method a painter has.
@@ -404,22 +639,9 @@ def _paint(painter, size, alt: bool) {
   painter.stroke_path(path, line)
   var style = TextStyle({ size: alt ? 14 : 11 })
   var measured = painter.measure_text('zug', style)
-  painter.text('zug ${measured.width.round()}', Point(0, 72), style)
-  painter.image(ImageSource.symbol('star.fill'), Rect(80, 70, 16, 16))
+  painter.text(
+    'zug ${measured.width.round()}, tap to draw', Point(0, 72), style,
+  )
+  painter.image(ImageSource.symbol('star.fill'), Rect(150, 70, 16, 16))
   painter.restore()
-}
-
-def _layout(alt: bool) {
-  return Table([
-    [Text('Name'), TextField({ text: 'Ada', on_changed: @(text) {} })],
-    [Text('Visible'), Visibility(Text('Now you see it'), {
-      visible: !alt,
-      keep_state: true,
-    })],
-  ], {
-    columns: [ColumnWidth.fit(), ColumnWidth.flex()],
-    align_items: AlignItems.BASELINE,
-    column_spacing: 8,
-    row_spacing: 6,
-  })
 }

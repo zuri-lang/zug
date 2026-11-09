@@ -1,31 +1,25 @@
 /**
- * Checks this platform's backend against zug's backend contract. While it
- * runs, a window shows every widget zug has, first with one set of
- * options, then with nearly all of them changed, then back again, and
- * each check prints as it finishes.
+ * The gallery that zug's conformance check builds: every widget zug has,
+ * in one window, as an application you can use. Every control keeps what
+ * you do to it, and the line at the top right says what you last did.
+ *
+ * The switch at the top, or Gallery › Second Set in the menu bar, swaps
+ * every widget to its second set of options, which is how the check
+ * changes nearly every prop of every native view. The second set also
+ * opens a second window, and going back puts the first set's values back.
  *
  *     zuri run examples/conformance.zu
  *
+ * `zuri run tools/check_backend.zu` runs the checks themselves against
+ * the gallery, and `check_backend()` in `zug.testing` does so from code.
+ *
  * An application outside this repository writes `import zug { * }` and
- * `import zug.testing { check_backend }`. `tools/check_backend.zu` does the
- * same from the command line, for any backend.
+ * `import zug.testing { gallery_app }`.
  */
 
-import ..app { create_backend }
-import ..app.testing { check_backend }
-
-def symbol(outcome: string) {
-  return outcome == 'passed' ? '✓' : outcome == 'failed' ? '✗' : '-'
-}
+import ..app { * }
+import ..app.testing { gallery_app }
 
 if __root__ == __file__ {
-  var backend = create_backend(nil)
-  echo 'Checking the ${backend.name()} backend'
-
-  var report = check_backend(backend, { on_result: @(result) {
-    var line = '  ${symbol(result.outcome)} ${result.name}'
-    echo result.detail == nil ? line : '${line}: ${result.detail}'
-  } })
-
-  echo report.summary()
+  run_app(gallery_app(ObservableValue(false)))
 }

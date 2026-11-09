@@ -110,9 +110,11 @@ for every event, its name and the prop it changes, if any.
    timers and frames, and then builds a gallery of every widget, changes
    nearly every prop of it, changes it back and tears it down, listing
    whatever didn't pass. `--load` imports the file that registers your
-   backend first. `check_backend()` in `zug.testing` does the same from a
-   test, and `examples/conformance.zu` shows it on the platform you're
-   on.
+   backend first, and `check_backend()` in `zug.testing` does the same
+   from a test. To look at the gallery yourself, run
+   `examples/conformance.zu`, or `gallery_app()` from `zug.testing` on
+   your backend: every control works, and a switch at the top swaps
+   every widget to its second set of options.
 6. Once it can run without a display, run zug's own tests on it with
    `ZUG_BACKEND=gtk zuri test`, and write tests of your own that check
    its native views directly, the way `tests/macos.test.zu` does for
