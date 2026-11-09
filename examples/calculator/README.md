@@ -19,8 +19,9 @@ $ open dist/calculator.app
 What it does:
 
 - **Keys** with the usual precedence (`2 + 3 × 4 =` is 14), parentheses,
-  powers, `%` as a pocket calculator takes it, a sign key, `=` again to
-  repeat the last operation, and memory keys.
+  powers, `%` as a pocket calculator takes it, a sign key, ⌫ to delete
+  the last digit, `=` again to repeat the last operation, and memory
+  keys.
 - **A scientific keypad**: powers and roots, trigonometry in degrees or
   radians, logarithms, factorials and constants.
 - **Typed expressions**: the box above the display calculates whatever

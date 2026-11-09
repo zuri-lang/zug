@@ -15,12 +15,13 @@ import .settings { load_state, save_state, storage_dir }
 var _BASIC_KEYS = [
   ['MC', 'mc', 'memory'], ['M+', 'm+', 'memory'], ['M−', 'm-', 'memory'],
   ['MR', 'mr', 'memory'], ['AC', 'clear', 'function'],
-  ['±', 'negate', 'function'], ['%', '%', 'function'], ['÷', '/', 'operator'],
-  ['7', '7', 'digit'], ['8', '8', 'digit'], ['9', '9', 'digit'],
-  ['×', '*', 'operator'], ['4', '4', 'digit'], ['5', '5', 'digit'],
-  ['6', '6', 'digit'], ['−', '-', 'operator'], ['1', '1', 'digit'],
-  ['2', '2', 'digit'], ['3', '3', 'digit'], ['+', '+', 'operator'],
-  ['0', '0', 'digit'], ['.', '.', 'digit'], ['=', '=', 'operator'],
+  ['⌫', 'backspace', 'function'], ['%', '%', 'function'],
+  ['÷', '/', 'operator'], ['7', '7', 'digit'], ['8', '8', 'digit'],
+  ['9', '9', 'digit'], ['×', '*', 'operator'], ['4', '4', 'digit'],
+  ['5', '5', 'digit'], ['6', '6', 'digit'], ['−', '-', 'operator'],
+  ['1', '1', 'digit'], ['2', '2', 'digit'], ['3', '3', 'digit'],
+  ['+', '+', 'operator'], ['±', 'negate', 'function'], ['0', '0', 'digit'],
+  ['.', '.', 'digit'], ['=', '=', 'operator'],
 ]
 
 var _SCIENTIFIC_KEYS = [
@@ -29,7 +30,6 @@ var _SCIENTIFIC_KEYS = [
   ['π', 'pi'], ['sin', 'sin'], ['cos', 'cos'], ['tan', 'tan'], ['ln', 'ln'],
   ['log', 'log'], ['sin⁻¹', 'asin'], ['cos⁻¹', 'acos'], ['tan⁻¹', 'atan'],
   ['eˣ', 'exp'], ['10ˣ', 'pow10'], ['e', 'e'], ['Rand', 'rand'],
-  ['⌫', 'backspace'],
 ]
 
 # Keys typed on the keyboard, by the character they type, to the engine
@@ -461,9 +461,6 @@ class CalculatorPage < StatelessWidget {
     var keys = _BASIC_KEYS.map(
       @(spec) => self._key(context, spec[0], spec[1], spec[2]),
     )
-
-    # The 0 key spans two columns.
-    keys[20] = GridCell(keys[20], { column_span: 2 })
     return Box({
       width: 240,
       child: Grid(keys, { columns: 4, spacing: 6, row_height: _KEY_HEIGHT }),

@@ -45,6 +45,12 @@ describe('the calculator window', @{
     expect(t.one('expression').text()).to_be('2 + 3 × 4 =')
   })
 
+  it('deletes the last digit typed with its ⌫ key', @{
+    tap_keys(t, ['1', '2', '3', 'backspace'])
+    expect(display(t)).to_be('12')
+    expect(t.one('key backspace').text()).to_be('⌫')
+  })
+
   it('labels its clear key by what it will clear', @{
     tap_keys(t, ['5'])
     expect(t.one('key clear').text()).to_be('C')
