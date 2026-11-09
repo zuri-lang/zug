@@ -52,6 +52,7 @@ var _arc = typed(
 )
 var _dash = typed(ffi.void, [ffi.pointer(ffi.double), ffi.long, ffi.double])
 var _draw_at = typed(ffi.void, [CGPoint])
+var _draw_in = typed(ffi.void, [CGRect, ffi.ulong, ffi.ptr])
 var _draw_image = typed(
   ffi.void, [CGRect, CGRect, ffi.ulong, ffi.double, ffi.bool, ffi.ptr],
 )
@@ -331,13 +332,28 @@ class MacPainter < Painter {
     return attributed_text(text, style == nil ? {} : style.to_data())
   }
 
-  text(text: string, at: Point, style) {
+  text(text: string, at: Point, style, max_width: ?number) {
     var string = self._text(text, style)
-    _draw_at(string, sel('drawAtPoint:'), { x: at.x, y: at.y })
+
+    if max_width == nil {
+      _draw_at(string, sel('drawAtPoint:'), { x: at.x, y: at.y })
+    } else {
+      _draw_in(
+        string, sel('drawWithRect:options:context:'),
+        rect(at.x, at.y, max_width, 10000000), _MEASURE_OPTIONS, nil,
+      )
+    }
+
     release(string)
   }
 
-  measure_text(text: string, style) {
+  measure_text(text: string, style, max_width: ?number) {
+    if max_width != nil {
+      return measure_attributed(
+        text, style == nil ? {} : style.to_data(), max_width,
+      )
+    }
+
     var string = self._text(text, style)
     var size = send_size(string, 'size')
     release(string)

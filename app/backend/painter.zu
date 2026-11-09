@@ -152,24 +152,28 @@ class Painter {
   }
 
   /**
-   * Draws `text` with its top left at `at`.
+   * Draws `text` with its top left at `at`. With `max_width`, the text
+   * wraps at that width, line after line downwards.
    *
    * @param string text
    * @param Point at
    * @param ?TextStyle style
+   * @param ?number max_width
    */
-  text(text: string, at: Point, style) {
+  text(text: string, at: Point, style, max_width: ?number) {
     raise NotImplementedError('text')
   }
 
   /**
-   * The size `text` takes in `style`.
+   * The size `text` takes in `style`, wrapped at `max_width` when it is
+   * given, as `text()` draws it.
    *
    * @param string text
    * @param ?TextStyle style
+   * @param ?number max_width
    * @returns Size
    */
-  measure_text(text: string, style) {
+  measure_text(text: string, style, max_width: ?number) {
     raise NotImplementedError('measure_text')
   }
 

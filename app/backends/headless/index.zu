@@ -832,13 +832,15 @@ class RecordingPainter < Painter {
     self.calls.append(['stroke_path', path, paint])
   }
 
-  text(text: string, at: Point, style) {
-    self.calls.append(['text', text, at])
+  text(text: string, at: Point, style, max_width: ?number) {
+    self.calls.append(
+      max_width == nil ? ['text', text, at] : ['text', text, at, max_width],
+    )
   }
 
-  measure_text(text: string, style) {
+  measure_text(text: string, style, max_width: ?number) {
     return measure_text_rule(
-      text, style == nil ? {} : style.to_data(), nil, nil,
+      text, style == nil ? {} : style.to_data(), max_width, nil,
     )
   }
 

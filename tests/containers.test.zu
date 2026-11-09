@@ -181,6 +181,21 @@ describe('Canvas', @{
     t.dispose()
   })
 
+  it('wraps text at a width, and measures it wrapped', @{
+    var measured = {}
+    var long = 'A line long enough to wrap twice in a narrow column'
+    var t = WidgetTester().pump_widget(Canvas(@(painter, size) {
+      measured['one_line'] = painter.measure_text(long, nil)
+      measured['wrapped'] = painter.measure_text(long, nil, 100)
+      painter.text(long, Point(0, 0), nil, 100)
+    }, { width: 200, height: 100 }))
+    var calls = one_of(t, 'canvas').paint()
+    expect(calls[0]).to_equal(['text', long, Point(0, 0), 100])
+    expect(measured.wrapped.width <= 100).to_be_true()
+    expect(measured.wrapped.height > measured.one_line.height).to_be_true()
+    t.dispose()
+  })
+
   it('asks to repaint when its repaint value changes', @{
     var value = ObservableValue(1)
     var t = WidgetTester().pump_widget(Observer(

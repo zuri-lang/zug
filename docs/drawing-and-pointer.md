@@ -53,14 +53,15 @@ drawn again after every build that reaches it.
 | `fill_oval(rect, color)`, `stroke_oval(rect, paint)` | ellipses filling `rect` |
 | `line(from, to, paint)` | a line between two `Point`s |
 | `fill_path(path, color)`, `stroke_path(path, paint)` | any shape |
-| `text(text, at, style)` | text with its top left at `at` |
+| `text(text, at, style, max_width)` | text with its top left at `at`, wrapped at `max_width` when you give one |
 | `image(source, rect)` | an `ImageSource` scaled into `rect` |
 
-`measure_text(text, style)` returns the `Size` text would take, and
-`size()` the canvas's size. `translate(dx, dy)`, `scale(sx, sy)` and
-`rotate(radians)` move what follows, `clip_rect(rect)` limits it to a
-rectangle, and `save()` and `restore()` bracket those changes so they
-don't leak into the rest of the drawing.
+`measure_text(text, style, max_width)` returns the `Size` text would
+take, wrapped the same way, which is how you work out where the next
+paragraph goes. `size()` is the canvas's size. `translate(dx, dy)`,
+`scale(sx, sy)` and `rotate(radians)` move what follows,
+`clip_rect(rect)` limits it to a rectangle, and `save()` and `restore()`
+bracket those changes so they don't leak into the rest of the drawing.
 
 A `Paint` says how lines are stroked: `color`, `width` (1), `cap`
 (`LineCap.BUTT`, `ROUND` or `SQUARE`), `join` (`LineJoin.MITER`, `ROUND`
