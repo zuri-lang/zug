@@ -145,7 +145,7 @@ class RenameState < State {
 
   build(context) {
     var close = self.widget.close
-    return Padding(EdgeInsets.all(20), Column([
+    return Box({ width: 320, padding: EdgeInsets.all(20), child: Column([
       Text('Rename'),
       TextField({ controller: self.field, autofocus: true }),
       Row([
@@ -157,7 +157,7 @@ class RenameState < State {
           close(self.field.text())
         } }),
       ], { spacing: 8 }),
-    ], { spacing: 12, align_items: AlignItems.STRETCH }))
+    ], { spacing: 12, align_items: AlignItems.STRETCH }) })
   }
 }
 ```
@@ -165,9 +165,12 @@ class RenameState < State {
 The dialog is a real window of your application, so its widgets keep
 their state while it's open, see your `Style`, and handle keys the usual
 way. Return presses the `PRIMARY` button and Escape the `CANCEL` one,
-which is what people expect of a dialog. It takes the size of its
-content unless you pass `size`, and `title` is used on platforms that
-give dialogs a title bar.
+which is what people expect of a dialog.
+
+A dialog takes the size of its content unless you pass `size`. Content
+that stretches to fill the width, like `RenameDialog`'s column, needs a
+width to fill, so give it one with a `Box`. `title` is used on
+platforms that give dialogs a title bar.
 
 With `context` left `nil`, the dialog goes on the window that had focus
 last. If that window closes while the dialog is open, the dialog closes

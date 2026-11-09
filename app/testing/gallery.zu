@@ -202,7 +202,8 @@ class GalleryState < State {
       Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 8 }), header),
       Separator(),
       Expanded(ScrollView(Padding(EdgeInsets.all(12), Column([
-        self.text(alt), self.buttons(alt), self.choices(alt),
+        self.text(alt), self.buttons(alt), self.dialogs(context, alt),
+        self.choices(alt),
         self.values(alt), self.pickers(alt), self.indicators(alt),
         self.media(alt), self.inputs(alt), self.containers(alt),
         self.table(alt), self.drawing(alt), self.layout(alt),
@@ -289,6 +290,83 @@ class GalleryState < State {
       on_pressed: self.note('pressed the enabled button'),
     }))
     return Wrap(buttons, { spacing: 6, run_spacing: 6 })
+  }
+
+  # A handler for a promise, saying what it resolved with.
+  answered(what: string) {
+    return @(value) {
+      if self.mounted() {
+        self.set_state(@{
+          self.last = '${what}: ${_shown(value)}'
+        })
+      }
+    }
+  }
+
+  dialogs(context, alt: bool) {
+    return Wrap([
+      Button('Alert…', { on_pressed: @{
+        show_alert(context, {
+          title: alt ? 'Delete the second set?' : 'Delete the first set?',
+          message: 'This only shows an alert.',
+          style: alt ? AlertStyle.CRITICAL : AlertStyle.WARNING,
+          buttons: ['Delete', 'Cancel'],
+          suppression: alt ? 'Do not ask again' : nil,
+        }).then(self.answered('alert'))
+      } }),
+      Button('Open…', { on_pressed: @{
+        pick_files(context, {
+          multiple: alt,
+          directories: alt,
+        }).then(self.answered('opened'))
+      } }),
+      Button('Save…', { on_pressed: @{
+        save_file(context, {
+          name: alt ? 'second.txt' : 'first.txt',
+        }).then(self.answered('saved'))
+      } }),
+      Button('Font…', { on_pressed: @{
+        pick_font(context, {
+          style: TextStyle({ size: alt ? 18 : 13 }),
+          on_changed: self.answered('font'),
+        }).then(self.answered('font chosen'))
+      } }),
+      Button('Colour…', { on_pressed: @{
+        pick_color(context, {
+          color: self.v.colour,
+          alpha: alt,
+          on_changed: self.answered('colour'),
+        }).then(self.answered('colour chosen'))
+      } }),
+      Button('Sheet…', { on_pressed: @{
+        show_dialog(
+          context,
+          @(close) => Box({
+            width: 300,
+            padding: EdgeInsets.all(20),
+            child: Column([
+              Text(alt ? 'A sheet from the second set' : 'A sheet'),
+              Row([
+                Spacer(),
+                Button('Cancel', {
+                  role: ButtonRole.CANCEL,
+                  on_pressed: @{
+                    close('cancelled')
+                  },
+                }),
+                Button('OK', {
+                  role: ButtonRole.PRIMARY,
+                  on_pressed: @{
+                    close('confirmed')
+                  },
+                }),
+              ], { spacing: 8 }),
+            ], { spacing: 12, align_items: AlignItems.STRETCH }),
+          }),
+          { title: 'Sheet' },
+        ).then(self.answered('sheet'))
+      } }),
+    ], { spacing: 6, run_spacing: 6 })
   }
 
   choices(alt: bool) {
@@ -597,8 +675,14 @@ def _shown(value) {
     or is_string(value)
     or is_number(value)
     or is_bool(value)
-    or is_list(value) {
+    or is_list(value)
+    or is_dict(value) {
     return '${value}'
+  }
+
+  if instance_of(value, TextStyle) {
+    var family = value.family == nil ? 'the system font' : value.family
+    return '${family} at ${value.size == nil ? 13 : value.size}'
   }
 
   return instance_of(value, Color) ? value.to_hex() : 'a new ${typeof(value)}'

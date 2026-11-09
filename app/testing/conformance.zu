@@ -561,7 +561,10 @@ class _Checker {
     }
 
     if self.backend.has_capability('native_dialogs') {
-      self.skip('shows dialogs', 'they need a person to answer them')
+      self.skip(
+        'shows alerts, file panels and the font and colour choosers',
+        'they need a person to answer them',
+      )
     }
 
     self.skip('opens URLs and beeps', 'they need a person to notice them')
@@ -602,6 +605,22 @@ class _Checker {
       window.clear_focus()
       window.remove_child(box)
       box.destroy()
+    })
+    self.check('shows a window as a sheet on another', @{
+      var props = kind_spec('window').initial_props()
+      props['title'] = 'zug conformance sheet'
+      var sheet = self.backend.create_window(props, @(event, payload) => nil)
+      sheet.set_content_size_to(Size(200, 80))
+      sheet.show_sheet(window)
+      sheet.close()
+      sheet.destroy()
+
+      # Closing a window ends a sheet still on it.
+      var left = self.backend.create_window(props, @(event, payload) => nil)
+      left.show_sheet(window)
+      window.close()
+      left.close()
+      left.destroy()
     })
     self.check('closes a window', @{
       window.close()
