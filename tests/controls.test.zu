@@ -1,6 +1,8 @@
 import test { * }
 
 import date
+import os
+import imagine
 import ..app { * }
 import ..app.testing { WidgetTester }
 
@@ -435,6 +437,52 @@ describe('Image and Icon', @{
       ImageSource.file('/tmp/x.png'), { width: 48, height: 24 },
     )))
     expect(one_of(t, 'image').frame.size()).to_equal(Size(48, 24))
+    t.dispose()
+  })
+
+  it('take the size of the file they show, turned with the image', @{
+    var path = os.join_paths(os.create_temp_dir('zug-image-'), 'wide.png')
+    imagine.create(40, 20, 'red').save(path)
+    var turn = ObservableValue(0)
+    var t = WidgetTester().pump_widget(Observer(
+      turn, @(context) => Center(Image(ImageSource.file(path), {
+        rotation: turn.value(),
+      })),
+    ))
+    expect(one_of(t, 'image').frame.size()).to_equal(Size(40, 20))
+    turn.set(90)
+    t.pump()
+    expect(one_of(t, 'image').frame.size()).to_equal(Size(20, 40))
+    turn.set(180)
+    t.pump()
+    expect(one_of(t, 'image').frame.size()).to_equal(Size(40, 20))
+    t.dispose()
+  })
+
+  it('turn by quarters, either way, and flip', @{
+    var t = WidgetTester().pump_widget(Column([
+      Image(ImageSource.file('/tmp/a.png'), {
+        rotation: -90,
+        flip_horizontal: true,
+        accessibility_identifier: 'a',
+      }),
+      Image(ImageSource.file('/tmp/b.png'), {
+        rotation: 450,
+        flip_vertical: true,
+        accessibility_identifier: 'b',
+      }),
+    ]))
+    var a = t.one('a').props
+    var b = t.one('b').props
+    expect([a.rotation, a.flip_horizontal, a.flip_vertical]).to_equal([
+      270, true, false,
+    ])
+    expect([b.rotation, b.flip_horizontal, b.flip_vertical]).to_equal([
+      90, false, true,
+    ])
+    expect(@{
+      Image(ImageSource.file('/tmp/c.png'), { rotation: 45 })
+    }).to_raise_instance_of(ValueError)
     t.dispose()
   })
 })

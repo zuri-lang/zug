@@ -9,7 +9,8 @@ import ._runtime {
   cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
   send_void_int, send_void_uint, send_void_double, send_void_rect, send_int,
   send_uint, send_double, send_bool, send_size, send_rect, typed, ns_string,
-  retain, release, rect, create_with_frame, CGRect,
+  retain, release, rect, create_with_frame, CGRect, CGSize, send_void_size,
+  from_ns_array,
 }
 import ._classes { register, unregister, shared_target }
 import ._cocoa { ns_color }
@@ -795,6 +796,9 @@ var _SCALING = { scale_down: 0, fill: 1, none: 2, contain: 3 }
 class MacImage < MacView {
   var image
 
+  # The image as loaded, which `image` is, or shows turned and flipped.
+  var original
+
   @new(backend, props: dict, dispatch: function) {
     var view = create_with_frame('NSImageView', nil)
     send_void_bool(view, 'setEditable:', false)
@@ -804,9 +808,13 @@ class MacImage < MacView {
   apply(name: string, value) {
     using name {
       when 'source' {
-        release(self.image)
-        self.image = self._load(value)
-        send_void_id(self.native, 'setImage:', self.image)
+        self._let_go()
+        release(self.original)
+        self.original = self._load(value)
+        self._show()
+      }
+      when 'rotation', 'flip_horizontal', 'flip_vertical' {
+        self._show()
       }
       when 'fit' {
         send_void_uint(self.native, 'setImageScaling:', _SCALING.get(value, 3))
@@ -879,9 +887,109 @@ class MacImage < MacView {
   }
 
   before_destroy() {
-    release(self.image)
+    self._let_go()
+    release(self.original)
+  }
+
+  # Shows the original, turned and flipped as the props say.
+  _show() {
+    self._let_go()
+    var rotation = self.props.get('rotation', 0)
+    var across = self.props.get('flip_horizontal', false) == true
+    var down = self.props.get('flip_vertical', false) == true
+
+    if self.original == nil or (rotation == 0 and !across and !down) {
+      self.image = self.original
+    } else {
+      self.image = self._transformed(rotation, across, down)
+    }
+
+    send_void_id(self.native, 'setImage:', self.image)
+  }
+
+  # Releases the turned copy, if one is shown.
+  _let_go() {
+    if self.image != nil and self.image != self.original {
+      release(self.image)
+    }
+
+    self.image = nil
+  }
+
+  # The original drawn mirrored and then turned clockwise into a bitmap
+  # with as many pixels as the original has, so it stays as sharp.
+  _transformed(rotation: number, across: bool, down: bool) {
+    var original = self.original
+    var size = send_size(original, 'size')
+    var quarter = rotation == 90 or rotation == 270
+    var width = quarter ? size.height : size.width
+    var height = quarter ? size.width : size.height
+
+    # A vector image has no pixels of its own, so it is drawn at twice its
+    # size, as on a Retina display.
+    var scale = 2
+    var reps = from_ns_array(send(original, 'representations'))
+
+    if !reps.is_empty() and size.width > 0 {
+      var pixels = send_int(reps[0], 'pixelsWide')
+
+      if pixels > 0 {
+        scale = pixels / size.width
+      }
+    }
+
+    var rep = _bitmap(
+      send(cls('NSBitmapImageRep'), 'alloc'),
+      sel('initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:'),
+      nil, (width * scale).round().max(1), (height * scale).round().max(1), 8,
+      4, true, false, ffi.open().symbol('NSDeviceRGBColorSpace').read(ffi.ptr),
+      0, 0,
+    )
+    send_void_size(rep, 'setSize:', { width, height })
+
+    var NSGraphicsContext = cls('NSGraphicsContext')
+    send_void(NSGraphicsContext, 'saveGraphicsState')
+    send_void_id(
+      NSGraphicsContext, 'setCurrentContext:',
+      send_id(NSGraphicsContext, 'graphicsContextWithBitmapImageRep:', rep),
+    )
+
+    var turn = send(cls('NSAffineTransform'), 'transform')
+    _two_doubles(turn, sel('translateXBy:yBy:'), width / 2, height / 2)
+
+    # The bitmap is not flipped, so a clockwise turn is a negative one.
+    _one_double(turn, sel('rotateByDegrees:'), -rotation)
+    _two_doubles(turn, sel('scaleXBy:yBy:'), across ? -1 : 1, down ? -1 : 1)
+    _two_doubles(
+      turn, sel('translateXBy:yBy:'), -size.width / 2, -size.height / 2,
+    )
+    send_void(turn, 'concat')
+    _draw_in_rect(
+      original, sel('drawInRect:fromRect:operation:fraction:'),
+      rect(0, 0, size.width, size.height), rect(0, 0, 0, 0), _SOURCE_OVER, 1,
+    )
+    send_void(NSGraphicsContext, 'restoreGraphicsState')
+
+    var image = typed(ffi.ptr, [CGSize])(
+      send(cls('NSImage'), 'alloc'), sel('initWithSize:'), { width, height },
+    )
+    send_void_id(image, 'addRepresentation:', rep)
+    release(rep)
+    send_void_bool(image, 'setTemplate:', send_bool(original, 'isTemplate'))
+    return image
   }
 }
+
+# NSCompositingOperationSourceOver.
+var _SOURCE_OVER = 2
+
+var _two_doubles = typed(ffi.void, [ffi.double, ffi.double])
+var _one_double = typed(ffi.void, [ffi.double])
+var _draw_in_rect = typed(ffi.void, [CGRect, CGRect, ffi.ulong, ffi.double])
+var _bitmap = typed(ffi.ptr, [
+  ffi.ptr, ffi.long, ffi.long, ffi.long, ffi.long, ffi.bool, ffi.bool, ffi.ptr,
+  ffi.long, ffi.long,
+])
 
 def _symbol_weight(css: number) {
   var weights = [

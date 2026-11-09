@@ -7,6 +7,7 @@ import test { * }
 
 import os
 import ffi
+import imagine
 import ..app { * }
 import ..app.testing { check_backend }
 
@@ -582,8 +583,11 @@ suite('the macOS backend', @{
         # while the application is active, which the test application need
         # not be while someone uses the machine. So this clicks the button
         # Return would press.
-        click(button_for_key(_send(sheet, _sel('contentView')), '\r'))
+        var primary = button_for_key(_send(sheet, _sel('contentView')), '\r')
+        seen['return_button'] = primary != nil
+        click(primary)
       },
+      @(runtime) {},
       @(runtime) {
         var main = runtime.windows()[0].view.native
         seen['after_return'] = _send(main, _sel('attachedSheet')) == nil
@@ -608,6 +612,7 @@ suite('the macOS backend', @{
 
     expect(reported).to_be_empty()
     expect(seen.sheet).to_be_true()
+    expect(seen.return_button).to_be_true()
     expect(seen.after_return).to_be_true()
     expect(seen.field_focused).to_be_true()
     expect(seen.after_escape).to_be_true()
@@ -729,6 +734,87 @@ suite('the macOS backend', @{
     expect(reported).to_be_empty()
     expect(sheets).to_equal([true, true])
     expect(results).to_equal([nil, false])
+  })
+
+  it('draws an image turned and flipped', @{
+    var path = os.join_paths(os.create_temp_dir('zug-image-'), 'halves.png')
+
+    # Red on the left half, blue on the right.
+    imagine.create(40, 20, 'blue').fill_rect(0, 0, 20, 20, 'red').save(path)
+
+    var seen = {}
+    var send_rect_arg = _objc.function(
+      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, _Bounds],
+    )
+    var cache = _objc.function(
+      'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, _Bounds, ffi.ptr],
+    )
+    var color_at = _objc.function(
+      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long, ffi.long],
+    )
+    var component = _objc.function(
+      'objc_msgSend', ffi.double, [ffi.ptr, ffi.ptr],
+    )
+
+    # Whether the view shows red or blue at a point, in points from its
+    # top left.
+    var hue_at = @(view, x, y) {
+      var bounds = _bounds(view, _sel('bounds'))
+      var rep = send_rect_arg(
+        view, _sel('bitmapImageRepForCachingDisplayInRect:'), bounds,
+      )
+      cache(view, _sel('cacheDisplayInRect:toBitmapImageRep:'), bounds, rep)
+      var scale = _send_long(rep, _sel('pixelsWide')) / bounds.w
+      var color = color_at(
+        rep, _sel('colorAtX:y:'), (x * scale).floor(), (y * scale).floor(),
+      )
+      return component(color, _sel('redComponent'))
+        > component(color, _sel('blueComponent'))
+        ? 'red'
+        : 'blue'
+    }
+
+    run_steps(App({ windows: [Window('Images', Column([
+      Image(ImageSource.file(path), { accessibility_identifier: 'plain' }),
+      Image(ImageSource.file(path), {
+        flip_horizontal: true,
+        accessibility_identifier: 'across',
+      }),
+      Image(ImageSource.file(path), {
+        rotation: 90,
+        accessibility_identifier: 'turned',
+      }),
+    ], { spacing: 4, align_items: AlignItems.START }), {
+      size: Size(200, 120),
+    })] }), [
+      @(runtime) {
+        var views = {}
+
+        for host in hosts(runtime, 'image') {
+          views[host.props.accessibility_identifier] = host.view.native
+        }
+
+        var turned = _bounds(views.turned, _sel('bounds'))
+        seen['turned_size'] = Size(turned.w, turned.h)
+        seen['plain'] = [
+          hue_at(views.plain, 5, 10), hue_at(views.plain, 35, 10),
+        ]
+        seen['across'] = [
+          hue_at(views.across, 5, 10), hue_at(views.across, 35, 10),
+        ]
+        seen['turned'] = [
+          hue_at(views.turned, 10, 5), hue_at(views.turned, 10, 35),
+        ]
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(seen.turned_size).to_equal(Size(20, 40))
+    expect(seen.plain).to_equal(['red', 'blue'])
+    expect(seen.across).to_equal(['blue', 'red'])
+
+    # A clockwise quarter turn takes the left half to the top.
+    expect(seen.turned).to_equal(['red', 'blue'])
   })
 
   it('keeps the backend contract', @{

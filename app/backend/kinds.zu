@@ -514,6 +514,9 @@ define_kind('image', {
     source: ['dict', nil],
     fit: ['string', 'contain', false],
     tint: [Color, nil, false],
+    rotation: ['number', 0],
+    flip_horizontal: ['bool', false, false],
+    flip_vertical: ['bool', false, false],
   },
 })
 

@@ -179,10 +179,15 @@ var group = GroupBox(Text('Inside'), { title: 'Display' })
 - **`Image(source, options)`** shows an `ImageSource`: `file(path)`,
   `memory(bytes)` or, on macOS, `symbol(name)` for an SF Symbol. `fit` is
   `ImageFit.CONTAIN` (the default), `FILL`, `NONE` or `SCALE_DOWN`, and
-  `tint` colours a template image.
+  `tint` colours a template image. `rotation` turns it clockwise a
+  quarter at a time, as 90, 180 or 270 degrees, or -90 the other way,
+  and its size turns with it. `flip_horizontal` mirrors it left to right
+  and `flip_vertical` top to bottom; flips happen before the turn.
 - **`Icon(name, options)`** is an SF Symbol sized like text, with `size`,
   `weight` and `color`.
 - **`GroupBox(child, { title })`** draws the standard titled box around
   related controls.
 - **`Separator()`** is a thin line, horizontal unless you pass
-  `{ axis: Axis.VERTICAL }`.
+  `{ axis: Axis.VERTICAL }`. In a `Row`, give a vertical one a height,
+  such as `Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) })`,
+  as a row only stretches its children with `AlignItems.STRETCH`.

@@ -130,6 +130,9 @@ class ImageView < HostWidget {
   var source
   var fit = 'contain'
   var tint
+  var rotation = 0
+  var flip_horizontal = false
+  var flip_vertical = false
 
   @new(source, fit: string, tint, common: dict) {
     self.source = source
@@ -143,12 +146,25 @@ class ImageView < HostWidget {
   }
 
   props(context) {
-    return { source: self.source.data, fit: self.fit, tint: self.tint }
+    return {
+      source: self.source.data,
+      fit: self.fit,
+      tint: self.tint,
+      rotation: self.rotation,
+      flip_horizontal: self.flip_horizontal,
+      flip_vertical: self.flip_vertical,
+    }
   }
 }
 
 /**
- * An image. Without a size it takes the image's own size.
+ * An image. Without a size it takes the image's own size, turned when
+ * the image is turned a quarter.
+ *
+ * `rotation` turns the image clockwise, in degrees, by quarter turns:
+ * 90, 180 or 270, or the same less a whole turn, so -90 is 270.
+ * `flip_horizontal` mirrors it left to right and `flip_vertical` top to
+ * bottom. The flips apply to the image before it is turned.
  */
 class Image < StatelessWidget {
   var source
@@ -157,8 +173,9 @@ class Image < StatelessWidget {
   /**
    * @param ImageSource source
    * @param ?dict options: `width`, `height`, `fit` (see `ImageFit`),
-   *    `tint` for a template image, and the options every host widget
-   *    takes.
+   *    `tint` for a template image, `rotation`, `flip_horizontal`,
+   *    `flip_vertical` and the options every host widget takes.
+   * @throws ValueError When the rotation is not a quarter turn
    * @constructor
    */
   @new(source: ImageSource, options: ?dict) {
@@ -169,8 +186,17 @@ class Image < StatelessWidget {
         height: 'number',
         fit: 'string',
         tint: Color,
+        rotation: 'number',
+        flip_horizontal: 'bool',
+        flip_vertical: 'bool',
       }),
     )
+
+    var rotation = o.get('rotation', 0)
+
+    if !is_int(rotation) or rotation % 90 != 0 {
+      raise ValueError('rotation of Image must be a multiple of 90 degrees, got ${rotation}')
+    }
 
     if !_FITS.contains(o.get('fit', 'contain')) {
       raise ValueError("fit of Image must be one of ImageFit's values, got '${o.get('fit')}'")
@@ -186,6 +212,9 @@ class Image < StatelessWidget {
     var view = ImageView(
       self.source, o.get('fit', 'contain'), o.get('tint'), common_props(o),
     )
+    view.rotation = ((o.get('rotation', 0) % 360) + 360) % 360
+    view.flip_horizontal = o.get('flip_horizontal', false)
+    view.flip_vertical = o.get('flip_vertical', false)
 
     if o.get('width') == nil and o.get('height') == nil {
       return view

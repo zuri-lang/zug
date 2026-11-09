@@ -19,6 +19,7 @@ import .. ..foundation {
   Size, Rect, Point, EdgeInsets, Constraints, INFINITY, UnsupportedError,
   BackendError,
 }
+import imagine
 import .. ..painting { PageSetup }
 
 /**
@@ -30,6 +31,32 @@ import .. ..painting { PageSetup }
  * @param ?number max_lines
  * @returns Size
  */
+# The size of the image a source names: a file's own size, read from its
+# header, a symbol's point size, and 32 by 32 for anything else.
+def _image_size(source) {
+  if !is_dict(source) {
+    return Size(32, 32)
+  }
+
+  if source.contains('symbol') {
+    var points = source.get('size', 13)
+    return Size(points, points)
+  }
+
+  var data = source.get('bytes')
+
+  if source.contains('path') {
+    catch {
+      data = file(source.path, 'rb').read()
+    } as error {
+      data = nil
+    }
+  }
+
+  var info = data == nil ? nil : imagine.probe(data)
+  return info == nil ? Size(32, 32) : Size(info.width, info.height)
+}
+
 def measure_text_rule(
   text: string, style: dict, max_width: ?number, max_lines: ?number,
 ) {
@@ -1167,14 +1194,11 @@ class HeadlessBackend < Backend {
     }
 
     if view.kind_name == 'image' {
-      var source = props.get('source')
-
-      if is_dict(source) and source.contains('symbol') {
-        var size = source.get('size', 13)
-        return Size(size, size)
-      }
-
-      return Size(32, 32)
+      var size = _image_size(props.get('source'))
+      var rotation = props.get('rotation', 0)
+      return rotation == 90 or rotation == 270
+        ? Size(size.height, size.width)
+        : size
     }
 
     var fixed = _FIXED_SIZES.get(view.kind_name)
