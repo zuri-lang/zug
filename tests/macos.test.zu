@@ -499,6 +499,73 @@ suite('the macOS backend', @{
     expect(seen.color).to_equal(Color(0, 0, 255))
   })
 
+  it('shows a dialog as a sheet, and closes it from its buttons', @{
+    var seen = {}
+    var results = []
+    var ask = @(context) {
+      show_dialog(context, @(close) => Padding(EdgeInsets.all(20), Column([
+        Text('Rename the file?'),
+        Row([
+          Button('Cancel', {
+            role: ButtonRole.CANCEL,
+            on_pressed: @{
+              close('cancelled')
+            },
+          }),
+          Button('Rename', {
+            role: ButtonRole.PRIMARY,
+            on_pressed: @{
+              close('renamed')
+            },
+          }),
+        ], { spacing: 8 }),
+      ], { spacing: 12 }))).then(@(result) {
+        results.append(result)
+      })
+    }
+
+    run_steps(App({ windows: [Window('Main', Builder(@(context) => Button(
+      'Ask', { on_pressed: @{
+        ask(context)
+      } },
+    )), { size: Size(320, 200) })] }), [
+      @(runtime) {
+        click(hosts(runtime, 'button')[0].view.native)
+      },
+      # A sheet slides in over a few frames.
+      @(runtime) {},
+      @(runtime) {
+        var main = runtime.windows()[0].view.native
+        var sheet = _send(main, _sel('attachedSheet'))
+        seen['sheet'] = sheet != nil
+          and sheet == runtime.windows()[1].view.native
+        send_key(sheet, '\r', 36, true)
+      },
+      @(runtime) {
+        var main = runtime.windows()[0].view.native
+        seen['after_return'] = _send(main, _sel('attachedSheet')) == nil
+        click(hosts(runtime, 'button')[0].view.native)
+      },
+      @(runtime) {
+        var sheet = _send(
+          runtime.windows()[0].view.native, _sel('attachedSheet'),
+        )
+        send_key(sheet, '\u001b', 53, true)
+      },
+      @(runtime) {
+        seen['after_escape'] = _send(
+          runtime.windows()[0].view.native, _sel('attachedSheet'),
+        ) == nil
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(seen.sheet).to_be_true()
+    expect(seen.after_return).to_be_true()
+    expect(seen.after_escape).to_be_true()
+    expect(results).to_equal(['renamed', 'cancelled'])
+  })
+
   it('keeps the backend contract', @{
     var report = check_backend(create_backend('macos'))
     expect(report

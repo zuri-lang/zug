@@ -204,6 +204,14 @@ class MacWindow < WindowHost {
   var focus_clears = 0
 
   /**
+   * The window this one is a sheet on, or `nil`.
+   *
+   * @internal
+   * @type ?MacWindow
+   */
+  var sheet_parent
+
+  /**
    * @param MacBackend backend
    * @param dict props
    * @param function dispatch
@@ -484,6 +492,24 @@ class MacWindow < WindowHost {
     self.clear_focus()
   }
 
+  show_sheet(window) {
+    if self.closed or self.destroyed {
+      return
+    }
+
+    if window == nil or window.closed or window.destroyed {
+      self.show()
+      return
+    }
+
+    self._shown = true
+    self.sheet_parent = window
+    typed(ffi.void, [ffi.ptr, ffi.ptr])(
+      window.native, sel('beginSheet:completionHandler:'), self.native, nil,
+    )
+    self.clear_focus()
+  }
+
   clear_focus() {
     if !self.closed and !self.destroyed {
       self.focus_clears++
@@ -497,6 +523,20 @@ class MacWindow < WindowHost {
     }
 
     self.closed = true
+
+    # A sheet still attached would leave its window waiting for it.
+    var sheet = send(self.native, 'attachedSheet')
+
+    if sheet != nil {
+      send_void_id(self.native, 'endSheet:', sheet)
+    }
+
+    var under = self.sheet_parent
+
+    if under != nil and !under.closed and !under.destroyed {
+      send_void_id(under.native, 'endSheet:', self.native)
+    }
+
     send_void(self.native, 'close')
   }
 

@@ -466,3 +466,71 @@ describe('PromiseBuilder', @{
     t.dispose()
   })
 })
+
+describe('show_dialog', @{
+  it('shows a sheet on the window, and resolves with what close gets', @{
+    var results = []
+    var inside = nil
+    var t = WidgetTester().pump_widget(Builder(@(context) {
+      inside = context
+      return Text('main')
+    }))
+    show_dialog(inside, @(close) => Button('Done', {
+      on_pressed: @{
+        close(42)
+      },
+    }), { title: 'Question' }).then(@(result) {
+      results.append(result)
+    })
+    t.pump()
+    var sheet = t.backend.windows[1]
+    expect(sheet.sheet_of == t.backend.windows[0]).to_be_true()
+    expect(sheet.shown).to_be_true()
+    expect(sheet.props.title).to_be('Question')
+    t.tap('Done')
+    t.pump()
+    expect(results).to_equal([42])
+    expect(sheet.closed).to_be_true()
+    t.dispose()
+  })
+
+  it('goes on the window that had focus last when given no context', @{
+    var t = WidgetTester().pump_widget(Text('main'))
+    show_dialog(nil, @(close) => Text('asking'))
+    t.pump()
+    expect(t.backend.windows[1].sheet_of == t.backend.windows[0]).to_be_true()
+    t.dispose()
+  })
+
+  it('refuses a context above the windows', @{
+    var t = WidgetTester().pump_app(Windowed())
+    expect(@{
+      show_dialog(t.state_of(WindowedState).context(), @(close) => Text('x'))
+    }).to_raise_instance_of(ValueError)
+    t.dispose()
+  })
+
+  it('closes with nil when its window goes away', @{
+    var open = ObservableValue(true)
+    var inside = nil
+    var results = []
+    var t = WidgetTester().pump_app(Observer(open, @(context) => App({
+      windows: open.value()
+        ? [Window('One', Builder(@(inner) {
+          inside = inner
+          return Text('one')
+        }), { key: ValueKey('one') })]
+        : [Window('Two', Text('two'), { key: ValueKey('two') })],
+    })))
+    show_dialog(inside, @(close) => Text('asking')).then(@(result) {
+      results.append(result)
+    })
+    t.pump()
+    open.set(false)
+    t.pump()
+    t.pump()
+    expect(results).to_equal([nil])
+    expect(t.find_text('asking')).to_be_empty()
+    t.dispose()
+  })
+})

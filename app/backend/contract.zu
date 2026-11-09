@@ -293,7 +293,19 @@ class WindowHost < ViewHost {
   }
 
   /**
+   * Shows the window as a dialog attached to `window`, which takes no
+   * input until this one closes: a sheet on macOS, and elsewhere a dialog
+   * centred on `window` that blocks it. `close()` dismisses it.
+   *
+   * @param WindowHost window
+   */
+  show_sheet(window) {
+    raise NotImplementedError('show_sheet')
+  }
+
+  /**
    * Closes the window without asking. The host must not be used again.
+   * Closing a window ends any sheet attached to it.
    */
   close() {
     raise NotImplementedError('close')

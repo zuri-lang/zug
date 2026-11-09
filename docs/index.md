@@ -38,8 +38,8 @@ application uses, roughly in the order you'll need it.
   `App`, opening and closing windows, the menu bar, and keyboard
   shortcuts.
 - [Timers, promises and the system](services.md): promises, timers, the
-  clipboard, alerts, file dialogs, font and colour choosers, and work on
-  other isolates.
+  clipboard, alerts, file dialogs, dialogs of your own, font and colour
+  choosers, and work on other isolates.
 - [When something goes wrong](errors.md): how zug reports mistakes and
   errors, and how to handle them yourself.
 

@@ -148,8 +148,73 @@ class App < StatefulWidget {
  */
 class AppState < State {
 
+  /**
+   * The dialogs `show_dialog()` opened, oldest first.
+   *
+   * @type list
+   */
+  var dialogs = []
+
   init_state() {
     self._configure()
+    var runtime = self.context().runtime()
+
+    if runtime != nil {
+      runtime.app_state = self
+    }
+  }
+
+  dispose() {
+    var runtime = self.context().runtime()
+
+    if runtime != nil and runtime.app_state == self {
+      runtime.app_state = nil
+    }
+  }
+
+  /**
+   * Opens `dialog`, which builds its own window.
+   *
+   * @param any dialog: has `window()`, returning a `Window`.
+   */
+  open_dialog(dialog) {
+    self.set_state(@{
+      self.dialogs.append(dialog)
+    })
+  }
+
+  /**
+   * Closes `dialog`.
+   *
+   * @param any dialog
+   */
+  close_dialog(dialog) {
+    var index = self.dialogs.index_of(dialog)
+
+    if index >= 0 and self.mounted() {
+      self.set_state(@{
+        self.dialogs.remove_at(index)
+      })
+    }
+  }
+
+  /**
+   * The shown window that had focus last, or the first shown, or `nil`.
+   *
+   * @returns ?RenderWindow
+   */
+  front_window() {
+    var runtime = self.context().runtime()
+    var best = nil
+
+    for window in runtime == nil ? [] : runtime.windows() {
+      if window.is_shown()
+        and (best == nil or window.focused_at > best.focused_at) {
+        best = window
+      }
+    }
+
+    return best
   }
 
   did_update_widget(previous) {
@@ -183,7 +248,9 @@ class AppState < State {
       )
     }
 
-    var windows = WindowSet(self.widget.windows)
+    var windows = WindowSet(
+      self.widget.windows + self.dialogs.map(@(dialog) => dialog.window()),
+    )
     var tracked = AppearanceTracker(windows)
     return self.widget.style == nil
       ? tracked
@@ -251,6 +318,14 @@ class Window < SingleChildRenderObjectWidget {
    * @type dict
    */
   var options = {}
+
+  /**
+   * The window this one is a dialog on, set by `show_dialog()`.
+   *
+   * @internal
+   * @type ?RenderWindow
+   */
+  var sheet_parent
 
   /**
    * @param string title
@@ -332,6 +407,7 @@ class Window < SingleChildRenderObjectWidget {
 
   create_render_object(context) {
     var window = RenderWindow(self._props(), {})
+    window.sheet_parent = self.sheet_parent
     window.set_handlers(self._handlers(context, window))
     window.set_size_to_content(self.options.get('size_to_content', false))
     return window
@@ -339,6 +415,7 @@ class Window < SingleChildRenderObjectWidget {
 
   update_render_object(context, render_object) {
     render_object.set_handlers(self._handlers(context, render_object))
+    render_object.sheet_parent = self.sheet_parent
     render_object.set_props(self._props())
     render_object.set_size_to_content(self.options.get(
       'size_to_content', false,

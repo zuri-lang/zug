@@ -95,6 +95,14 @@ its widgets and their state stay alive for nothing.
 | `on_resize` | Called with the new content `Size`. |
 | `on_focus_changed` | Called with whether it became the key window. |
 
+A second window suits anything the user keeps open beside their work,
+such as an inspector, a settings window or a find panel. It doesn't
+suit a question that needs an answer before they carry on: a window
+doesn't stop the user going back to the main one, and it can't hand you
+an answer. For that, use `show_dialog()`, which shows your widgets as a
+sheet on the window and gives you a promise of the result. See
+[dialogs](services.md#dialogs).
+
 ## Menus
 
 On macOS the menu bar belongs to the application. Give the `App` a

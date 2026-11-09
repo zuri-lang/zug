@@ -6,6 +6,8 @@ import ..foundation { Point, Size, Constraints, INFINITY, LayoutError }
 import .object { RenderObject }
 import .host { RenderHost }
 
+var _focus_changes = 0
+
 /**
  * Holds windows, and sets of windows, with no geometry of its own. The
  * root of every render tree is one.
@@ -74,7 +76,25 @@ class RenderWindow < RenderHost {
    */
   var closed = false
 
+  /**
+   * The window this one is a dialog on, set by `show_dialog()`, or `nil`.
+   *
+   * @internal
+   * @type ?RenderWindow
+   */
+  var sheet_parent
+
+  /**
+   * When the window last had focus, as a count of focus changes, or 0
+   * when it never had it.
+   *
+   * @internal
+   * @type number
+   */
+  var focused_at = 0
+
   var _shown = false
+  var _sheets = []
 
   /**
    * @param dict props
@@ -140,13 +160,60 @@ class RenderWindow < RenderHost {
       self.mark_needs_layout()
     } else if event == 'closed' {
       self.closed = true
+    } else if event == 'focus_changed' and payload.focused {
+      _focus_changes++
+      self.focused_at = _focus_changes
     }
   }
 
   after_commit() {
-    if !self._shown and !self.closed and self.props.get('visible') {
-      self._shown = true
+    if self._shown or self.closed or !self.props.get('visible') {
+      return
+    }
+
+    self._shown = true
+    var under = self.sheet_parent
+
+    if under == nil {
       self.view.show()
+    } else if under.is_shown() and under.view != nil {
+      under.add_sheet(self)
+      self.view.show_sheet(under.view)
+    } else {
+      self.end_sheet()
+    }
+  }
+
+  /**
+   * Records `sheet` as shown on this window, to close it when this window
+   * goes.
+   *
+   * @internal
+   * @param RenderWindow sheet
+   */
+  add_sheet(sheet) {
+    self._sheets.append(sheet)
+  }
+
+  /**
+   * Closes this dialog as though dismissed, when the window it was on has
+   * gone.
+   *
+   * @internal
+   */
+  end_sheet() {
+    if !self.closed {
+      self.handle_event('closed', nil)
+    }
+  }
+
+  detach() {
+    var sheets = self._sheets
+    self._sheets = []
+    parent.detach()
+
+    for sheet in sheets {
+      sheet.end_sheet()
     }
   }
 

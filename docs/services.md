@@ -101,6 +101,78 @@ and resolves with a list of paths or `nil` if the user cancelled.
 `save_file(context, options)` asks where to save, with a suggested
 `name`, and resolves with a path or `nil`.
 
+### Dialogs of your own
+
+When an alert's buttons aren't enough, `show_dialog(context, builder,
+options)` shows any widgets you like as a dialog on the window of
+`context`. On macOS it's a sheet that slides down from the window's
+title bar, and the window takes no clicks or keys until it closes.
+
+`builder` gets a `close` function. Call `close(result)` to dismiss the
+dialog, and the promise resolves with `result`:
+
+```zuri,ignore
+show_dialog(context, @(close) => RenameDialog(self.name, close)).then(@(name) {
+  if name != nil {
+    self.set_state(@{
+      self.name = name
+    })
+  }
+})
+```
+
+```zuri,ignore
+class RenameDialog < StatefulWidget {
+  var name
+  var close
+
+  @new(name, close) {
+    self.name = name
+    self.close = close
+  }
+
+  create_state() {
+    return RenameState()
+  }
+}
+
+class RenameState < State {
+  var field
+
+  init_state() {
+    self.field = TextController(self.widget.name)
+  }
+
+  build(context) {
+    var close = self.widget.close
+    return Padding(EdgeInsets.all(20), Column([
+      Text('Rename'),
+      TextField({ controller: self.field, autofocus: true }),
+      Row([
+        Spacer(),
+        Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{
+          close(nil)
+        } }),
+        Button('Rename', { role: ButtonRole.PRIMARY, on_pressed: @{
+          close(self.field.text())
+        } }),
+      ], { spacing: 8 }),
+    ], { spacing: 12, align_items: AlignItems.STRETCH }))
+  }
+}
+```
+
+The dialog is a real window of your application, so its widgets keep
+their state while it's open, see your `Style`, and handle keys the usual
+way. Return presses the `PRIMARY` button and Escape the `CANCEL` one,
+which is what people expect of a dialog. It takes the size of its
+content unless you pass `size`, and `title` is used on platforms that
+give dialogs a title bar.
+
+With `context` left `nil`, the dialog goes on the window that had focus
+last. If that window closes while the dialog is open, the dialog closes
+too and the promise resolves with `nil`.
+
 ### Fonts and colours
 
 The font and colour choosers work differently. On macOS they're panels

@@ -440,6 +440,13 @@ class HeadlessWindow < WindowHost {
   var closed = false
 
   /**
+   * The window this one is shown as a sheet on, or `nil`.
+   *
+   * @type ?HeadlessWindow
+   */
+  var sheet_of
+
+  /**
    * @param HeadlessBackend backend
    * @param dict props
    * @param function dispatch
@@ -556,6 +563,11 @@ class HeadlessWindow < WindowHost {
     if !self.closed {
       self.shown = true
     }
+  }
+
+  show_sheet(window) {
+    self.sheet_of = window
+    self.show()
   }
 
   close() {

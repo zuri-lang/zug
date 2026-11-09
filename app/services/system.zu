@@ -3,7 +3,8 @@
  *
  * Dialogs return promises. An alert, an open panel or a save panel is
  * attached to the window of the `Context` given, and is a separate window
- * when the context is `nil`. The font and colour choosers belong to the
+ * when the context is `nil`. A dialog of your own, from `show_dialog()`,
+ * is a sheet on a window. The font and colour choosers belong to the
  * whole application, and report each pick as the user makes it.
  *
  * ```zuri,ignore
@@ -20,10 +21,12 @@
  * ```
  */
 
-import ..foundation { Color, Deferred, LifecycleError, check_options }
+import ..foundation {
+  Color, Size, ValueKey, Deferred, LifecycleError, check_options,
+}
 import ..painting { TextStyle }
 import ..rendering { RenderWindow }
-import ..widgets { current_runtime }
+import ..widgets { current_runtime, Window, Builder }
 
 def _runtime() {
   var runtime = current_runtime()
@@ -194,6 +197,139 @@ def save_file(context, options: ?dict) {
   _runtime().backend.save_file(_window_host(context), spec, @(path) {
     deferred.resolve(path)
   })
+  return deferred.promise
+}
+
+var _dialog_count = 0
+
+# A dialog `show_dialog()` opened, which the App builds as a window
+# attached to `under`.
+class _Dialog {
+  var id
+  var title
+  var builder
+  var size
+  var under
+  var app
+  var deferred
+  var closed = false
+
+  @new(title: string, builder: function, size, under, app, deferred) {
+    _dialog_count++
+    self.id = 'zug dialog ${_dialog_count}'
+    self.title = title
+    self.builder = builder
+    self.size = size
+    self.under = under
+    self.app = app
+    self.deferred = deferred
+  }
+
+  close(result) {
+    if self.closed {
+      return
+    }
+
+    self.closed = true
+    self.app.close_dialog(self)
+    self.deferred.resolve(result)
+  }
+
+  window() {
+    var dialog = self
+    var close = @(result) {
+      dialog.close(result)
+    }
+    var options = {
+      key: ValueKey(self.id),
+      resizable: false,
+      minimizable: false,
+      on_closed: @{
+        dialog.close(nil)
+      },
+    }
+
+    if self.size == nil {
+      options['size_to_content'] = true
+    } else {
+      options['size'] = self.size
+    }
+
+    var window = Window(
+      self.title, Builder(@(context) => dialog.builder(close)), options,
+    )
+    window.sheet_parent = self.under
+    return window
+  }
+}
+
+/**
+ * Shows a dialog of your own, built by `builder`, on the window of
+ * `context`. On macOS it's a sheet that slides from the window's title
+ * bar, and the window takes no input until the dialog closes.
+ *
+ * `builder` is called with `close`, a function. Calling `close(result)`
+ * dismisses the dialog and resolves the promise with `result`. The dialog
+ * is a window of the application, so its widgets keep their state, see
+ * the application's `Style`, and take keys as any window's do: a button
+ * with `ButtonRole.PRIMARY` is pressed by Return, and one with
+ * `ButtonRole.CANCEL` by Escape.
+ *
+ * ```zuri,ignore
+ * show_dialog(context, @(close) => Padding(EdgeInsets.all(20), Column([
+ *   Text('Rename the file?'),
+ *   Row([
+ *     Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{ close(false) } }),
+ *     Button('Rename', { role: ButtonRole.PRIMARY, on_pressed: @{ close(true) } }),
+ *   ], { spacing: 8 }),
+ * ], { spacing: 12 }))).then(@(rename) {
+ *   echo rename
+ * })
+ * ```
+ *
+ * With `context` left `nil`, the dialog goes on the window that had focus
+ * last. If the window it is on goes away, the dialog closes and the
+ * promise is resolved with `nil`.
+ *
+ * @param ?Context context
+ * @param function builder: called with `close`; returns a widget.
+ * @param ?dict options: `title`, which platforms that show dialogs with a
+ *    title bar show, and `size`, the dialog's content size; it takes the
+ *    size of its content when left out.
+ * @returns Promise
+ * @throws LifecycleError When no `App` is running
+ * @throws ValueError When there is no window to show the dialog on
+ */
+def show_dialog(context, builder: function, options: ?dict) {
+  var o = check_options(options, 'show_dialog', { title: 'string', size: Size })
+  var app = _runtime().app_state
+
+  if app == nil {
+    raise LifecycleError('show_dialog() needs a running App')
+  }
+
+  var under = nil
+
+  if context == nil {
+    under = app.front_window()
+  } else {
+    under = _window_node(context)
+
+    if under == nil and context.mounted() {
+      raise ValueError(
+        'show_dialog() needs the context of a widget inside a window, and this one is above the windows',
+      )
+    }
+  }
+
+  if under == nil {
+    raise ValueError('show_dialog() needs an open window to show the dialog on')
+  }
+
+  var deferred = Deferred()
+  app.open_dialog(_Dialog(
+    o.get('title', ''), builder, o.get('size'), under, app, deferred,
+  ))
   return deferred.promise
 }
 

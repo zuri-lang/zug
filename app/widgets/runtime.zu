@@ -108,6 +108,14 @@ class Runtime < BackendDelegate {
    */
   var appearance_listeners = []
 
+  /**
+   * The state of the running `App`, which opens dialogs.
+   *
+   * @internal
+   * @type ?State
+   */
+  var app_state
+
   var _pending_root
   var _key_handlers = []
   var _menu_spec
