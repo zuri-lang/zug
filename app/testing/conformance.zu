@@ -25,7 +25,9 @@ import ..foundation {
   Point, Size, Rect, EdgeInsets, Constraints, INFINITY, ObservableValue,
   UnsupportedError, ZugError, set_error_handler, check_options,
 }
+import os
 import ..backend { CAPABILITIES, kind_names, kind_spec }
+import ..painting { PageSetup }
 import ..widgets { Runtime }
 import .gallery { gallery_app }
 
@@ -560,9 +562,43 @@ class _Checker {
       self.skip('keeps text on the clipboard', 'no clipboard capability')
     }
 
+    if self.backend.has_capability('printing') {
+      self.check('writes pages to a PDF', @{
+        var setup = self.backend.default_page_setup()
+        _require(
+          instance_of(setup, PageSetup),
+          'default_page_setup() gave ${typeof(setup)}, not a PageSetup',
+        )
+        var path = os.join_paths(
+          os.create_temp_dir('zug-conformance-'), 'pages.pdf',
+        )
+        var asked = nil
+        var painted = []
+        self.backend.save_pdf(
+          path, { title: 'zug conformance', setup }, @(painter) {
+            asked = painter.size()
+            return 2
+          }, @(painter, page) {
+            painted.append(page)
+            painter.text('Page ${page + 1}', Point(0, 0), nil, 200)
+          },
+        )
+        _require(
+          asked == setup.printable_size(),
+          'pages were counted for a painter of ${asked}, not the printable size',
+        )
+        _require(
+          painted.contains(0) and painted.contains(1),
+          'pages 0 and 1 were not both painted: ${painted}',
+        )
+      })
+    } else {
+      self.skip('writes pages to a PDF', 'no printing capability')
+    }
+
     if self.backend.has_capability('native_dialogs') {
       self.skip(
-        'shows alerts, file panels and the font and colour choosers',
+        'shows alerts, file panels, choosers, page setup and printing',
         'they need a person to answer them',
       )
     }

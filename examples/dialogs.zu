@@ -1,8 +1,9 @@
 /**
  * A small notes editor that uses every kind of dialog: an open panel to
  * open a note, a save panel to save it, an alert before changes are
- * thrown away, the font and colour choosers to restyle it as you pick,
- * and a sheet of its own to rename it.
+ * thrown away, the font and colour choosers to restyle it as you pick, a
+ * sheet of its own to rename it, and the page setup and print dialogs to
+ * print it, its text flowing from page to page.
  *
  *     zuri run examples/dialogs.zu
  *
@@ -25,6 +26,7 @@ class NotesState < State {
   var edited = false
   var ask_before_discarding = true
   var style = TextStyle({ size: 14 })
+  var setup
   var status = 'A new note.'
 
   init_state() {
@@ -155,6 +157,56 @@ class NotesState < State {
     self.say('${title}.')
   }
 
+  # The note's lines laid out on pages the size of the painter's, each
+  # page a list of [line, y]. Lines wrap at the width of the page.
+  pages_of(painter) {
+    var width = painter.size().width
+    var pages = [[]]
+    var y = 0
+
+    for text in self.text.text().split('\n') {
+      var line = text == '' ? ' ' : text
+      var height = painter.measure_text(line, self.style, width).height
+
+      if y + height > painter.size().height and !pages[-1].is_empty() {
+        pages.append([])
+        y = 0
+      }
+
+      pages[-1].append([line, y])
+      y += height
+    }
+
+    return pages
+  }
+
+  print_note(context) {
+    print_pages(context, {
+      title: self.title,
+      setup: self.setup,
+      pages: @(painter) => self.pages_of(painter).length(),
+      paint: @(painter, page) {
+        for item in self.pages_of(painter)[page] {
+          painter.text(
+            item[0], Point(0, item[1]), self.style, painter.size().width,
+          )
+        }
+      },
+    }).then(self.if_open(@(printed) {
+      self.say(printed ? 'Printed “${self.title}”.' : 'Not printed.')
+    }))
+  }
+
+  # The paper is kept for the next print.
+  choose_paper(context) {
+    page_setup(context, { setup: self.setup }).then(self.if_open(@(setup) {
+      if setup != nil {
+        self.setup = setup
+        self.say('Set the paper to print on.')
+      }
+    }))
+  }
+
   # The note changes font as the user picks in the chooser.
   choose_font(context) {
     pick_font(context, {
@@ -238,6 +290,19 @@ class NotesState < State {
         Button('Rename…', {
           on_pressed: @{
             self.rename(context)
+          },
+        }),
+        Separator({ axis: Axis.VERTICAL }),
+        Button('Page Setup…', {
+          shortcut: 'cmd+shift+p',
+          on_pressed: @{
+            self.choose_paper(context)
+          },
+        }),
+        Button('Print…', {
+          shortcut: 'cmd+p',
+          on_pressed: @{
+            self.print_note(context)
           },
         }),
       ],
@@ -365,7 +430,7 @@ if __root__ == __file__ {
   run_app(App({
     title: 'Notes',
     windows: [Window('Notes', Notes(), {
-      size: Size(560, 420),
+      size: Size(720, 460),
       min_size: Size(420, 260),
     })],
   }))

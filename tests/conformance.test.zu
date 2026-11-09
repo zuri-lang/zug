@@ -144,6 +144,20 @@ describe('check_backend', @{
     t.pump()
     expect(t.find_text('colour chosen: nil')).to_have_length(1)
 
+    t.tap('Page Setup…')
+    t.backend.answer_dialog(PageSetup({
+      orientation: PageOrientation.LANDSCAPE,
+      paper_name: 'A4',
+    }))
+    t.pump()
+    expect(t.find_text('page setup: A4, landscape')).to_have_length(1)
+
+    t.tap('Print…')
+    t.backend.answer_dialog(true)
+    t.pump()
+    expect(t.find_text('printed: true')).to_have_length(1)
+    expect(t.backend.printed[0].pages.length()).to_be(2)
+
     t.tap('Sheet…')
     t.pump()
     t.tap('OK')

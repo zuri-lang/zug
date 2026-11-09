@@ -338,6 +338,25 @@ class GalleryState < State {
           on_changed: self.answered('colour'),
         }).then(self.answered('colour chosen'))
       } }),
+      Button('Page Setup…', { on_pressed: @{
+        page_setup(context).then(self.answered('page setup'))
+      } }),
+      Button('Print…', { on_pressed: @{
+        print_pages(context, {
+          title: 'zug gallery',
+          pages: alt ? 3 : 2,
+          paint: @(painter, page) {
+            painter.text('Page ${page + 1}', Point(0, 0), TextStyle({
+              size: 18,
+              weight: FontWeight.BOLD,
+            }))
+            painter.save()
+            painter.translate(0, 36)
+            _paint(painter, Size(painter.size().width, 160), alt)
+            painter.restore()
+          },
+        }).then(self.answered('printed'))
+      } }),
       Button('Sheet…', { on_pressed: @{
         show_dialog(
           context,
@@ -683,6 +702,11 @@ def _shown(value) {
   if instance_of(value, TextStyle) {
     var family = value.family == nil ? 'the system font' : value.family
     return '${family} at ${value.size == nil ? 13 : value.size}'
+  }
+
+  if instance_of(value, PageSetup) {
+    var paper = value.paper_name == nil ? 'custom paper' : value.paper_name
+    return '${paper}, ${value.orientation}'
   }
 
   return instance_of(value, Color) ? value.to_hex() : 'a new ${typeof(value)}'

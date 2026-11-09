@@ -1,0 +1,443 @@
+/**
+ * A sales report that prints over as many pages as it needs: a title on
+ * the first, the table's header on every one, page numbers at the foot,
+ * and the total at the end. The window previews each page with the same
+ * paint function the printer uses, and can print the report, change the
+ * paper, or export it as a PDF.
+ *
+ *     zuri run examples/printing.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import ..app { * }
+
+var _CUSTOMERS = [
+  'Ada Lovelace', 'Charles Babbage', 'Grace Hopper', 'Alan Turing',
+  'Katherine Johnson', 'Edsger Dijkstra', 'Barbara Liskov', 'Donald Knuth',
+]
+
+# Ninety orders through October, as [date, customer, amount in cents].
+def _orders() {
+  var orders = []
+
+  iter var i = 0; i < 90; i++ {
+    var day = '${(i / 3).floor() + 1}'.lpad(2, '0')
+    orders.append([
+      '2026-10-${day}', _CUSTOMERS[i % _CUSTOMERS.length()],
+      (i * 7919) % 48000 + 1500,
+    ])
+  }
+
+  return orders
+}
+
+var _ORDERS = _orders()
+
+def _money(cents: number) {
+  var whole = (cents / 100).floor()
+  return '£${whole}.${'${cents % 100}'.lpad(2, '0')}'
+}
+
+def _total() {
+  return _ORDERS.reduce(@(sum, order) => sum + order[2], 0)
+}
+
+# The report's measurements, in points.
+var _TITLE = 56
+var _HEADER = 22
+var _ROW = 18
+var _TOTAL = 30
+var _FOOTER = 24
+
+var _INK = Color.BLACK
+var _QUIET = Color.gray(0.4)
+var _STRIPE = Color.gray(0.94)
+
+# Which orders go on each page of a page `size`. Rows are all the same
+# height, so this needs no measuring: each page takes the rows that fit
+# between its header and the footer, and the total goes on the last page
+# if there is room, or a page of its own if there is not.
+def _lay_out(size: Size) {
+  var room = size.height - _FOOTER
+  var pages = []
+  var next = 0
+
+  while next < _ORDERS.length() {
+    var top = (pages.is_empty() ? _TITLE : 0) + _HEADER
+    var fits = ((room - top) / _ROW).floor().max(1)
+    var last = (next + fits).min(_ORDERS.length())
+    pages.append({
+      first: pages.is_empty(),
+      from: next,
+      to: last,
+      total: false,
+    })
+    next = last
+  }
+
+  var end = pages[-1]
+  var used = (end.first ? _TITLE : 0) + _HEADER + (end.to - end.from) * _ROW
+
+  if used + _TOTAL <= room {
+    end['total'] = true
+  } else {
+    pages.append({ first: false, from: next, to: next, total: true })
+  }
+
+  return pages
+}
+
+def _text(painter, text: string, x: number, y: number, style) {
+  painter.text(text, Point(x, y), style)
+}
+
+# Draws `text` with its right edge at `right`.
+def _right(painter, text: string, right: number, y: number, style) {
+  var width = painter.measure_text(text, style).width
+  painter.text(text, Point(right - width, y), style)
+}
+
+# Draws page `index` of the report on `painter`, whose size is the area
+# inside the margins.
+def paint_page(painter, index: number) {
+  var size = painter.size()
+  var pages = _lay_out(size)
+
+  if index >= pages.length() {
+    return
+  }
+
+  var page = pages[index]
+  var width = size.width
+  var body = TextStyle({ size: 10, color: _INK })
+  var bold = TextStyle({ size: 10, weight: FontWeight.BOLD, color: _INK })
+  var y = 0
+
+  if page.first {
+    _text(painter, 'Sales in October 2026', 0, 0, TextStyle({
+      size: 20,
+      weight: FontWeight.BOLD,
+      color: _INK,
+    }))
+    _text(
+      painter, '${_ORDERS.length()} orders from every region', 0, 28,
+      TextStyle({
+        size: 11,
+        color: _QUIET,
+      }),
+    )
+    y = _TITLE
+  }
+
+  _text(painter, 'Date', 4, y + 4, bold)
+  _text(painter, 'Customer', 90, y + 4, bold)
+  _right(painter, 'Amount', width - 4, y + 4, bold)
+  painter.line(Point(0, y + _HEADER - 2), Point(width, y + _HEADER - 2), Paint({
+    color: _INK,
+  }))
+  y += _HEADER
+
+  iter var i = page.from; i < page.to; i++ {
+    var order = _ORDERS[i]
+
+    if i % 2 == 1 {
+      painter.fill_rect(Rect(0, y, width, _ROW), _STRIPE)
+    }
+
+    _text(painter, order[0], 4, y + 3, body)
+    _text(painter, order[1], 90, y + 3, body)
+    _right(painter, _money(order[2]), width - 4, y + 3, body)
+    y += _ROW
+  }
+
+  if page.total {
+    painter.line(Point(0, y + 4), Point(width, y + 4), Paint({ color: _INK }))
+    _text(painter, 'Total', 4, y + 10, bold)
+    _right(painter, _money(_total()), width - 4, y + 10, bold)
+  }
+
+  var footer = TextStyle({ size: 9, color: _QUIET })
+  var label = 'Page ${index + 1} of ${pages.length()}'
+  var label_width = painter.measure_text(label, footer).width
+  _text(painter, label, (width - label_width) / 2, size.height - 12, footer)
+}
+
+# How many pages the report takes, for a painter of the printable size.
+def page_count(painter) {
+  return _lay_out(painter.size()).length()
+}
+
+class Report < StatefulWidget {
+  create_state() {
+    return ReportState()
+  }
+}
+
+class ReportState < State {
+  var setup
+  var page = 0
+  var status = ''
+
+  init_state() {
+    self.setup = default_page_setup()
+  }
+
+  pages() {
+    return _lay_out(self.setup.printable_size()).length()
+  }
+
+  say(status: string) {
+    if self.mounted() {
+      self.set_state(@{
+        self.status = status
+      })
+    }
+  }
+
+  choose_paper(context) {
+    page_setup(context, { setup: self.setup }).then(@(setup) {
+      if setup == nil or !self.mounted() {
+        return
+      }
+
+      self.set_state(@{
+        self.setup = setup
+        self.page = self.page.min(self.pages() - 1)
+        self.status = '${setup.paper_name == nil ? "Custom paper" : setup.paper_name}, ${setup.orientation}.'
+      })
+    })
+  }
+
+  print(context) {
+    print_pages(context, {
+      title: 'October sales',
+      setup: self.setup,
+      pages: page_count,
+      paint: paint_page,
+    }).then(@(printed) {
+      self.say(printed ? 'Printed the report.' : 'Not printed.')
+    })
+  }
+
+  export(context) {
+    save_file(context, {
+      title: 'Export the report as a PDF.',
+      name: 'October sales.pdf',
+      types: ['pdf'],
+    }).then(@(path) {
+      if path == nil {
+        return
+      }
+
+      catch {
+        save_pdf(path, {
+          title: 'October sales',
+          setup: self.setup,
+          pages: page_count,
+          paint: paint_page,
+        })
+      } as error {
+        show_alert(context, {
+          title: 'The report could not be exported',
+          message: error.message,
+          style: AlertStyle.CRITICAL,
+        })
+        return
+      }
+
+      self.say('Saved ${path}.')
+    })
+  }
+
+  # The page being previewed, on a sheet of paper scaled to fit.
+  preview(painter, size: Size) {
+    var setup = self.setup
+    var paper = setup.page_size()
+    var scale = ((size.width - 32) / paper.width).min(
+      (size.height - 32) / paper.height,
+    )
+    var width = paper.width * scale
+    var height = paper.height * scale
+    var x = (size.width - width) / 2
+    var y = (size.height - height) / 2
+    var printable = setup.printable_size()
+
+    painter.fill_rect(Rect(x + 2, y + 3, width, height), Color.gray(0, 0.2))
+    painter.fill_rect(Rect(x, y, width, height), Color.WHITE)
+    painter.save()
+    painter.translate(x, y)
+    painter.scale(scale, scale)
+    painter.translate(setup.margins.left, setup.margins.top)
+    painter.clip_rect(Rect(0, 0, printable.width, printable.height))
+    paint_page(_Scaled(painter, printable), self.page)
+    painter.restore()
+  }
+
+  build(context) {
+    var pages = self.pages()
+    var tools = Row([
+      Button('Page Setup…', {
+        shortcut: 'cmd+shift+p',
+        on_pressed: @{
+          self.choose_paper(context)
+        },
+      }),
+      Button('Print…', {
+        role: ButtonRole.PRIMARY,
+        shortcut: 'cmd+p',
+        on_pressed: @{
+          self.print(context)
+        },
+      }),
+      Button('Export PDF…', {
+        on_pressed: @{
+          self.export(context)
+        },
+      }),
+      Spacer(),
+      Button('‹', {
+        on_pressed: self.page == 0 ? nil : @{
+          self.set_state(@{
+            self.page--
+          })
+        },
+        accessibility_label: 'Previous page',
+      }),
+      Text('Page ${self.page + 1} of ${pages}', {
+        style: TextStyle({ monospaced_digits: true }),
+        accessibility_identifier: 'page',
+      }),
+      Button('›', {
+        on_pressed: self.page >= pages - 1 ? nil : @{
+          self.set_state(@{
+            self.page++
+          })
+        },
+        accessibility_label: 'Next page',
+      }),
+    ], { spacing: 8 })
+
+    return Column([
+      Padding(EdgeInsets.all(12), tools),
+      Expanded(Box({
+        color: Color.system('under_page_background'),
+        child: Canvas(@(painter, size) => self.preview(painter, size), {
+          repaint: [
+            self.page, self.setup.orientation, self.setup.paper_size.width,
+            self.setup.margins.left,
+          ],
+        }),
+      })),
+      Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 6 }), Text(
+        self.status,
+        {
+          style: TextStyle({
+            size: 11,
+            color: Color.system('secondary_label'),
+          }),
+          accessibility_identifier: 'status',
+        },
+      )),
+    ], { align_items: AlignItems.STRETCH })
+  }
+}
+
+# A painter that draws through another but reports a size of its own, so
+# the preview can hand `paint_page` a painter the size of the printable
+# area, as printing does.
+class _Scaled < Painter {
+  var inner
+  var area
+
+  @new(inner, area: Size) {
+    self.inner = inner
+    self.area = area
+  }
+
+  size() {
+    return self.area
+  }
+
+  save() {
+    self.inner.save()
+  }
+
+  restore() {
+    self.inner.restore()
+  }
+
+  translate(dx: number, dy: number) {
+    self.inner.translate(dx, dy)
+  }
+
+  scale(sx: number, sy: number) {
+    self.inner.scale(sx, sy)
+  }
+
+  rotate(radians: number) {
+    self.inner.rotate(radians)
+  }
+
+  clip_rect(rect: Rect) {
+    self.inner.clip_rect(rect)
+  }
+
+  fill_rect(rect: Rect, color) {
+    self.inner.fill_rect(rect, color)
+  }
+
+  stroke_rect(rect: Rect, paint) {
+    self.inner.stroke_rect(rect, paint)
+  }
+
+  fill_rounded_rect(rect: Rect, radius: number, color) {
+    self.inner.fill_rounded_rect(rect, radius, color)
+  }
+
+  stroke_rounded_rect(rect: Rect, radius: number, paint) {
+    self.inner.stroke_rounded_rect(rect, radius, paint)
+  }
+
+  fill_oval(rect: Rect, color) {
+    self.inner.fill_oval(rect, color)
+  }
+
+  stroke_oval(rect: Rect, paint) {
+    self.inner.stroke_oval(rect, paint)
+  }
+
+  line(from: Point, to: Point, paint) {
+    self.inner.line(from, to, paint)
+  }
+
+  fill_path(path, color) {
+    self.inner.fill_path(path, color)
+  }
+
+  stroke_path(path, paint) {
+    self.inner.stroke_path(path, paint)
+  }
+
+  text(text: string, at: Point, style, max_width: ?number) {
+    self.inner.text(text, at, style, max_width)
+  }
+
+  measure_text(text: string, style, max_width: ?number) {
+    return self.inner.measure_text(text, style, max_width)
+  }
+
+  image(source, rect: Rect) {
+    self.inner.image(source, rect)
+  }
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Report',
+    windows: [Window('October Sales', Report(), {
+      size: Size(620, 720),
+      min_size: Size(420, 420),
+    })],
+  }))
+}

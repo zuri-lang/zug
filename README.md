@@ -94,7 +94,11 @@ place to begin; after that, the pages most people reach for are
   background work.
 - `examples/dialogs.zu`: a notes editor that opens and saves files, asks
   before throwing changes away, restyles its text from the font and
-  colour choosers, and renames the note in a sheet of its own.
+  colour choosers, renames the note in a sheet of its own, and prints
+  it with its text flowing from page to page.
+- `examples/printing.zu`: a sales report that runs over several pages,
+  with a header on each and page numbers, previewed in the window,
+  printed, or exported as a PDF.
 - `examples/conformance.zu`: every widget zug has in one working window,
   the gallery the backend conformance check builds, with a switch that
   swaps every widget to a second set of options.
