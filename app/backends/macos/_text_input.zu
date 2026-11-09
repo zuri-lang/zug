@@ -11,14 +11,41 @@ import ffi
 import .. ..foundation { Size, Constraints }
 import ._runtime {
   cls, sel, send, send_void, send_void_id, send_void_bool, send_void_int,
-  send_void_uint, send_size, send_int, typed, ns_string, zuri_string, retain,
-  rect, create_with_frame, define_class, ns_array, NSRange, CGSize,
+  send_void_uint, send_size, send_int, typed, ns_string, zuri_string,
+  retain, rect, create_with_frame, define_class, ns_array, NSRange, CGSize,
+  CGPoint,
 }
 import ._classes { register, unregister, host_for, shared_target, B }
 import ._cocoa { ns_color, ns_font, text_alignment }
 import ._views { MacView, control_size }
 
 var _cancel = sel('cancelOperation:')
+
+var _key_event = typed(ffi.ptr, [
+  ffi.ulong, CGPoint, ffi.ulong, ffi.double, ffi.long, ffi.ptr, ffi.ptr,
+  ffi.ptr, ffi.bool, ffi.ushort,
+])
+
+# Offers Escape to the key equivalents in the window of `view`, which is
+# how it reaches a Cancel button from a text input.
+def _press_cancel(view) {
+  var window = send(view, 'window')
+
+  if window == nil {
+    return false
+  }
+
+  var escape = ns_string('\u001b')
+  var event = _key_event(
+    cls('NSEvent'),
+    sel('keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:'),
+    10, { x: 0, y: 0 }, 0, 0, send_int(window, 'windowNumber'), nil, escape,
+    escape, false, 53,
+  )
+  return typed(ffi.bool, [ffi.ptr])(
+    window, sel('performKeyEquivalent:'), event,
+  )
+}
 
 /**
  * The delegate of every text input.
@@ -52,11 +79,19 @@ var ZugTextDelegate = define_class('ZugTextDelegate', 'NSObject', {
     @(this, control, view, command) {
       var host = host_for(control)
 
-      if host != nil
-        and command.address() == _cancel.address()
-        and host.handles_escape() {
-        host.fire('escape', nil)
-        return true
+      if host != nil and command.address() == _cancel.address() {
+        return host.escape_pressed()
+      }
+
+      return false
+    }, false,
+  ],
+  'textView:doCommandBySelector:': [
+    '${B}@:@:', ffi.bool, [ffi.ptr, ffi.ptr], @(this, view, command) {
+      var host = host_for(view)
+
+      if host != nil and command.address() == _cancel.address() {
+        return host.escape_pressed()
       }
 
       return false
@@ -241,11 +276,23 @@ class MacTextField < MacView {
   }
 
   /**
+   * Escape, which no `on_escape` took, pressed in the field. It presses
+   * the window's Cancel button, as in any Mac dialog. Failing that, a
+   * search field clears itself, as AppKit has it do, and other fields
+   * swallow the key, where AppKit would offer completions. Returns whether
+   * the key was used.
+   *
    * @internal
    * @returns bool
    */
-  handles_escape() {
-    return self.kind_name == 'text_field'
+  escape_pressed() {
+    var search = self.kind_name == 'search_field'
+
+    if search and zuri_string(send(self.native, 'stringValue')) != '' {
+      return false
+    }
+
+    return _press_cancel(self.native) or !search
   }
 
   /**
@@ -391,11 +438,14 @@ class MacTextArea < MacView {
   }
 
   /**
+   * Escape, which no `on_escape` took, pressed in the text: it presses the
+   * window's Cancel button when there is one. Returns whether it did.
+   *
    * @internal
    * @returns bool
    */
-  handles_escape() {
-    return false
+  escape_pressed() {
+    return _press_cancel(self.text_view)
   }
 
   /**

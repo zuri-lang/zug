@@ -100,10 +100,10 @@ def mouse_click(view) {
   _send_void_id(window, _sel('sendEvent:'), make(1, 1.0))
 }
 
-# Sends a native window a key going down. With `through_app`, the key
-# goes through the application first, as the keyboard's keys do, so
-# buttons and menus see their shortcuts.
-def send_key(window, characters, code, through_app: ?bool) {
+# Sends a native window a key going down, as the keyboard does. It goes
+# to the window itself rather than through the application, which drops
+# keys while another application is active.
+def send_key(window, characters, code) {
   var string = _send_string_arg(
     _class('NSString'), _sel('stringWithUTF8String:'), characters,
   )
@@ -113,10 +113,7 @@ def send_key(window, characters, code, through_app: ?bool) {
     10, { x: 0, y: 0 }, 0, 0, _send_long(window, _sel('windowNumber')), nil,
     string, string, false, code,
   )
-  var target = through_app == true
-    ? _send(_class('NSApplication'), _sel('sharedApplication'))
-    : window
-  _send_void_id(target, _sel('sendEvent:'), event)
+  _send_void_id(window, _sel('sendEvent:'), event)
 }
 
 def native_string(object, name) {
@@ -420,14 +417,14 @@ suite('the macOS backend', @{
         mouse_click(hosts(runtime, 'text_field')[0].view.native)
       },
       @(runtime) {
-        send_key(runtime.windows()[0].view.native, '\u001b', 53, true)
+        send_key(runtime.windows()[0].view.native, '\u001b', 53)
         mouse_click(hosts(runtime, 'table')[0].view.table)
       },
       @(runtime) {
         var window = runtime.windows()[0].view.native
-        send_key(window, '\u001b', 53, true)
+        send_key(window, '\u001b', 53)
         runtime.windows()[0].view.clear_focus()
-        send_key(window, '\u001b', 53, true)
+        send_key(window, '\u001b', 53)
       },
     ])
 
@@ -502,9 +499,16 @@ suite('the macOS backend', @{
   it('shows a dialog as a sheet, and closes it from its buttons', @{
     var seen = {}
     var results = []
+    var asked = 0
+
+    # The second time, a focused field in the dialog has Escape first.
     var ask = @(context) {
+      asked++
+      var field = asked == 2
+        ? TextField({ autofocus: true })
+        : Text('Rename the file?')
       show_dialog(context, @(close) => Padding(EdgeInsets.all(20), Column([
-        Text('Rename the file?'),
+        field,
         Row([
           Button('Cancel', {
             role: ButtonRole.CANCEL,
@@ -539,7 +543,7 @@ suite('the macOS backend', @{
         var sheet = _send(main, _sel('attachedSheet'))
         seen['sheet'] = sheet != nil
           and sheet == runtime.windows()[1].view.native
-        send_key(sheet, '\r', 36, true)
+        send_key(sheet, '\r', 36)
       },
       @(runtime) {
         var main = runtime.windows()[0].view.native
@@ -550,7 +554,11 @@ suite('the macOS backend', @{
         var sheet = _send(
           runtime.windows()[0].view.native, _sel('attachedSheet'),
         )
-        send_key(sheet, '\u001b', 53, true)
+        seen['field_focused'] = _send_bool_id(
+          _send(sheet, _sel('firstResponder')), _sel('isKindOfClass:'),
+          _class('NSTextView'),
+        )
+        send_key(sheet, '\u001b', 53)
       },
       @(runtime) {
         seen['after_escape'] = _send(
@@ -562,6 +570,7 @@ suite('the macOS backend', @{
     expect(reported).to_be_empty()
     expect(seen.sheet).to_be_true()
     expect(seen.after_return).to_be_true()
+    expect(seen.field_focused).to_be_true()
     expect(seen.after_escape).to_be_true()
     expect(results).to_equal(['renamed', 'cancelled'])
   })

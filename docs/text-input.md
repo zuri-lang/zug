@@ -137,5 +137,6 @@ later. To take focus away, so that keys go to the window's
 `clear_focus(context)`.
 
 Every text input takes `on_escape`, called when the user presses Escape
-in it. Without one, Escape does what the platform does there: a search
-field, for one, empties itself.
+in it. Without one, Escape empties a search field that has text in it,
+as search fields do, and otherwise presses the window's `CANCEL` button,
+if it has one, as in any Mac dialog.
