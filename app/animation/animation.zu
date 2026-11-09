@@ -1,0 +1,394 @@
+/**
+ * Animations: a value that moves over time, one frame at a time.
+ */
+
+import ..foundation {
+  Observable, Duration, Deferred, LifecycleError, check_options,
+}
+import ..widgets { current_runtime }
+import .curve { Curve }
+
+/**
+ * A value that runs between `lower` and `upper`, 0 and 1 unless given
+ * others, over a duration. It changes once a frame while it runs and
+ * notifies its listeners each time, so an `Observer` of it rebuilds with
+ * every step.
+ *
+ * `forward()` runs it to `upper`, `reverse()` back to `lower`,
+ * `animate_to()` to any value, and `repeat()` over and over. Each returns a
+ * `Promise` of whether the run finished: `true` when it reached its end,
+ * `false` when `stop()`, `set()` or another run interrupted it.
+ *
+ * An animation needs a running application, and should be disposed when
+ * whatever owns it is, usually in `State.dispose()`.
+ *
+ * ```zuri,ignore
+ * class Notice < StatefulWidget {
+ *   create_state() {
+ *     return NoticeState()
+ *   }
+ * }
+ *
+ * class NoticeState < State {
+ *   var fade = Animation({ duration: Duration.ms(250) })
+ *
+ *   init_state() {
+ *     self.fade.forward()
+ *   }
+ *
+ *   build(context) {
+ *     return Observer(self.fade, @(context) => Box({
+ *       opacity: self.fade.value(),
+ *       child: Text('Saved'),
+ *     }))
+ *   }
+ *
+ *   dispose() {
+ *     self.fade.dispose()
+ *   }
+ * }
+ * ```
+ */
+class Animation < Observable {
+
+  /**
+   * How long a run from `lower` to `upper` takes. A run over part of the
+   * range takes the same part of it.
+   *
+   * @type ?Duration
+   */
+  var duration
+
+  /**
+   * How long a run back from `upper` to `lower` takes, when it differs
+   * from `duration`.
+   *
+   * @type ?Duration
+   */
+  var reverse_duration
+
+  /**
+   * @type number
+   */
+  var lower = 0
+
+  /**
+   * @type number
+   */
+  var upper = 1
+
+  var _value = 0
+  var _ticker
+  var _runtime
+  var _deferred
+  var _from = 0
+  var _to = 0
+  var _seconds = 0
+  var _started = 0
+  var _curve
+  var _repeat
+
+  /**
+   * @param ?dict options: `duration`, `reverse_duration`, `lower` (0),
+   *    `upper` (1), and `value`, where it starts (`lower` when left out).
+   * @throws ValueError When lower is not below upper
+   * @constructor
+   */
+  @new(options: ?dict) {
+    var o = check_options(
+      options, 'Animation',
+      {
+        duration: Duration,
+        reverse_duration: Duration,
+        lower: 'number',
+        upper: 'number',
+        value: 'number',
+      },
+    )
+    self.duration = o.get('duration')
+    self.reverse_duration = o.get('reverse_duration')
+    self.lower = o.get('lower', 0)
+    self.upper = o.get('upper', 1)
+
+    if !(self.lower < self.upper) {
+      raise ValueError('an Animation needs lower below upper, got ${self.lower} and ${self.upper}')
+    }
+
+    self._value = self._clamp(o.get('value', self.lower))
+    self._curve = Curve.LINEAR
+    self._ticker = @(time) => self._tick(time)
+  }
+
+  /**
+   * The current value.
+   *
+   * @returns number
+   */
+  value() {
+    return self._value
+  }
+
+  /**
+   * Whether a run is under way.
+   *
+   * @returns bool
+   */
+  is_animating() {
+    return self._deferred != nil
+  }
+
+  /**
+   * Moves straight to `value`, stopping any run.
+   *
+   * @param number value: held within `lower` and `upper`.
+   */
+  set(value: number) {
+    self._end(false)
+    self._show(self._clamp(value))
+  }
+
+  /**
+   * Runs to `upper`.
+   *
+   * @param ?number from: where to start; the current value when left
+   *    out.
+   * @returns Promise of bool
+   * @throws LifecycleError When no application is running
+   * @throws ValueError When the animation has no duration
+   */
+  forward(from: ?number) {
+    return self._run_from(from, self.upper, self._duration_to(self.upper))
+  }
+
+  /**
+   * Runs back to `lower`.
+   *
+   * @param ?number from: where to start; the current value when left
+   *    out.
+   * @returns Promise of bool
+   * @throws LifecycleError When no application is running
+   * @throws ValueError When the animation has no duration
+   */
+  reverse(from: ?number) {
+    return self._run_from(from, self.lower, self._duration_to(self.lower))
+  }
+
+  /**
+   * Runs to `target` along a curve.
+   *
+   * @param number target: held within `lower` and `upper`.
+   * @param ?dict options: `duration` (the share of `duration` the
+   *    distance takes when left out) and `curve` (`Curve.LINEAR`).
+   * @returns Promise of bool
+   * @throws LifecycleError When no application is running
+   * @throws ValueError When there is no duration to use
+   */
+  animate_to(target: number, options: ?dict) {
+    var o = check_options(
+      options, 'Animation.animate_to', { duration: Duration, curve: Curve },
+    )
+    var goal = self._clamp(target)
+    var given = o.get('duration')
+    var seconds = given != nil
+      ? given.in_seconds()
+      : self._duration_to(goal)
+    return self._run(goal, seconds, o.get('curve', Curve.LINEAR))
+  }
+
+  /**
+   * Runs to `upper` and starts again, over and over: from `lower` each
+   * time, or back and forth with `reverse`. The first run starts from the
+   * current value.
+   *
+   * @param ?dict options: `reverse` (false) and `count`, how many runs to
+   *    make before the promise resolves; without it the animation
+   *    repeats until stopped.
+   * @returns Promise of bool
+   * @throws LifecycleError When no application is running
+   * @throws ValueError When the duration is zero, or count is not a
+   *    whole number of at least 1
+   */
+  repeat(options: ?dict) {
+    var o = check_options(
+      options, 'Animation.repeat', { reverse: 'bool', count: 'number' },
+    )
+    var count = o.get('count')
+
+    if count != nil and (!is_int(count) or count < 1) {
+      raise ValueError('an Animation repeats a whole number of times, at least 1, got ${count}')
+    }
+
+    var reverse = o.get('reverse', false)
+
+    if self._full_seconds(self.upper) <= 0
+      or (reverse and self._full_seconds(self.lower) <= 0) {
+      raise ValueError('an Animation cannot repeat with no duration')
+    }
+
+    # From `upper` the first run goes back, or starts over from `lower`.
+    var first = self.upper
+
+    if self._value == self.upper {
+      if reverse {
+        first = self.lower
+      } else {
+        self._end(false)
+        self._show(self.lower)
+      }
+    }
+
+    var promise = self._run(first, self._duration_to(first), Curve.LINEAR)
+    self._repeat = { reverse, remaining: count }
+    return promise
+  }
+
+  /**
+   * Stops where it is. A run under way resolves its promise with
+   * `false`.
+   */
+  stop() {
+    self._end(false)
+  }
+
+  /**
+   * Stops, and refuses further use.
+   */
+  dispose() {
+    self._end(false)
+    parent.dispose()
+  }
+
+  _clamp(value: number) {
+    return value.max(self.lower).min(self.upper)
+  }
+
+  # The seconds of a whole run towards `target`.
+  _full_seconds(target: number) {
+    var length = target == self.lower and self.reverse_duration != nil
+      ? self.reverse_duration
+      : self.duration
+
+    if length == nil {
+      raise ValueError('an Animation needs a duration to run')
+    }
+
+    return length.in_seconds()
+  }
+
+  # The seconds of a run from the current value to `target`: the share
+  # of a whole run the distance is.
+  _duration_to(target: number) {
+    var share = (target - self._value).abs() / (self.upper - self.lower)
+    return self._full_seconds(target) * share
+  }
+
+  _run_from(from: ?number, target: number, seconds: number) {
+    if from == nil {
+      return self._run(target, seconds, Curve.LINEAR)
+    }
+
+    self._end(false)
+    self._show(self._clamp(from))
+    return self._run(target, self._duration_to(target), Curve.LINEAR)
+  }
+
+  _run(target: number, seconds: number, curve) {
+    var runtime = current_runtime()
+
+    if runtime == nil {
+      raise LifecycleError('animations need a running application')
+    }
+
+    self._end(false)
+    var deferred = Deferred()
+    self._deferred = deferred
+    self._from = self._value
+    self._to = target
+    self._seconds = seconds
+    self._curve = curve
+    self._started = runtime.backend.now()
+
+    if seconds <= 0 or self._from == target {
+      self._show(target)
+      self._end(true)
+      return deferred.promise
+    }
+
+    self._runtime = runtime
+    runtime.add_ticker(self._ticker)
+    return deferred.promise
+  }
+
+  _tick(time: number) {
+    if self._deferred == nil {
+      return
+    }
+
+    var elapsed = time - self._started
+
+    # A run that ended between two frames hands its leftover time to the
+    # next one when repeating, so the rhythm holds.
+    while elapsed >= self._seconds {
+      if self._repeat == nil {
+        self._show(self._to)
+        self._end(true)
+        return
+      }
+
+      var remaining = self._repeat.remaining
+
+      if remaining != nil {
+        remaining--
+        self._repeat['remaining'] = remaining
+
+        if remaining <= 0 {
+          self._show(self._to)
+          self._end(true)
+          return
+        }
+      }
+
+      elapsed -= self._seconds
+      self._started = time - elapsed
+
+      if self._repeat.reverse {
+        var back = self._to == self.upper ? self.lower : self.upper
+        self._from = self._to
+        self._to = back
+      } else {
+        self._from = self.lower
+        self._to = self.upper
+      }
+
+      self._seconds = self._full_seconds(self._to)
+    }
+
+    var t = elapsed / self._seconds
+    self._show(self._from + (self._to - self._from) * self._curve.transform(t))
+  }
+
+  _show(value: number) {
+    if value != self._value {
+      self._value = value
+      self.notify()
+    }
+  }
+
+  _end(finished: bool) {
+    var deferred = self._deferred
+
+    if deferred == nil {
+      return
+    }
+
+    self._deferred = nil
+    self._repeat = nil
+
+    if self._runtime != nil {
+      self._runtime.remove_ticker(self._ticker)
+      self._runtime = nil
+    }
+
+    deferred.resolve(finished)
+  }
+}

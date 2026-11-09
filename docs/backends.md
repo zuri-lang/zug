@@ -19,7 +19,8 @@ Two backends ship with zug:
 `app/backend/contract.zu` defines four classes.
 
 **`Backend`** is the platform. It starts and runs the event loop, asks
-for frames, runs timers, creates windows and views, sets the menu bar,
+for frames, runs timers, says how often the display refreshes
+(`frame_interval()`, which animations draw at), creates windows and views, sets the menu bar,
 shows dialogs, and reaches the clipboard, the appearance, the screens
 and the system's standard actions (`perform_role()`).
 

@@ -1,0 +1,371 @@
+import test { * }
+
+import ..app { * }
+import ..app.testing { WidgetTester }
+
+describe('Curve', @{
+  it('starts at 0 and ends at 1', @{
+    for curve in [
+      Curve.LINEAR, Curve.EASE, Curve.EASE_IN, Curve.EASE_OUT,
+      Curve.EASE_IN_OUT, Curve.BACK_IN, Curve.BACK_OUT, Curve.BOUNCE_OUT,
+    ] {
+      expect(curve.transform(0)).to_be(0)
+      expect(curve.transform(1)).to_be(1)
+      expect(curve.transform(-1)).to_be(0)
+      expect(curve.transform(2)).to_be(1)
+    }
+  })
+
+  it('eases as named', @{
+    expect(Curve.LINEAR.transform(0.3)).to_be(0.3)
+    expect(Curve.EASE_IN.transform(0.5)).to_be_less_than(0.5)
+    expect(Curve.EASE_OUT.transform(0.5)).to_be_greater_than(0.5)
+    expect(Curve.EASE_IN_OUT.transform(0.5)).to_be_close_to(0.5, 6)
+    expect(Curve.BACK_OUT.transform(0.7)).to_be_greater_than(1)
+    expect(Curve.BACK_IN.transform(0.2)).to_be_less_than(0)
+  })
+
+  it('solves a cubic curve as CSS does', @{
+    # cubic-bezier(0.25, 0.1, 0.25, 1) is 0.8024 at 0.5, as browsers draw
+    # it.
+    expect(Curve.cubic(0.25, 0.1, 0.25, 1).transform(0.5)).to_be_close_to(
+      0.8024, 3,
+    )
+    expect(@{
+      Curve.cubic(1.2, 0, 0, 1)
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('steps, staggers and flips', @{
+    expect(Curve.steps(4).transform(0.3)).to_be(0.25)
+    var late = Curve.interval(0.5, 1)
+    expect(late.transform(0.25)).to_be(0)
+    expect(late.transform(0.75)).to_be(0.5)
+    var flipped = Curve.EASE_IN.flipped()
+    expect(flipped.transform(0.3)).to_be_close_to(
+      1 - Curve.EASE_IN.transform(0.7), 9,
+    )
+    expect(Curve.EASE_OUT.name).to_be('Curve.EASE_OUT')
+    expect(late.name).to_be('Curve.interval(0.5, 1, Curve.LINEAR)')
+    expect(@{
+      Curve.interval(0.6, 0.2)
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Curve.steps(0)
+    }).to_raise_instance_of(ValueError)
+  })
+
+  it('takes a function', @{
+    expect(Curve(@(t) => t * t).transform(0.5)).to_be(0.25)
+  })
+})
+
+describe('lerp and Tween', @{
+  it('interpolates numbers and geometry', @{
+    expect(lerp(10, 20, 0.25)).to_be(12.5)
+    expect(lerp(Point(0, 0), Point(10, 20), 0.5)).to_equal(Point(5, 10))
+    expect(lerp(Size(10, 10), Size(20, 30), 0.5)).to_equal(Size(15, 20))
+    expect(lerp(Alignment.TOP_LEFT, Alignment.BOTTOM_RIGHT, 0.5)).to_equal(
+      Alignment.CENTER,
+    )
+  })
+
+  it('keeps insets and colours in range when overshooting', @{
+    var insets = lerp(EdgeInsets.all(10), EdgeInsets.all(0), 1.5)
+    expect(insets).to_equal(EdgeInsets.all(0))
+    expect(lerp(Color.BLACK, Color.WHITE, 2)).to_equal(Color.WHITE)
+  })
+
+  it('refuses what it cannot interpolate', @{
+    expect(can_lerp('a', 'b')).to_be_false()
+    expect(can_lerp(Color.RED, 1)).to_be_false()
+    expect(@{
+      lerp('a', 'b', 0.5)
+    }).to_raise_instance_of(TypeError)
+    expect(@{
+      Tween(0, Color.RED)
+    }).to_raise_instance_of(TypeError)
+  })
+
+  it('maps progress through its curve', @{
+    var width = Tween(100, 200, Curve.steps(2))
+    expect(width.at(0.4)).to_be(100)
+    expect(width.at(0.6)).to_be(150)
+    expect(width.at(1)).to_be(200)
+    expect(Tween(0, 10).at(5)).to_be(10)
+  })
+})
+
+describe('Animation', @{
+  var t = nil
+
+  before_each(@{
+    t = WidgetTester().pump_widget(Text('x'))
+  })
+
+  after_each(@{
+    t.dispose()
+  })
+
+  it('runs forward over its duration and resolves when done', @{
+    var animation = Animation({ duration: Duration.seconds(1) })
+    var outcomes = []
+    animation.forward().then(@(finished) {
+      outcomes.append(finished)
+    })
+    expect(animation.is_animating()).to_be_true()
+    t.advance(0.5)
+    expect(animation.value()).to_be_close_to(0.5)
+    expect(outcomes).to_be_empty()
+    t.advance(0.6)
+    expect(animation.value()).to_be(1)
+    expect(animation.is_animating()).to_be_false()
+    expect(outcomes).to_equal([true])
+    animation.dispose()
+  })
+
+  it('takes only the share of its duration a shorter run needs', @{
+    var animation = Animation({
+      duration: Duration.seconds(1),
+      reverse_duration: Duration.seconds(2),
+      value: 0.5,
+    })
+    var done = []
+    animation.forward().then(@(finished) {
+      done.append('forward')
+    })
+    t.advance(0.55)
+    expect(done).to_equal(['forward'])
+    animation.reverse()
+    t.advance(1)
+    expect(animation.value()).to_be_close_to(0.5)
+    animation.dispose()
+  })
+
+  it('resolves false when stopped or interrupted', @{
+    var animation = Animation({ duration: Duration.seconds(1) })
+    var outcomes = []
+    animation.forward().then(@(finished) {
+      outcomes.append(finished)
+    })
+    t.advance(0.25)
+    animation.animate_to(0.1, { duration: Duration.ms(100) }).then(
+      @(finished) {
+        outcomes.append(finished)
+      },
+    )
+    t.advance(0.2)
+    expect(animation.value()).to_be(0.1)
+    animation.forward().then(@(finished) {
+      outcomes.append(finished)
+    })
+    animation.stop()
+    t.pump()
+    expect(outcomes).to_equal([false, true, false])
+    animation.dispose()
+  })
+
+  it('animates to a value along a curve', @{
+    var animation = Animation({ duration: Duration.seconds(1) })
+    animation.animate_to(
+      0.8, { duration: Duration.seconds(1), curve: Curve.steps(2) },
+    )
+    t.advance(0.3)
+    expect(animation.value()).to_be(0)
+    t.advance(0.3)
+    expect(animation.value()).to_be(0.4)
+    animation.dispose()
+  })
+
+  it('repeats a number of times, back and forth', @{
+    var animation = Animation({ duration: Duration.ms(500) })
+    var outcomes = []
+    animation.repeat({ reverse: true, count: 3 }).then(@(finished) {
+      outcomes.append(finished)
+    })
+    t.advance(0.75)
+    expect(animation.value()).to_be_close_to(0.5)
+    t.advance(0.85)
+    expect(outcomes).to_equal([true])
+    expect(animation.value()).to_be(1)
+    animation.dispose()
+  })
+
+  it('repeats from the start without reverse until stopped', @{
+    var animation = Animation({ duration: Duration.ms(500), value: 1 })
+    animation.repeat()
+    t.advance(0.25)
+    expect(animation.value()).to_be_close_to(0.5)
+    t.advance(0.5)
+    expect(animation.value()).to_be_close_to(0.5)
+    animation.stop()
+    expect(animation.is_animating()).to_be_false()
+    animation.dispose()
+  })
+
+  it('stops drawing frames once nothing animates', @{
+    var animation = Animation({ duration: Duration.ms(100) })
+    animation.forward()
+    t.advance(0.2)
+    var frames = t.runtime.frames()
+    t.advance(1)
+    expect(t.runtime.frames()).to_be(frames)
+    animation.dispose()
+  })
+
+  it('draws one frame for each refresh of the display', @{
+    var animation = Animation({ duration: Duration.seconds(1) })
+    t.pump_widget(Observer(
+      animation, @(context) => Text('at ${animation.value()}'),
+    ))
+    animation.forward()
+    t.pump()
+    var frames = t.runtime.frames()
+    t.advance(0.5)
+    expect(t.runtime.frames() - frames).to_be(30)
+    animation.dispose()
+  })
+
+  it('rebuilds an Observer on every step', @{
+    var animation = Animation({ duration: Duration.seconds(1) })
+    t.pump_widget(Observer(
+      animation, @(context) => Text('at ${(animation.value() * 10).round()}'),
+    ))
+    animation.forward()
+    t.advance(0.3)
+    expect(t.find_text('at 3')).to_have_length(1)
+    animation.dispose()
+  })
+
+  it('jumps with set() and keeps within its range', @{
+    var animation = Animation({ lower: 10, upper: 20 })
+    expect(animation.value()).to_be(10)
+    animation.set(50)
+    expect(animation.value()).to_be(20)
+    expect(@{
+      animation.forward()
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      Animation({ lower: 1, upper: 1 })
+    }).to_raise_instance_of(ValueError)
+    animation.dispose()
+  })
+})
+
+describe('Animation without an application', @{
+  it('cannot run', @{
+    var animation = Animation({ duration: Duration.ms(10) })
+    expect(@{
+      animation.forward()
+    }).to_raise_instance_of(LifecycleError)
+  })
+})
+
+class Toggle < StatefulWidget {
+  var build_child
+
+  @new(build_child: function) {
+    self.build_child = build_child
+  }
+
+  create_state() {
+    return ToggleState()
+  }
+}
+
+class ToggleState < State {
+  var on = false
+
+  flip() {
+    self.set_state(@{
+      self.on = !self.on
+    })
+  }
+
+  build(context) {
+    return self.widget.build_child(self.on)
+  }
+}
+
+describe('AnimatedBox', @{
+  it('moves its size and colour to new ones', @{
+    var ended = []
+    var t = WidgetTester().pump_widget(Align(Toggle(@(on) => AnimatedBox({
+      duration: Duration.seconds(1),
+      curve: Curve.LINEAR,
+      width: on ? 200 : 100,
+      height: 20,
+      color: on ? Color.WHITE : Color.BLACK,
+      accessibility_identifier: 'box',
+      on_end: @{
+        ended.append(true)
+      },
+    })), { alignment: Alignment.TOP_LEFT }))
+    expect(t.one('box').window_frame().width).to_be(100)
+    t.state_of(ToggleState).flip()
+    t.pump()
+    t.advance(0.5)
+    expect(t.one('box').window_frame().width).to_be_close_to(150, 0)
+    expect(t.one('box').props.color.red).to_be_close_to(127.5, -1)
+    t.advance(0.6)
+    expect(t.one('box').window_frame().width).to_be(200)
+    expect(t.one('box').props.color).to_equal(Color.WHITE)
+    expect(ended).to_equal([true])
+    t.dispose()
+  })
+
+  it('moves on from where it is when changed on the way', @{
+    var t = WidgetTester().pump_widget(Align(Toggle(@(on) => AnimatedBox({
+      duration: Duration.seconds(1),
+      curve: Curve.LINEAR,
+      width: on ? 200 : 100,
+      height: 10,
+      accessibility_identifier: 'box',
+    })), { alignment: Alignment.TOP_LEFT }))
+    var toggle = t.state_of(ToggleState)
+    toggle.flip()
+    t.pump()
+    t.advance(0.5)
+    toggle.flip()
+    t.pump()
+    t.advance(0.5)
+    expect(t.one('box').window_frame().width).to_be_close_to(125, 0)
+    t.dispose()
+  })
+
+  it('needs a duration and takes only Box options', @{
+    expect(@{
+      AnimatedBox({ width: 10 })
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      AnimatedBox({ duration: Duration.ms(10), colour: Color.RED })
+    }).to_raise_instance_of(OptionError)
+  })
+})
+
+describe('AnimatedValue', @{
+  it('builds from the value on its way to a new one', @{
+    var t = WidgetTester().pump_widget(Toggle(@(on) => AnimatedValue(
+      on ? 10 : 0, @(context, value) => Text('value ${value.round()}'), {
+        duration: Duration.seconds(1),
+        curve: Curve.LINEAR,
+      },
+    )))
+    expect(t.find_text('value 0')).to_have_length(1)
+    t.state_of(ToggleState).flip()
+    t.pump()
+    t.advance(0.4)
+    expect(t.find_text('value 4')).to_have_length(1)
+    t.advance(1)
+    expect(t.find_text('value 10')).to_have_length(1)
+    t.dispose()
+  })
+
+  it('refuses a value it cannot move', @{
+    expect(@{
+      AnimatedValue('x', @(context, value) => Text(value), {
+        duration: Duration.ms(10),
+      })
+    }).to_raise_instance_of(TypeError)
+  })
+})

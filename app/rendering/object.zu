@@ -142,6 +142,25 @@ class PipelineOwner {
   }
 
   /**
+   * Whether anything is waiting to be laid out, committed or destroyed.
+   *
+   * @returns bool
+   */
+  has_work() {
+    if !self._needs_layout.is_empty() or !self._pending_destroy.is_empty() {
+      return true
+    }
+
+    for root in self.roots {
+      if root.needs_commit or root.child_needs_commit {
+        return true
+      }
+    }
+
+    return false
+  }
+
+  /**
    * Lays out every queued relayout boundary, shallowest first.
    */
   flush_layout() {

@@ -1,0 +1,355 @@
+/**
+ * Widgets that animate on their own: give them a new value and they move
+ * to it, with no animation to set up or dispose.
+ */
+
+import ..foundation { Key, Duration, values_equal, check_options }
+import ..widgets { StatefulWidget, State, Box, box_options }
+import .curve { Curve }
+import .tween { lerp, can_lerp }
+import .animation { Animation }
+
+/**
+ * Moves to each new `value` it is built with, over `duration`, and builds
+ * its child from the value on the way. The value may be anything `lerp()`
+ * takes: a number, `Color`, `Point`, `Size`, `Rect`, `EdgeInsets`,
+ * `Alignment`, `Border` or `Shadow`. A change while it moves starts a new
+ * move from wherever it is.
+ *
+ * ```zuri,ignore
+ * AnimatedValue(self.progress, @(context, value) => ProgressBar({ value }), {
+ *   duration: Duration.ms(300),
+ * })
+ * ```
+ */
+class AnimatedValue < StatefulWidget {
+
+  /**
+   * The value to move to.
+   *
+   * @type any
+   */
+  var value
+
+  /**
+   * Called with the context and the value on the way; returns a widget.
+   *
+   * @type function
+   */
+  var builder
+
+  /**
+   * @type Duration
+   */
+  var duration
+
+  /**
+   * @type Curve
+   */
+  var curve
+
+  /**
+   * @type ?function
+   */
+  var on_end
+
+  /**
+   * @param any value
+   * @param function builder: called with a context and the current
+   *    value; returns a widget.
+   * @param dict options: `duration` (required), `curve` (`Curve.EASE`),
+   *    `on_end`, called when a move finishes, and `key`.
+   * @throws ValueError When there is no duration
+   * @throws TypeError When the value cannot be interpolated
+   * @constructor
+   */
+  @new(value, builder: function, options: dict) {
+    var o = check_options(
+      options, 'AnimatedValue',
+      { key: Key, duration: Duration, curve: Curve, on_end: 'function' },
+    )
+
+    if o.get('duration') == nil {
+      raise ValueError('an AnimatedValue needs a duration')
+    }
+
+    if !can_lerp(value, value) {
+      raise TypeError('an AnimatedValue cannot move a ${typeof(value)}')
+    }
+
+    self.key = o.get('key')
+    self.value = value
+    self.builder = builder
+    self.duration = o.get('duration')
+    self.curve = o.get('curve', Curve.EASE)
+    self.on_end = o.get('on_end')
+  }
+
+  create_state() {
+    return AnimatedValueState()
+  }
+}
+
+/**
+ * @internal
+ */
+class AnimatedValueState < State {
+  var _animation
+  var _listener
+  var _from
+  var _to
+
+  init_state() {
+    self._from = self.widget.value
+    self._to = self.widget.value
+    self._animation = _follow(self, self.widget.duration)
+  }
+
+  did_update_widget(previous) {
+    self._animation.duration = self.widget.duration
+
+    if !values_equal(self._to, self.widget.value) {
+      self._from = self.current()
+      self._to = self.widget.value
+      _restart(self, self._animation)
+    }
+  }
+
+  /**
+   * The value on the way.
+   *
+   * @returns any
+   */
+  current() {
+    if !can_lerp(self._from, self._to) {
+      return self._to
+    }
+
+    return lerp(
+      self._from, self._to,
+      self.widget.curve.transform(self._animation.value()),
+    )
+  }
+
+  build(context) {
+    return self.widget.builder(context, self.current())
+  }
+
+  dispose() {
+    self._animation.dispose()
+  }
+}
+
+var _OWN_OPTIONS = { duration: Duration, curve: Curve, on_end: 'function' }
+
+# The options of Box that AnimatedBox moves rather than switches.
+var _MOVING = [
+  'width', 'height', 'min_width', 'max_width', 'min_height', 'max_height',
+  'width_factor', 'height_factor', 'padding', 'margin', 'alignment', 'color',
+  'border', 'radius', 'shadow', 'opacity',
+]
+
+/**
+ * A `Box` that moves to its new size, spacing, alignment, colour, border,
+ * corner radius, shadow and opacity whenever it is built with new ones,
+ * over `duration`. Its child and its other options change at once.
+ *
+ * A size that appears or disappears, such as `width` going from unset to
+ * 100, changes at once too, since there is nothing to move from.
+ *
+ * ```zuri,ignore
+ * AnimatedBox({
+ *   duration: Duration.ms(200),
+ *   width: self.open ? 240 : 0,
+ *   color: self.open ? Color.system('control_background') : Color.TRANSPARENT,
+ *   child: Sidebar(),
+ * })
+ * ```
+ */
+class AnimatedBox < StatefulWidget {
+
+  /**
+   * The options passed on to the `Box`.
+   *
+   * @type dict
+   */
+  var box = {}
+
+  /**
+   * @type Duration
+   */
+  var duration
+
+  /**
+   * @type Curve
+   */
+  var curve
+
+  /**
+   * @type ?function
+   */
+  var on_end
+
+  /**
+   * @param dict options: every option `Box` takes, with `duration`
+   *    (required), `curve` (`Curve.EASE`) and `on_end`, called when a
+   *    move finishes.
+   * @throws ValueError When there is no duration
+   * @constructor
+   */
+  @new(options: dict) {
+    var spec = box_options()
+
+    for name, type in _OWN_OPTIONS {
+      spec[name] = type
+    }
+
+    var o = check_options(options, 'AnimatedBox', spec)
+
+    if o.get('duration') == nil {
+      raise ValueError('an AnimatedBox needs a duration')
+    }
+
+    self.key = o.get('key')
+    self.duration = o.get('duration')
+    self.curve = o.get('curve', Curve.EASE)
+    self.on_end = o.get('on_end')
+    var box = {}
+
+    for name, value in o {
+      if !_OWN_OPTIONS.contains(name) and name != 'key' {
+        box[name] = value
+      }
+    }
+
+    self.box = box
+  }
+
+  create_state() {
+    return AnimatedBoxState()
+  }
+}
+
+/**
+ * @internal
+ */
+class AnimatedBoxState < State {
+  var _animation
+  var _listener
+  var _from = {}
+  var _to = {}
+
+  init_state() {
+    self._to = _targets(self.widget.box)
+    self._from = self._to
+    self._animation = _follow(self, self.widget.duration)
+  }
+
+  did_update_widget(previous) {
+    self._animation.duration = self.widget.duration
+    var targets = _targets(self.widget.box)
+
+    if !values_equal(self._to, targets) {
+      self._from = self.current()
+      self._to = targets
+      _restart(self, self._animation)
+    }
+  }
+
+  /**
+   * The moving options as they are now.
+   *
+   * @returns dict
+   */
+  current() {
+    var t = self.widget.curve.transform(self._animation.value())
+    var values = {}
+
+    for name, end in self._to {
+      var start = self._from.get(name)
+      values[name] = _movable(start, end)
+        ? _hold(name, lerp(start, end, t))
+        : end
+    }
+
+    return values
+  }
+
+  build(context) {
+    var options = {}
+
+    for name, value in self.widget.box {
+      if !_MOVING.contains(name) {
+        options[name] = value
+      }
+    }
+
+    for name, value in self.current() {
+      options[name] = value
+    }
+
+    return Box(options)
+  }
+
+  dispose() {
+    self._animation.dispose()
+  }
+}
+
+# An animation, resting at its end, that rebuilds `state` as it runs.
+def _follow(state, duration: Duration) {
+  var animation = Animation({ duration, value: 1 })
+  animation.add_listener(@{
+    if state.mounted() {
+      state.set_state()
+    }
+  })
+  return animation
+}
+
+# Runs `animation` from the start, and calls the widget's `on_end` when
+# the run finishes rather than being interrupted.
+def _restart(state, animation) {
+  animation.forward(0).then(@(finished) {
+    if finished and state.mounted() and state.widget.on_end != nil {
+      state.widget.on_end()
+    }
+  })
+}
+
+def _targets(options: dict) {
+  var targets = {}
+
+  for name in _MOVING {
+    if options.get(name) != nil {
+      targets[name] = options[name]
+    }
+  }
+
+  return targets
+}
+
+def _movable(start, end) {
+  if start == nil or !can_lerp(start, end) {
+    return false
+  }
+
+  if is_number(start) {
+    return start.is_finite() and end.is_finite()
+  }
+
+  return true
+}
+
+# Keeps a moved option in its range when a curve overshoots.
+def _hold(name: string, value) {
+  if name == 'opacity' {
+    return value.max(0).min(1)
+  }
+
+  if is_number(value) {
+    return value.max(0)
+  }
+
+  return value
+}

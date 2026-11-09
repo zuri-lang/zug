@@ -1,0 +1,10 @@
+/**
+ * Animation: `Animation` moves a value over time, `Tween` maps it onto a
+ * range of values, `Curve` eases it, and `AnimatedBox` and
+ * `AnimatedValue` animate changes on their own.
+ */
+
+import @.curve { * }
+import @.tween { * }
+import @.animation { * }
+import @.animated { * }

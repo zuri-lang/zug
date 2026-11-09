@@ -406,6 +406,17 @@ class Backend {
   }
 
   /**
+   * The seconds between two refreshes of the display, which is how often
+   * frames are drawn while something animates. A backend that cannot tell
+   * keeps this default of 1/60.
+   *
+   * @returns number
+   */
+  frame_interval() {
+    return 1 / 60
+  }
+
+  /**
    * Creates a window, hidden until `show()`.
    *
    * @param dict props: the `window` kind's props.

@@ -248,6 +248,16 @@ var _BOX_OPTIONS = host_options({
 })
 
 /**
+ * The options `Box` takes, for widgets that pass them on to one.
+ *
+ * @internal
+ * @returns dict
+ */
+def box_options() {
+  return _BOX_OPTIONS.clone()
+}
+
+/**
  * A box: size, spacing, alignment and decoration around a child.
  *
  * Sizes are in points. `width` and `height` fix a dimension, the

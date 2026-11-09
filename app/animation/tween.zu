@@ -1,0 +1,170 @@
+/**
+ * Values between two others: `lerp()` for one step, `Tween` for a range
+ * an animation moves along.
+ */
+
+import ..foundation {
+  Point, Size, Rect, EdgeInsets, Alignment, Color, values_equal,
+}
+import ..painting { Border, Shadow }
+import .curve { Curve }
+
+/**
+ * Whether `lerp()` can find values between `a` and `b`: two numbers, or
+ * two `Color`s, `Point`s, `Size`s, `Rect`s, `EdgeInsets`, `Alignment`s,
+ * `Border`s or `Shadow`s.
+ *
+ * @param any a
+ * @param any b
+ * @returns bool
+ */
+def can_lerp(a, b) {
+  if is_number(a) and is_number(b) {
+    return true
+  }
+
+  for type in [
+    Color, Point, Size, Rect, EdgeInsets, Alignment, Border, Shadow,
+  ] {
+    if instance_of(a, type) and instance_of(b, type) {
+      return true
+    }
+  }
+
+  return false
+}
+
+/**
+ * The value `t` of the way from `a` to `b`: `a` at 0, `b` at 1, and
+ * beyond them below 0 and above 1. Sizes, insets, border widths and
+ * shadow blurs stop at zero rather than go negative, and colours stop at
+ * their ends. A system colour has no fixed value, so it switches halfway.
+ *
+ * @param any a
+ * @param any b
+ * @param number t
+ * @returns any
+ * @throws TypeError When the two cannot be interpolated; see can_lerp()
+ */
+def lerp(a, b, t: number) {
+  if is_number(a) and is_number(b) {
+    return a + (b - a) * t
+  }
+
+  if instance_of(a, Color) and instance_of(b, Color) {
+    return Color.lerp(a, b, t)
+  }
+
+  if instance_of(a, Point) and instance_of(b, Point) {
+    return Point(_mix(a.x, b.x, t), _mix(a.y, b.y, t))
+  }
+
+  if instance_of(a, Size) and instance_of(b, Size) {
+    return Size(_grow(a.width, b.width, t), _grow(a.height, b.height, t))
+  }
+
+  if instance_of(a, Rect) and instance_of(b, Rect) {
+    return Rect(
+      _mix(a.x, b.x, t), _mix(a.y, b.y, t), _grow(a.width, b.width, t),
+      _grow(a.height, b.height, t),
+    )
+  }
+
+  if instance_of(a, EdgeInsets) and instance_of(b, EdgeInsets) {
+    return EdgeInsets(
+      _grow(a.left, b.left, t), _grow(a.top, b.top, t),
+      _grow(a.right, b.right, t), _grow(a.bottom, b.bottom, t),
+    )
+  }
+
+  if instance_of(a, Alignment) and instance_of(b, Alignment) {
+    return Alignment(_mix(a.x, b.x, t), _mix(a.y, b.y, t))
+  }
+
+  if instance_of(a, Border) and instance_of(b, Border) {
+    return Border(_grow(a.width, b.width, t), Color.lerp(a.color, b.color, t))
+  }
+
+  if instance_of(a, Shadow) and instance_of(b, Shadow) {
+    return Shadow({
+      color: Color.lerp(a.color, b.color, t),
+      blur: _grow(a.blur, b.blur, t),
+      x: _mix(a.x, b.x, t),
+      y: _mix(a.y, b.y, t),
+    })
+  }
+
+  if values_equal(a, b) {
+    return a
+  }
+
+  raise TypeError('cannot interpolate from ${typeof(a)} to ${typeof(b)}')
+}
+
+def _mix(a: number, b: number, t: number) {
+  return a + (b - a) * t
+}
+
+def _grow(a: number, b: number, t: number) {
+  return (a + (b - a) * t).max(0)
+}
+
+/**
+ * A range of values for an animation to move along, from `begin` to
+ * `end`, eased by a curve.
+ *
+ * ```zuri
+ * import zug { Tween, Curve, Color }
+ *
+ * var width = Tween(80, 240, Curve.EASE_OUT)
+ * var tint = Tween(Color.WHITE, Color.RED)
+ * echo width.at(0.5)
+ * echo tint.at(0.25)
+ * ```
+ */
+class Tween {
+
+  /**
+   * @type any
+   */
+  var begin
+
+  /**
+   * @type any
+   */
+  var end
+
+  /**
+   * @type Curve
+   */
+  var curve
+
+  /**
+   * @param any begin
+   * @param any end: of the same kind as `begin`; see `can_lerp()`.
+   * @param ?Curve curve: `Curve.LINEAR` when left out.
+   * @throws TypeError When begin and end cannot be interpolated
+   * @constructor
+   */
+  @new(begin, end, curve: ?Curve) {
+    if !can_lerp(begin, end) {
+      raise TypeError('a Tween cannot run from ${typeof(begin)} to ${typeof(end)}')
+    }
+
+    self.begin = begin
+    self.end = end
+    self.curve = curve == nil ? Curve.LINEAR : curve
+  }
+
+  /**
+   * The value at progress `t`, eased by the curve. Progress is held
+   * within 0 to 1, though a curve such as `Curve.BACK_OUT` still carries
+   * the value past `end` on the way.
+   *
+   * @param number t
+   * @returns any
+   */
+  at(t: number) {
+    return lerp(self.begin, self.end, self.curve.transform(t))
+  }
+}

@@ -117,6 +117,9 @@ class Runtime < BackendDelegate {
   var _started = false
   var _post_frame = []
   var _frames = 0
+  var _tickers = []
+  var _ticker_timer
+  var _frame_time = 0
 
   /**
    * @param Backend backend
@@ -219,6 +222,9 @@ class Runtime < BackendDelegate {
       }
     }
 
+    self._tickers = []
+    self._stop_ticking()
+
     if _current == self {
       _current = nil
       set_microtask_waker(nil)
@@ -229,7 +235,10 @@ class Runtime < BackendDelegate {
    * Asks for a frame, once however often it is called before the frame.
    */
   request_frame() {
-    if self._frame_requested or !self._started {
+    # A frame being drawn builds, lays out and commits whatever is asked
+    # for while it runs. Work it leaves undone gets a frame of its own
+    # when it ends.
+    if self._frame_requested or !self._started or self._in_frame {
       return
     }
 
@@ -265,6 +274,77 @@ class Runtime < BackendDelegate {
     self.request_frame()
   }
 
+  /**
+   * Calls `callback` with the frame time at the start of every frame,
+   * until it is removed. While any ticker is registered, frames come at
+   * the display's rate whether or not anything else changed, which is
+   * what drives animations.
+   *
+   * @param function callback: called with the frame time, in the
+   *    seconds of `backend.now()`.
+   */
+  add_ticker(callback: function) {
+    if self._tickers.contains(callback) {
+      return
+    }
+
+    self._tickers.append(callback)
+
+    if self._ticker_timer == nil and self._started {
+      self._ticker_timer = self.backend.start_timer(
+        self.backend.frame_interval(), true, @{
+          self.request_frame()
+        },
+      )
+    }
+
+    self.request_frame()
+  }
+
+  /**
+   * Stops calling a ticker. Frames stop coming once no ticker is left.
+   *
+   * @param function callback
+   */
+  remove_ticker(callback: function) {
+    var index = self._tickers.index_of(callback)
+
+    if index >= 0 {
+      self._tickers.remove_at(index)
+    }
+
+    if self._tickers.is_empty() {
+      self._stop_ticking()
+    }
+  }
+
+  /**
+   * The time the current frame, or the last one, started, in the seconds
+   * of `backend.now()`.
+   *
+   * @returns number
+   */
+  frame_time() {
+    return self._frame_time
+  }
+
+  _stop_ticking() {
+    if self._ticker_timer != nil {
+      self._ticker_timer.cancel()
+      self._ticker_timer = nil
+    }
+  }
+
+  _tick() {
+    for ticker in self._tickers.clone() {
+      catch {
+        ticker(self._frame_time)
+      } as error {
+        report_error(error, 'running an animation')
+      }
+    }
+  }
+
   on_frame() {
     self._frame_requested = false
     self.draw_frame()
@@ -280,6 +360,13 @@ class Runtime < BackendDelegate {
 
     self._in_frame = true
     self._frames++
+    self._frame_time = self.backend.now()
+
+    if !self._tickers.is_empty() {
+      self._tick()
+    }
+
+    var failed = false
 
     catch {
       run_microtasks()
@@ -290,6 +377,7 @@ class Runtime < BackendDelegate {
       self.build_owner.finalize_tree()
       self.pipeline.flush_commit()
     } as error {
+      failed = true
       report_error(error, 'drawing a frame')
     }
 
@@ -308,7 +396,13 @@ class Runtime < BackendDelegate {
       }
     }
 
-    if has_microtasks() {
+    # A frame that failed would fail the same way again at once, so it
+    # waits for the next change instead.
+    if has_microtasks()
+      or (!failed
+        and (self._pending_root != nil
+          or self.build_owner.has_dirty()
+          or self.pipeline.has_work())) {
       self.request_frame()
     }
 

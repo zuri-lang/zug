@@ -1,0 +1,90 @@
+/**
+ * Animation: a panel that eases open and shut, a level that glides to
+ * each new value, and a dot that pulses until the window closes.
+ *
+ *     zuri run examples/animation.zu
+ *
+ * An application outside this repository writes `import zug { * }`.
+ */
+
+import ..app { * }
+
+var _LEVELS = [0.2, 0.9, 0.5, 0.05]
+
+class Demo < StatefulWidget {
+  create_state() {
+    return DemoState()
+  }
+}
+
+class DemoState < State {
+  var open = false
+  var step = 0
+  var pulse = Animation({ duration: Duration.ms(900) })
+  var glow = Tween(0.25, 1, Curve.EASE_IN_OUT)
+
+  init_state() {
+    self.pulse.repeat({ reverse: true })
+  }
+
+  dispose() {
+    self.pulse.dispose()
+  }
+
+  build(context) {
+    var level = _LEVELS[self.step % _LEVELS.length()]
+
+    return Padding(EdgeInsets.all(16), Column([
+      Row([
+        Button(self.open ? 'Close the panel' : 'Open the panel', {
+          on_pressed: @{
+            self.set_state(@{
+              self.open = !self.open
+            })
+          },
+        }),
+        Button('Next level', { on_pressed: @{
+          self.set_state(@{
+            self.step++
+          })
+        } }),
+        Spacer(),
+        Observer(self.pulse, @(context) => Box({
+          width: 14,
+          height: 14,
+          radius: 7,
+          color: Color.system('accent'),
+          opacity: self.glow.at(self.pulse.value()),
+        })),
+      ], { spacing: 8 }),
+      AnimatedBox({
+        duration: Duration.ms(350),
+        curve: Curve.EASE_OUT,
+        height: self.open ? 110 : 0,
+        color: Color.system('accent'),
+        opacity: self.open ? 1 : 0,
+        radius: 8,
+        clip: true,
+        padding: EdgeInsets.all(12),
+        child: Text('Everything in here eases in and out with the panel.', {
+          style: TextStyle({ color: Color.WHITE, size: 14 }),
+        }),
+      }),
+      AnimatedValue(level, @(context, value) => Column([
+        ProgressBar({ value }),
+        Text('Level ${(value * 100).round()}%', {
+          style: TextStyle({ monospaced_digits: true }),
+        }),
+      ], { spacing: 4, align_items: AlignItems.STRETCH }), {
+        duration: Duration.ms(600),
+      }),
+    ], { spacing: 14, align_items: AlignItems.STRETCH }))
+  }
+}
+
+if __root__ == __file__ {
+  run_app(App({
+    title: 'Animation',
+    windows: [Window('Animation', Demo(), { size: Size(420, 260) })],
+  }))
+}

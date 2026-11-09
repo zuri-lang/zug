@@ -43,5 +43,6 @@ import @.painting { * }
 import @.backend { * }
 import @.rendering { * }
 import @.widgets { * }
+import @.animation { * }
 import @.services { * }
 import .backends

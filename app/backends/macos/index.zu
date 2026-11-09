@@ -37,6 +37,8 @@ import ._window { MacWindow }
 import ._menus { build_menu_bar, default_menus, role_action }
 import ._dialogs { show_alert, pick_files, save_file }
 
+var _responds = typed(ffi.bool, [ffi.ptr])
+
 var _FACTORIES = {
   text: @(backend, props, dispatch) => MacText(backend, props, dispatch),
   button: @(backend, props, dispatch) => MacButton(backend, props, dispatch),
@@ -272,6 +274,25 @@ class MacBackend < Backend {
 
   now() {
     return now()
+  }
+
+  # The main screen's highest refresh rate, which macOS 12 and later
+  # report; ProMotion displays run at 120.
+  frame_interval() {
+    var screen = send(cls('NSScreen'), 'mainScreen')
+
+    if screen != nil
+      and _responds(
+        screen, sel('respondsToSelector:'), sel('maximumFramesPerSecond'),
+      ) {
+      var rate = send_int(screen, 'maximumFramesPerSecond')
+
+      if rate > 0 {
+        return 1 / rate
+      }
+    }
+
+    return 1 / 60
   }
 
   create_window(props: dict, dispatch: function) {

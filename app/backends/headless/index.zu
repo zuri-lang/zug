@@ -686,11 +686,16 @@ class HeadlessTimer < TimerHandle {
   var task
   var active = true
 
+  # When the timer started, and how many times it has fired.
+  var origin = 0
+  var fired = 0
+
   @new(due: number, interval: number, repeats: bool, task: function) {
     self.due = due
     self.interval = interval
     self.repeats = repeats
     self.task = task
+    self.origin = due - interval
   }
 
   cancel() {
@@ -1011,9 +1016,11 @@ class HeadlessBackend < Backend {
     while true {
       var next = nil
 
+      # A timer due within a nanosecond of the target counts as due, so
+      # rounding in the due times does not hold back a tick.
       for timer in self._timers {
         if timer.active
-          and timer.due <= target
+          and timer.due <= target + 0.000000001
           and (next == nil or timer.due < next.due) {
           next = timer
         }
@@ -1023,10 +1030,13 @@ class HeadlessBackend < Backend {
         break
       }
 
-      self._clock = next.due
+      self._clock = next.due.max(self._clock)
 
       if next.repeats {
-        next.due += next.interval.max(0.001)
+        # Each due time is counted from the start, so rounding does not
+        # build up from tick to tick.
+        next.fired++
+        next.due = next.origin + next.interval.max(0.001) * (next.fired + 1)
       } else {
         next.active = false
       }
