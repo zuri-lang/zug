@@ -334,6 +334,142 @@ describe('Grid', @{
   })
 })
 
+describe('Table', @{
+  it('sizes each column by its rule and each row by its tallest cell', @{
+    var t = show(Table([
+      [block('a', 40, 20), block('b', 10, 10), block('c', 10, 30)],
+      [block('d', 60, 10)],
+    ], {
+      columns: [ColumnWidth.fit(), ColumnWidth.fixed(50), ColumnWidth.flex()],
+      column_spacing: 10,
+      row_spacing: 5,
+    }))
+    expect(frame(t, 'a')).to_equal(Rect(0, 0, 60, 20))
+    expect(frame(t, 'b')).to_equal(Rect(70, 0, 50, 10))
+    expect(frame(t, 'c')).to_equal(Rect(130, 0, 170, 30))
+    expect(frame(t, 'd')).to_equal(Rect(0, 35, 60, 10))
+    t.dispose()
+  })
+
+  it('shares the spare width among flexible columns by factor', @{
+    var t = show(Table(
+      [[fill('a'), fill('b'), fill('c')]], {
+        columns: [
+          ColumnWidth.flex(1), ColumnWidth.flex(3), ColumnWidth.fraction(0.5),
+        ],
+      },
+    ))
+    expect(frame(t, 'a').width).to_be(37.5)
+    expect(frame(t, 'b')).to_equal(Rect(37.5, 0, 112.5, 0))
+    expect(frame(t, 'c').width).to_be(150)
+    t.dispose()
+  })
+
+  it('places cells within their row', @{
+    var cases = { start: 0, center: 10, end: 20 }
+
+    for align_items, expected in cases {
+      var t = show(Table(
+        [[block('short', 10, 10), block('tall', 10, 30)]], { align_items },
+      ))
+      expect(frame(t, 'short').y).to_be(expected)
+      t.dispose()
+    }
+
+    var t = show(Table([[block('short', 10, 10), block('tall', 10, 30)]], {
+      align_items: AlignItems.STRETCH,
+    }))
+    expect(frame(t, 'short').height).to_be(30)
+    t.dispose()
+  })
+
+  it('lines up text by its baseline', @{
+    var t = show(Table([[
+      Text('Big', { style: TextStyle({ size: 20 }) }),
+      Text('small'),
+    ]], { align_items: AlignItems.BASELINE }))
+    expect(frame(t, 'Big').y + 20).to_be(frame(t, 'small').y + 13)
+    expect(frame(t, 'small').y).to_be(7)
+    t.dispose()
+  })
+
+  it('fits flexible columns to their cells when its width is not bounded', @{
+    var t = show(Row([Table([[block('a', 40, 10), block('b', 25, 10)]])]))
+    expect(frame(t, 'a').width).to_be(40)
+    expect(frame(t, 'b')).to_equal(Rect(40, 95, 25, 10))
+    t.dispose()
+  })
+
+  it('keeps flexible proportions in its intrinsic width', @{
+    var t = show(Align(FitContent(Table(
+      [[block('a', 40, 10), block('b', 30, 10)]],
+      { columns: [ColumnWidth.flex(1), ColumnWidth.flex(2)] },
+    )), { alignment: Alignment.TOP_LEFT }))
+    expect(frame(t, 'a').width).to_be(40)
+    expect(frame(t, 'b').width).to_be(80)
+    t.dispose()
+  })
+
+  it('narrows fitted columns when it is too narrow for them', @{
+    var t = show(Align(Box({ width: 100, child: Table([[
+      Wrap([block('a1', 40, 10), block('a2', 40, 10)]),
+      Wrap([block('b1', 40, 10), block('b2', 40, 10)]),
+    ]], { columns: [ColumnWidth.fit(), ColumnWidth.fit()] }) }), {
+      alignment: Alignment.TOP_LEFT,
+    }))
+    expect(frame(t, 'b1').x).to_be(50)
+    expect(frame(t, 'a2')).to_equal(Rect(0, 10, 40, 10))
+    t.dispose()
+  })
+
+  it('leaves the last cells of a short row empty', @{
+    var t = show(Table([[fill('a')], [fill('b'), block('c', 10, 10)]]))
+    expect(frame(t, 'a').width).to_be(150)
+    expect(frame(t, 'c')).to_equal(Rect(150, 0, 150, 10))
+    t.dispose()
+  })
+
+  it('keeps the state of keyed cells when rows move', @{
+    var rows = ObservableValue(['x', 'y'])
+    var t = show(Observer(rows, @(context) => Table(rows.value().map(
+      @(name) => [
+        Text(name), Checkbox(false, {
+          key: ValueKey(name),
+          label: 'pick ${name}',
+          on_changed: @(value) {},
+        }),
+      ],
+    ))))
+    var before = t.one('pick x')
+    rows.set(['y', 'x'])
+    t.pump()
+    expect(t.one('pick x') == before).to_be_true()
+    expect(frame(t, 'pick x').y > frame(t, 'pick y').y).to_be_true()
+    t.dispose()
+  })
+
+  it('refuses rows that are not lists of widgets, and bad column widths', @{
+    expect(@{
+      Table([Text('x')])
+    }).to_raise_instance_of(TypeError)
+    expect(@{
+      Table([['x']])
+    }).to_raise_instance_of(TypeError)
+    expect(@{
+      Table([], { columns: [80] })
+    }).to_raise_instance_of(TypeError)
+    expect(@{
+      ColumnWidth.flex(0)
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      ColumnWidth.fraction(1.5)
+    }).to_raise_instance_of(ValueError)
+    expect(@{
+      ColumnWidth.fixed(-1)
+    }).to_raise_instance_of(ValueError)
+  })
+})
+
 describe('AspectRatio and FitContent', @{
   it('keeps a ratio within the space', @{
     var t = show(Center(AspectRatio(2, fill('a'))))

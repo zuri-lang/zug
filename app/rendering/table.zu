@@ -1,0 +1,581 @@
+/**
+ * A table: rows of cells lined up in columns, each column sized by its
+ * own rule.
+ */
+
+import io
+import ..foundation { Point, Size, Constraints, INFINITY }
+import .object { RenderObject, ParentData }
+
+/**
+ * How wide a table column is.
+ *
+ * @printable
+ */
+class ColumnWidth {
+
+  /**
+   * `fixed`, `flex`, `fit` or `fraction`.
+   *
+   * @type string
+   */
+  var kind = 'flex'
+
+  /**
+   * The points of a fixed column, the share of a flexible one, or the
+   * fraction of the table of a fractional one.
+   *
+   * @type number
+   */
+  var value = 1
+
+  /**
+   * @internal
+   * @param string kind
+   * @param number value
+   * @constructor
+   */
+  @new(kind: string, value: number) {
+    self.kind = kind
+    self.value = value
+  }
+
+  /**
+   * Exactly `points` wide.
+   *
+   * @param number points
+   * @returns ColumnWidth
+   * @throws ValueError When points is negative
+   */
+  static fixed(points: number) {
+    if !(points >= 0) {
+      raise ValueError('a fixed column cannot be ${points} points wide')
+    }
+
+    return ColumnWidth('fixed', points)
+  }
+
+  /**
+   * A share of the width left after the other columns, in proportion to
+   * `factor` among the flexible columns. When the table's width is not
+   * bounded, it is as wide as its widest cell.
+   *
+   * @param ?number factor: 1 when left out.
+   * @returns ColumnWidth
+   * @throws ValueError When factor is not above zero
+   */
+  static flex(factor: ?number) {
+    var share = factor == nil ? 1 : factor
+
+    if !(share > 0) {
+      raise ValueError('a flexible column needs a factor above zero, got ${share}')
+    }
+
+    return ColumnWidth('flex', share)
+  }
+
+  /**
+   * As wide as its widest cell. When the table is too narrow for its
+   * columns, these give up width first, down to the narrowest their cells
+   * can be.
+   *
+   * @returns ColumnWidth
+   */
+  static fit() {
+    return ColumnWidth('fit', 0)
+  }
+
+  /**
+   * A fraction of the table's width, from 0 to 1. When the table's width
+   * is not bounded, it is as wide as its widest cell.
+   *
+   * @param number share
+   * @returns ColumnWidth
+   * @throws ValueError When share is outside 0 to 1
+   */
+  static fraction(share: number) {
+    if !(share >= 0 and share <= 1) {
+      raise ValueError('a column fraction must be from 0 to 1, got ${share}')
+    }
+
+    return ColumnWidth('fraction', share)
+  }
+
+  @eq(other) {
+    return instance_of(other, ColumnWidth)
+      and self.kind == other.kind
+      and self.value == other.value
+  }
+
+  @to_string() {
+    return self.kind == 'fit'
+      ? 'ColumnWidth.fit()'
+      : 'ColumnWidth.${self.kind}(${self.value})'
+  }
+}
+
+var _DEFAULT_WIDTH = ColumnWidth.flex(1)
+
+/**
+ * Where a table cell is.
+ */
+class TableParentData < ParentData {
+
+  /**
+   * @type number
+   */
+  var row = 0
+
+  /**
+   * @type number
+   */
+  var column = 0
+}
+
+/**
+ * Lays its children out as table cells, row after row, from a list of how
+ * many cells each row has. Each column is sized by its `ColumnWidth`, and
+ * each row is as tall as its tallest cell. Cells are as wide as their
+ * column, and placed within their row by `align_items`.
+ */
+class RenderTable < RenderObject {
+
+  /**
+   * How many cells each row has.
+   *
+   * @type list
+   */
+  var row_lengths = []
+
+  /**
+   * The width of each column, from the first; columns past the end of
+   * the list are `ColumnWidth.flex(1)`.
+   *
+   * @type list
+   */
+  var columns = []
+
+  /**
+   * Where cells sit within their row: `start`, `center`, `end`,
+   * `stretch` or `baseline`.
+   *
+   * @type string
+   */
+  var align_items = 'start'
+
+  /**
+   * @type number
+   */
+  var column_spacing = 0
+
+  /**
+   * @type number
+   */
+  var row_spacing = 0
+
+  var _overflow_reported = false
+
+  /**
+   * @param list row_lengths
+   * @param list columns
+   * @param string align_items
+   * @param number column_spacing
+   * @param number row_spacing
+   */
+  configure(
+    row_lengths: list, columns: list, align_items: string,
+    column_spacing: number, row_spacing: number,
+  ) {
+    if _same(row_lengths, self.row_lengths)
+      and _same(columns, self.columns)
+      and align_items == self.align_items
+      and column_spacing == self.column_spacing
+      and row_spacing == self.row_spacing {
+      return
+    }
+
+    self.row_lengths = row_lengths
+    self.columns = columns
+    self.align_items = align_items
+    self.column_spacing = column_spacing
+    self.row_spacing = row_spacing
+    self.mark_needs_layout()
+  }
+
+  setup_parent_data(child: RenderObject) {
+    if !instance_of(child.parent_data, TableParentData) {
+      child.parent_data = TableParentData()
+    }
+  }
+
+  /**
+   * How many columns the table has: as many as its longest row, or as
+   * its column widths name, whichever is more.
+   *
+   * @returns number
+   */
+  column_count() {
+    var count = self.columns.length()
+
+    for length in self.row_lengths {
+      count = count.max(length)
+    }
+
+    return count
+  }
+
+  _width_of(column: number) {
+    return column < self.columns.length()
+      ? self.columns[column]
+      : _DEFAULT_WIDTH
+  }
+
+  # The children row by row, with each child's cell recorded.
+  _rows() {
+    var rows = []
+    var index = 0
+
+    iter var r = 0; r < self.row_lengths.length(); r++ {
+      var row = []
+
+      iter var c = 0; c < self.row_lengths[r]; c++ {
+        if index >= self.children.length() {
+          break
+        }
+
+        var child = self.children[index]
+        child.parent_data.row = r
+        child.parent_data.column = c
+        row.append(child)
+        index++
+      }
+
+      rows.append(row)
+    }
+
+    return rows
+  }
+
+  _columns_of(rows: list) {
+    var columns = []
+
+    iter var c = 0; c < self.column_count(); c++ {
+      columns.append([])
+    }
+
+    for row in rows {
+      for child in row {
+        columns[child.parent_data.column].append(child)
+      }
+    }
+
+    return columns
+  }
+
+  _gaps() {
+    return self.column_spacing * (self.column_count() - 1).max(0)
+  }
+
+  # The widths of the columns when the table is `width` wide, or as wide
+  # as it likes when `width` is infinite.
+  _column_widths(rows: list, width: number) {
+    var cells = self._columns_of(rows)
+    var bounded = width != INFINITY
+    var widths = []
+    var flex_total = 0
+
+    iter var c = 0; c < cells.length(); c++ {
+      var rule = self._width_of(c)
+
+      using rule.kind {
+        when 'fixed' {
+          widths.append(rule.value)
+        }
+        when 'fraction' {
+          widths.append(
+            bounded ? rule.value * width : _widest(cells[c], true),
+          )
+        }
+        when 'fit' {
+          widths.append(_widest(cells[c], true))
+        }
+        default {
+          if bounded {
+            widths.append(0)
+            flex_total += rule.value
+          } else {
+            widths.append(_widest(cells[c], true))
+          }
+        }
+      }
+    }
+
+    if !bounded {
+      return widths
+    }
+
+    var remaining = width - _sum(widths) - self._gaps()
+
+    if remaining > 0 and flex_total > 0 {
+      iter var c = 0; c < widths.length(); c++ {
+        var rule = self._width_of(c)
+
+        if rule.kind == 'flex' {
+          widths[c] = remaining * rule.value / flex_total
+        }
+      }
+    } else if remaining < 0 {
+      self._shrink_fit_columns(cells, widths, -remaining)
+    }
+
+    return widths
+  }
+
+  # Takes `excess` from the fitted columns, each in proportion to how far
+  # it is above the narrowest its cells can be.
+  _shrink_fit_columns(cells: list, widths: list, excess: number) {
+    var slack = []
+    var total = 0
+
+    iter var c = 0; c < widths.length(); c++ {
+      var room = 0
+
+      if self._width_of(c).kind == 'fit' {
+        room = (widths[c] - _widest(cells[c], false)).max(0)
+      }
+
+      slack.append(room)
+      total += room
+    }
+
+    if total == 0 {
+      return
+    }
+
+    var cut = excess.min(total)
+
+    iter var c = 0; c < widths.length(); c++ {
+      widths[c] -= cut * slack[c] / total
+    }
+  }
+
+  perform_layout() {
+    var c = self.constraints
+    var rows = self._rows()
+    var widths = self._column_widths(
+      rows, c.has_bounded_width() ? c.max_width : INFINITY,
+    )
+    var lefts = []
+    var x = 0
+
+    iter var i = 0; i < widths.length(); i++ {
+      lefts.append(x)
+      x += widths[i] + self.column_spacing
+    }
+
+    var content_width = _sum(widths) + self._gaps()
+    var top = 0
+
+    iter var r = 0; r < rows.length(); r++ {
+      top += self._layout_row(rows[r], widths, lefts, top)
+
+      if r < rows.length() - 1 {
+        top += self.row_spacing
+      }
+    }
+
+    if c.has_bounded_width()
+      and content_width > c.max_width + 0.5
+      and !self._overflow_reported {
+      self._overflow_reported = true
+      io.stderr.write('zug: a Table overflowed by ${(content_width - c.max_width).round()} points; its columns do not fit in ${c}\n')
+    }
+
+    self.size = c.constrain(Size(content_width, top))
+  }
+
+  # Lays out and places one row whose top is at `top`, and returns its
+  # height.
+  _layout_row(row: list, widths: list, lefts: list, top: number) {
+    var height = 0
+    var ascent = 0
+    var descent = 0
+    var baseline = self.align_items == 'baseline'
+
+    for child in row {
+      var width = widths[child.parent_data.column]
+      child.layout(Constraints(width, width, 0, INFINITY), true)
+      var line = baseline ? child.baseline() : nil
+
+      if line != nil {
+        ascent = ascent.max(line)
+        descent = descent.max(child.size.height - line)
+      } else {
+        height = height.max(child.size.height)
+      }
+    }
+
+    height = height.max(ascent + descent)
+
+    for child in row {
+      var column = child.parent_data.column
+
+      if self.align_items == 'stretch' and child.size.height != height {
+        child.layout(Constraints.tight(Size(widths[column], height)), true)
+      }
+
+      var y = 0
+
+      using self.align_items {
+        when 'center' {
+          y = (height - child.size.height) / 2
+        }
+        when 'end' {
+          y = height - child.size.height
+        }
+        when 'baseline' {
+          var line = child.baseline()
+          y = line == nil ? 0 : ascent - line
+        }
+      }
+
+      self.place_child(child, Point(lefts[column], top + y))
+    }
+
+    return height
+  }
+
+  compute_min_intrinsic_width(height: number) {
+    var cells = self._columns_of(self._rows())
+    var total = 0
+
+    iter var c = 0; c < cells.length(); c++ {
+      var rule = self._width_of(c)
+      total += rule.kind == 'fixed' ? rule.value : _widest(cells[c], false)
+    }
+
+    return total + self._gaps()
+  }
+
+  compute_max_intrinsic_width(height: number) {
+    var cells = self._columns_of(self._rows())
+    var total = 0
+    var unit = 0
+    var flex_total = 0
+
+    iter var c = 0; c < cells.length(); c++ {
+      var rule = self._width_of(c)
+
+      using rule.kind {
+        when 'fixed' {
+          total += rule.value
+        }
+        when 'flex' {
+          # Flexible columns keep their proportions, so the widest cell
+          # for its share sets the width of every share.
+          unit = unit.max(_widest(cells[c], true) / rule.value)
+          flex_total += rule.value
+        }
+        default {
+          total += _widest(cells[c], true)
+        }
+      }
+    }
+
+    return total + unit * flex_total + self._gaps()
+  }
+
+  compute_min_intrinsic_height(width: number) {
+    return self._intrinsic_height(width, false)
+  }
+
+  compute_max_intrinsic_height(width: number) {
+    return self._intrinsic_height(width, true)
+  }
+
+  _intrinsic_height(width: number, largest: bool) {
+    var rows = self._rows()
+    var widths = self._column_widths(rows, width)
+    var total = 0
+
+    for row in rows {
+      var height = 0
+
+      for child in row {
+        var cell = widths[child.parent_data.column]
+        height = height.max(
+          largest
+            ? child.max_intrinsic_height(cell)
+            : child.min_intrinsic_height(cell),
+        )
+      }
+
+      total += height
+    }
+
+    return total + self.row_spacing * (rows.length() - 1).max(0)
+  }
+
+  compute_baseline() {
+    var rows = self._rows()
+
+    if rows.is_empty() {
+      return nil
+    }
+
+    var best = nil
+
+    for child in rows[0] {
+      var line = child.baseline()
+
+      if line != nil {
+        var value = line + child.parent_data.offset.y
+        best = best == nil ? value : best.min(value)
+      }
+    }
+
+    return best
+  }
+
+  describe() {
+    return 'RenderTable(${self.row_lengths.length()} rows)'
+  }
+}
+
+def _widest(cells: list, largest: bool) {
+  var widest = 0
+
+  for child in cells {
+    widest = widest.max(
+      largest
+        ? child.max_intrinsic_width(INFINITY)
+        : child.min_intrinsic_width(INFINITY),
+    )
+  }
+
+  return widest
+}
+
+def _sum(values: list) {
+  var total = 0
+
+  for value in values {
+    total += value
+  }
+
+  return total
+}
+
+def _same(a: list, b: list) {
+  if a.length() != b.length() {
+    return false
+  }
+
+  iter var i = 0; i < a.length(); i++ {
+    if a[i] != b[i] {
+      return false
+    }
+  }
+
+  return true
+}

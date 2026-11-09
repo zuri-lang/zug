@@ -5,6 +5,7 @@
 import @.framework { * }
 import @.host { * }
 import @.basic { * }
+import @.table { * }
 import @.builders { * }
 import @.text { * }
 import @.button { * }

@@ -9,6 +9,7 @@ import @.flex { * }
 import @.stack { * }
 import @.wrap { * }
 import @.grid { * }
+import @.table { * }
 import @.host { * }
 import @.window { * }
 import @.containers { * }

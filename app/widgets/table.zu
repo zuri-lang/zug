@@ -1,0 +1,139 @@
+/**
+ * Rows of widgets lined up in columns.
+ */
+
+import ..foundation { Key, check_options }
+import ..rendering {
+  RenderTable, ColumnWidth, AlignItems, check_align_items,
+}
+import .framework { Widget, MultiChildRenderObjectWidget }
+
+/**
+ * Rows of cells lined up in columns. Each row is a list of widgets; a
+ * shorter row leaves its last cells empty. Each column is as wide as its
+ * `ColumnWidth` says, and each row as tall as its tallest cell.
+ *
+ * Every cell is as wide as its column. `align_items` places the cells
+ * within their row, as it does across a `Row`, and `BASELINE` lines up
+ * text, which suits a form.
+ *
+ * ```zuri
+ * import zug { Table, Text, TextField, ColumnWidth, AlignItems }
+ *
+ * var form = Table([
+ *   [Text('Name'), TextField({ placeholder: 'Ada Lovelace' })],
+ *   [Text('Email'), TextField({ placeholder: 'ada@example.com' })],
+ * ], {
+ *   columns: [ColumnWidth.fit(), ColumnWidth.flex()],
+ *   align_items: AlignItems.BASELINE,
+ *   column_spacing: 8,
+ *   row_spacing: 6,
+ * })
+ * ```
+ */
+class Table < MultiChildRenderObjectWidget {
+
+  /**
+   * How many cells each row has.
+   *
+   * @type list
+   */
+  var row_lengths = []
+
+  /**
+   * @type list
+   */
+  var columns = []
+
+  /**
+   * @type string
+   */
+  var align_items = 'start'
+
+  /**
+   * @type number
+   */
+  var column_spacing = 0
+
+  /**
+   * @type number
+   */
+  var row_spacing = 0
+
+  /**
+   * @param list rows: lists of widgets, one list a row.
+   * @param ?dict options: `columns`, a list of `ColumnWidth`s from the
+   *    first column (any column past its end is `ColumnWidth.flex()`);
+   *    `align_items` (see `AlignItems`, `START` when left out); `spacing`
+   *    for both directions, or `column_spacing` and `row_spacing`; and
+   *    `key`.
+   * @throws TypeError When a row is not a list of widgets, or a column
+   *    width is not a ColumnWidth
+   * @constructor
+   */
+  @new(rows: list, options: ?dict) {
+    var o = check_options(
+      options, 'Table',
+      {
+        key: Key,
+        columns: 'list',
+        align_items: 'string',
+        spacing: 'number',
+        column_spacing: 'number',
+        row_spacing: 'number',
+      },
+    )
+    var children = []
+    var lengths = []
+
+    iter var r = 0; r < rows.length(); r++ {
+      var row = rows[r]
+
+      if !is_list(row) {
+        raise TypeError('row ${r} of a Table must be a list of widgets, got ${typeof(row)}')
+      }
+
+      iter var c = 0; c < row.length(); c++ {
+        if !instance_of(row[c], Widget) {
+          raise TypeError('cell ${c} of row ${r} of a Table must be a widget, got ${typeof(row[c])}')
+        }
+
+        children.append(row[c])
+      }
+
+      lengths.append(row.length())
+    }
+
+    var columns = o.get('columns', [])
+
+    iter var c = 0; c < columns.length(); c++ {
+      if !instance_of(columns[c], ColumnWidth) {
+        raise TypeError('column ${c} of a Table must be a ColumnWidth, got ${typeof(columns[c])}')
+      }
+    }
+
+    var align_items = o.get('align_items', AlignItems.START)
+    check_align_items(align_items, 'Table')
+    var spacing = o.get('spacing', 0)
+    self.key = o.get('key')
+    self.children = children
+    self.row_lengths = lengths
+    self.columns = columns
+    self.align_items = align_items
+    self.column_spacing = o.get('column_spacing', spacing)
+    self.row_spacing = o.get('row_spacing', spacing)
+  }
+
+  create_render_object(context) {
+    var table = RenderTable()
+    self.update_render_object(context, table)
+    return table
+  }
+
+  update_render_object(context, render_object) {
+    render_object.configure(
+      self.row_lengths, self.columns, self.align_items, self.column_spacing,
+      self.row_spacing,
+    )
+  }
+}
