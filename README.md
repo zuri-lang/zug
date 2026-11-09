@@ -99,6 +99,8 @@ place to begin; after that, the pages most people reach for are
 - `examples/printing.zu`: a sales report that runs over several pages,
   with a header on each and page numbers, previewed in the window,
   printed, or exported as a PDF.
+- `examples/images.zu`: an image viewer that shows an image file, turns
+  it a quarter either way and flips it across or down.
 - `examples/conformance.zu`: every widget zug has in one working window,
   the gallery the backend conformance check builds, with a switch that
   swaps every widget to a second set of options.

@@ -275,7 +275,7 @@ class NotesState < State {
             self.save_note(context)
           },
         }),
-        Separator({ axis: Axis.VERTICAL }),
+        Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
         Button('Font…', {
           shortcut: 'cmd+t',
           on_pressed: @{
@@ -292,7 +292,7 @@ class NotesState < State {
             self.rename(context)
           },
         }),
-        Separator({ axis: Axis.VERTICAL }),
+        Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
         Button('Page Setup…', {
           shortcut: 'cmd+shift+p',
           on_pressed: @{
