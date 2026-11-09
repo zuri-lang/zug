@@ -332,6 +332,76 @@ describe('dialogs and the clipboard', @{
     t.dispose()
   })
 
+  it('report each font picked, and resolve with the last', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var picked = []
+    var result = []
+    var base = TextStyle({ size: 12, color: Color.RED, design: 'rounded' })
+    pick_font(nil, { style: base, on_changed: @(style) {
+      picked.append(style)
+    } }).then(@(style) {
+      result.append(style)
+    })
+    expect(t.backend.dialogs[0].spec.font).to_equal({ size: 12 })
+    t.backend.change_dialog({ family: 'Menlo', size: 14, weight: 400 })
+    t.backend.change_dialog({ family: 'Menlo', size: 14, weight: 700 })
+    t.backend.answer_dialog(nil)
+    var bold = TextStyle({
+      family: 'Menlo',
+      size: 14,
+      weight: 700,
+      color: Color.RED,
+    })
+    expect(picked.length()).to_be(2)
+    expect(picked[1]).to_equal(bold)
+    expect(result).to_equal([bold])
+    t.dispose()
+  })
+
+  it('resolve a font chooser closed without a pick with nil', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var result = []
+    pick_font(nil).then(@(style) {
+      result.append(style)
+    })
+    t.backend.answer_dialog(nil)
+    expect(result).to_equal([nil])
+    t.dispose()
+  })
+
+  it('finish an open font chooser when another opens', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var first = []
+    pick_font(nil).then(@(style) {
+      first.append(style)
+    })
+    t.backend.change_dialog({ size: 20 })
+    pick_font(nil)
+    t.pump()
+    expect(first).to_equal([TextStyle({ size: 20 })])
+    expect(t.backend.dialogs.length()).to_be(1)
+    t.dispose()
+  })
+
+  it('report each colour picked, and resolve with the last', @{
+    var t = WidgetTester().pump_widget(Text('x'))
+    var picked = []
+    var result = []
+    pick_color(nil, { color: Color.RED, alpha: true, on_changed: @(color) {
+      picked.append(color)
+    } }).then(@(color) {
+      result.append(color)
+    })
+    expect(t.backend.dialogs[0].spec).to_equal({
+      color: Color.RED,
+      alpha: true,
+    })
+    t.backend.answer_dialog(Color.BLUE)
+    expect(picked).to_equal([Color.BLUE])
+    expect(result).to_equal([Color.BLUE])
+    t.dispose()
+  })
+
   it('reads and writes the clipboard', @{
     var t = WidgetTester().pump_widget(Text('x'))
     Clipboard.write_text('42')

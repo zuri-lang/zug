@@ -435,6 +435,70 @@ suite('the macOS backend', @{
     expect(pressed).to_equal(['field', 'table', 'cancel'])
   })
 
+  it('reports font and colour picks, and the last when the panel closes', @{
+    var seen = { font_changes: 0 }
+    var target = nil
+    var manager = _send(_class('NSFontManager'), _sel('sharedFontManager'))
+    var font_panel = @{
+      return _objc.function(
+        'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.bool],
+      )(manager, _sel('fontPanel:'), false)
+    }
+    var color_panel = _send(_class('NSColorPanel'), _sel('sharedColorPanel'))
+    var visible = _objc.function('objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr])
+
+    run_steps(App({ windows: [Window('Pick', Text('x'))] }), [
+      @(runtime) {
+        pick_font(nil, {
+          style: TextStyle({ family: 'Helvetica', size: 13 }),
+          on_changed: @(style) {
+            seen['font_changes']++
+          },
+        }).then(@(style) {
+          seen['font'] = style
+        })
+      },
+      @(runtime) {
+        seen['font_shown'] = visible(font_panel(), _sel('isVisible'))
+        target = _send(manager, _sel('target'))
+
+        # Adds bold as the Font menu's Bold item does, which the panel's
+        # target converts the font with.
+        var bold = _send(
+          _send(_class('NSMenuItem'), _sel('alloc')), _sel('init'),
+        )
+        _objc.function(
+          'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.long],
+        )(bold, _sel('setTag:'), 2)
+        _send_void_id(manager, _sel('addFontTrait:'), bold)
+        _send_void_id(font_panel(), _sel('close'), nil)
+      },
+      @(runtime) {
+        pick_color(nil, { color: Color.RED }).then(@(color) {
+          seen['color'] = color
+        })
+      },
+      @(runtime) {
+        seen['color_shown'] = visible(color_panel, _sel('isVisible'))
+        _send_void_id(
+          color_panel, _sel('setColor:'),
+          _send(_class('NSColor'), _sel('blueColor')),
+        )
+        _send_void_id(target, _sel('zugColorChanged:'), color_panel)
+        _send_void_id(color_panel, _sel('close'), nil)
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(seen.font_shown).to_be_true()
+    expect(seen.font_changes).to_be(1)
+    expect(seen.font.family).to_be('Helvetica')
+    expect(seen.font.weight).to_be(700)
+    expect(seen.font.size).to_be(13)
+    expect(seen.color_shown).to_be_true()
+    expect(seen.color).to_equal(Color(0, 0, 255))
+  })
+
   it('keeps the backend contract', @{
     var report = check_backend(create_backend('macos'))
     expect(report

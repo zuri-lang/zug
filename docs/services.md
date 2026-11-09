@@ -101,6 +101,37 @@ and resolves with a list of paths or `nil` if the user cancelled.
 `save_file(context, options)` asks where to save, with a suggested
 `name`, and resolves with a path or `nil`.
 
+### Fonts and colours
+
+The font and colour choosers work differently. On macOS they're panels
+that float beside your windows with no OK button: the user picks, and
+expects to see the change straight away. So both take an `on_changed`
+that's called with every pick, and the promise resolves with the last
+pick when the user closes the chooser, or `nil` if they never picked
+anything.
+
+```zuri,ignore
+pick_font(context, { style: self.style, on_changed: @(style) {
+  self.set_state(@{
+    self.style = style
+  })
+} })
+```
+
+`pick_font(context, options)` starts from `style`, a `TextStyle`, and
+calls `on_changed` with that style in the new font. Only the family,
+size, weight and slant change; the colour and the rest of the style
+stay as you gave them. Leave `style` out to start from the system font.
+
+`pick_color(context, options)` starts from `color` and calls
+`on_changed` with each `Color` picked. Pass `alpha: true` to let the
+user choose an opacity too.
+
+There's one font chooser and one colour chooser per application, so
+opening a second finishes the first: its promise resolves with whatever
+was picked there. For a colour that belongs in a form, a `ColorWell`
+is usually the better fit.
+
 ## The system
 
 - `open_url(url)` opens a link in the application the system chooses,

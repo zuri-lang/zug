@@ -35,7 +35,7 @@ import ._containers { MacScroll, MacTabs, MacSplit, MacTable, MacVisualEffect }
 import ._canvas { MacCanvas, MacPointer, measure_attributed }
 import ._window { MacWindow }
 import ._menus { build_menu_bar, default_menus, role_action }
-import ._dialogs { show_alert, pick_files, save_file }
+import ._dialogs { show_alert, pick_files, save_file, pick_font, pick_color }
 
 var _responds = typed(ffi.bool, [ffi.ptr])
 
@@ -406,6 +406,14 @@ class MacBackend < Backend {
 
   save_file(window, spec: dict, done: function) {
     save_file(self, window, spec, done)
+  }
+
+  pick_font(window, spec: dict, changed: function, done: function) {
+    pick_font(self, window, spec, changed, done)
+  }
+
+  pick_color(window, spec: dict, changed: function, done: function) {
+    pick_color(self, window, spec, changed, done)
   }
 
   /**

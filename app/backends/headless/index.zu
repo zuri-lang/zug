@@ -1248,8 +1248,54 @@ class HeadlessBackend < Backend {
     self.dialogs.append({ type: 'save_file', window, spec, done })
   }
 
+  pick_font(window, spec: dict, changed: function, done: function) {
+    self._replace_dialog('pick_font')
+    self.dialogs.append({ type: 'pick_font', window, spec, changed, done })
+  }
+
+  pick_color(window, spec: dict, changed: function, done: function) {
+    self._replace_dialog('pick_color')
+    self.dialogs.append({ type: 'pick_color', window, spec, changed, done })
+  }
+
+  # A font or colour chooser opened again finishes the one already open,
+  # with the last value picked there.
+  _replace_dialog(type: string) {
+    var index = self.dialogs.find_index(@(dialog) => dialog.type == type)
+
+    if index >= 0 {
+      var dialog = self.dialogs.remove_at(index)
+      dialog['done'](dialog.get('last'))
+    }
+  }
+
   /**
-   * Answers the oldest waiting dialog with `answer`, as the user would.
+   * Picks `value` in the oldest waiting font or colour chooser, as the
+   * user would, without closing it: a font dict for a font chooser and a
+   * `Color` for a colour chooser. Answering the chooser later with
+   * `answer_dialog(nil)` closes it with the last value picked.
+   *
+   * @param any value
+   * @throws BackendError When no font or colour chooser is waiting
+   */
+  change_dialog(value) {
+    var dialog = self.dialogs.find(
+      @(dialog) => dialog.type == 'pick_font' or dialog.type == 'pick_color',
+    )
+
+    if dialog == nil {
+      raise BackendError('no font or colour chooser is waiting')
+    }
+
+    dialog['last'] = value
+    dialog['changed'](value)
+    self.event_handled()
+  }
+
+  /**
+   * Answers the oldest waiting dialog with `answer`, as the user would. A
+   * font or colour chooser given a value picks it and closes; given `nil`,
+   * it closes with the last value `change_dialog()` picked.
    *
    * @param any answer
    * @throws BackendError When no dialog is waiting
@@ -1260,6 +1306,17 @@ class HeadlessBackend < Backend {
     }
 
     var dialog = self.dialogs.shift()
+
+    # A font or colour chooser given a value picks it and closes. Given
+    # nil, it closes with the last value picked.
+    if dialog.type == 'pick_font' or dialog.type == 'pick_color' {
+      if answer != nil {
+        dialog['changed'](answer)
+      } else {
+        answer = dialog.get('last')
+      }
+    }
+
     dialog['done'](answer)
     self.event_handled()
   }

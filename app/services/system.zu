@@ -3,7 +3,8 @@
  *
  * Dialogs return promises. An alert, an open panel or a save panel is
  * attached to the window of the `Context` given, and is a separate window
- * when the context is `nil`.
+ * when the context is `nil`. The font and colour choosers belong to the
+ * whole application, and report each pick as the user makes it.
  *
  * ```zuri,ignore
  * show_alert(context, {
@@ -19,7 +20,8 @@
  * ```
  */
 
-import ..foundation { Deferred, LifecycleError, check_options }
+import ..foundation { Color, Deferred, LifecycleError, check_options }
+import ..painting { TextStyle }
 import ..rendering { RenderWindow }
 import ..widgets { current_runtime }
 
@@ -191,6 +193,113 @@ def save_file(context, options: ?dict) {
   }
   _runtime().backend.save_file(_window_host(context), spec, @(path) {
     deferred.resolve(path)
+  })
+  return deferred.promise
+}
+
+var _FONT_FIELDS = ['family', 'size', 'weight', 'italic']
+
+# `base` with the font a backend reported: its family, size, weight and
+# slant. A family replaces a system design such as rounded, and the
+# system font clears the family.
+def _with_font(base, font: dict) {
+  var data = base.to_data()
+
+  for field in _FONT_FIELDS {
+    data.remove(field)
+    var value = font.get(field)
+
+    if value != nil {
+      data[field] = value
+    }
+  }
+
+  if font.get('family') != nil {
+    data.remove('design')
+  }
+
+  return TextStyle(data)
+}
+
+/**
+ * Shows the font chooser with the font of `style` chosen. Each time the
+ * user picks another font, `on_changed` is called with `style` in that
+ * font, as a `TextStyle`, so what it applies to can change as they pick.
+ * The promise is resolved when the chooser closes, with the last style
+ * picked, or `nil` when the user picked none.
+ *
+ * Only one font chooser is open at a time. Opening another resolves the
+ * first one's promise with what was picked there.
+ *
+ * ```zuri,ignore
+ * pick_font(context, { style: self.style, on_changed: @(style) {
+ *   self.set_state(@{
+ *     self.style = style
+ *   })
+ * } })
+ * ```
+ *
+ * @param ?Context context
+ * @param ?dict options: `style`, the `TextStyle` to start from (the
+ *    system font when left out), and `on_changed`.
+ * @returns Promise
+ */
+def pick_font(context, options: ?dict) {
+  var o = check_options(
+    options, 'pick_font', { style: TextStyle, on_changed: 'function' },
+  )
+  var base = o.get('style', TextStyle())
+  var on_changed = o.get('on_changed')
+  var deferred = Deferred()
+  var font = {}
+
+  for field in _FONT_FIELDS {
+    var value = getprop(base, field)
+
+    if value != nil {
+      font[field] = value
+    }
+  }
+
+  var spec = { font }
+
+  _runtime().backend.pick_font(_window_host(context), spec, @(font) {
+    if on_changed != nil {
+      on_changed(_with_font(base, font))
+    }
+  }, @(font) {
+    deferred.resolve(font == nil ? nil : _with_font(base, font))
+  })
+  return deferred.promise
+}
+
+/**
+ * Shows the colour chooser with `color` chosen. Each time the user picks
+ * another colour, `on_changed` is called with it, and the promise is
+ * resolved when the chooser closes, with the last colour picked, or `nil`
+ * when the user picked none. Only one colour chooser is open at a time,
+ * as with `pick_font()`.
+ *
+ * @param ?Context context
+ * @param ?dict options: `color` to start from, `alpha` to let the user
+ *    choose an opacity, and `on_changed`.
+ * @returns Promise
+ */
+def pick_color(context, options: ?dict) {
+  var o = check_options(
+    options, 'pick_color',
+    { color: Color, alpha: 'bool', on_changed: 'function' },
+  )
+  var on_changed = o.get('on_changed')
+  var deferred = Deferred()
+  var spec = { color: o.get('color'), alpha: o.get('alpha', false) }
+
+  _runtime().backend.pick_color(_window_host(context), spec, @(color) {
+    if on_changed != nil {
+      on_changed(color)
+    }
+  }, @(color) {
+    deferred.resolve(color)
   })
   return deferred.promise
 }

@@ -146,6 +146,19 @@ expect(t.backend.dialogs[0].spec.title).to_be('Delete “Q3 report”?')
 t.backend.answer_dialog({ button: 0, suppressed: false })
 ```
 
+The font and colour choosers report picks while they're open, so a test
+can pick without closing them: `backend.change_dialog(value)` picks a
+font, given as `{ family, size, weight, italic }`, or a `Color`. Then
+`answer_dialog(nil)` closes the chooser with the last pick, and
+`answer_dialog(value)` picks once more and closes it.
+
+```zuri,ignore
+t.tap('Font…')
+t.backend.change_dialog({ family: 'Menlo', size: 14 })
+expect(t.one('preview').props.style.family).to_be('Menlo')
+t.backend.answer_dialog(nil)
+```
+
 The clipboard is in memory, so `Clipboard.write_text()` and
 `read_text()` work as usual without touching yours. `backend.beeps`
 counts calls to `beep()`, `backend.opened_urls` lists what `open_url()`

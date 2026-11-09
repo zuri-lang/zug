@@ -508,6 +508,40 @@ class Backend {
   }
 
   /**
+   * Shows the platform's font chooser with `spec.font` chosen. Each time
+   * the user picks another font, `changed` is called with it, and when the
+   * chooser closes, `done` is called with the last font picked, or `nil`
+   * when none was. A chooser with OK and Cancel buttons calls `changed`
+   * once, on OK. A font is a dict of `family` (`nil` for the system
+   * font), `size`, `weight` (100 to 900) and `italic`. Only one font
+   * chooser is open at a time: opening another finishes the first.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `font`, a dict as above, with any key left out.
+   * @param function changed
+   * @param function done
+   */
+  pick_font(window, spec: dict, changed: function, done: function) {
+    raise NotImplementedError('pick_font')
+  }
+
+  /**
+   * Shows the platform's colour chooser with `spec.color` chosen, calling
+   * `changed` with a `Color` each time the user picks another and `done`
+   * with the last one picked, or `nil`, when it closes, as `pick_font()`
+   * does for fonts.
+   *
+   * @param ?WindowHost window
+   * @param dict spec: `color`, a `Color` or `nil`, and `alpha`, whether
+   *    the user may choose an opacity.
+   * @param function changed
+   * @param function done
+   */
+  pick_color(window, spec: dict, changed: function, done: function) {
+    raise NotImplementedError('pick_color')
+  }
+
+  /**
    * The text on the clipboard, or `nil` when it holds none.
    *
    * @returns ?string

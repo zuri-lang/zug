@@ -1,17 +1,21 @@
 /**
- * Alerts, open panels and save panels.
+ * Alerts, open and save panels, and the font and colour panels.
  *
- * Each is shown as a sheet on the window given, and as a dialog of its own
- * when there is none. Either way the answer reaches zug through the
- * backend's `answer()`, after the dialog has closed.
+ * Alerts and file panels are shown as a sheet on the window given, and as
+ * a dialog of their own when there is none. Either way the answer reaches
+ * zug through the backend's `answer()`, after the dialog has closed. The
+ * font and colour panels float beside every window and report each pick
+ * as it happens.
  */
 
 import ffi
 import ._runtime {
   cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
   send_void_uint, send_int, typed, ns_string, zuri_string, from_ns_array,
-  ns_array, Block,
+  ns_array, Block, define_class,
 }
+import ._cocoa { ns_font, ns_color, css_weight }
+import ._controls { from_ns_color }
 
 # NSAlertStyle values.
 var _STYLES = { warning: 0, informational: 1, critical: 2 }
@@ -170,4 +174,213 @@ def save_file(backend, window, spec: dict, done: function) {
     send_void(panel, 'release')
     backend.answer(done, path)
   })
+}
+
+# The font and colour panels are each shared by the whole application, so
+# one pick of each is open at a time. A pick is `{ backend, panel, changed,
+# done, last }`, with `current`, the font the panel last showed, for fonts.
+var _picks = { font: nil, color: nil }
+
+var _set_action = typed(ffi.void, [ffi.ptr])
+var _observe = typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr])
+var _stop_observing = typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr])
+var _set_selected_font = typed(ffi.void, [ffi.ptr, ffi.bool])
+var _font_panel = typed(ffi.ptr, [ffi.bool])
+var _weight_of = typed(ffi.long, [ffi.ptr])
+var _traits_of = typed(ffi.ulong, [ffi.ptr])
+var _point_size = typed(ffi.double, [])
+
+var _will_close = nil
+
+def _will_close_name() {
+  if _will_close == nil {
+    _will_close = ffi.open().symbol('NSWindowWillCloseNotification').read(
+      ffi.ptr,
+    )
+  }
+
+  return _will_close
+}
+
+/**
+ * What the font and colour panels report to: their action, and the
+ * notice that a panel is closing.
+ *
+ * @type Pointer
+ */
+var ZugPanelTarget = define_class('ZugPanelTarget', 'NSObject', {
+  'zugFontChanged:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
+    _font_changed(sender)
+  }],
+  'zugColorChanged:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
+    _color_changed(sender)
+  }],
+  'panelWillClose:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    var panel = send(note, 'object')
+
+    for name in ['font', 'color'] {
+      var pick = _picks[name]
+
+      if pick != nil and pick.panel == panel {
+        _finish(name)
+      }
+    }
+  }],
+})
+
+var _target = nil
+
+def _panel_target() {
+  if _target == nil {
+    _target = send(send(ZugPanelTarget, 'alloc'), 'init')
+  }
+
+  return _target
+}
+
+def _center() {
+  return send(cls('NSNotificationCenter'), 'defaultCenter')
+}
+
+# Starts a pick of `name` on `panel`, finishing any still open.
+def _start(name: string, pick: dict) {
+  _finish(name)
+  _picks[name] = pick
+  _observe(
+    _center(), sel('addObserver:selector:name:object:'), _panel_target(),
+    sel('panelWillClose:'), _will_close_name(), pick.panel,
+  )
+}
+
+# Ends the pick of `name`, if one is open, with the last value picked.
+def _finish(name: string) {
+  var pick = _picks[name]
+
+  if pick == nil {
+    return
+  }
+
+  _picks[name] = nil
+  _stop_observing(
+    _center(), sel('removeObserver:name:object:'), _panel_target(),
+    _will_close_name(), pick.panel,
+  )
+  send_void_id(pick.source, 'setTarget:', nil)
+  _set_action(pick.source, sel('setAction:'), nil)
+
+  if pick.get('current') != nil {
+    send_void(pick.current, 'release')
+  }
+
+  pick.backend.answer(pick.done, pick.last)
+}
+
+# The font dict for an NSFont. The system font has no family a style can
+# name, so it has none.
+def _font_data(font) {
+  var manager = send(cls('NSFontManager'), 'sharedFontManager')
+  var family = zuri_string(send(font, 'familyName'))
+
+  if family != nil and family.starts_with('.') {
+    family = nil
+  }
+
+  return {
+    family,
+    size: _point_size(font, sel('pointSize')),
+    weight: css_weight(_weight_of(manager, sel('weightOfFont:'), font)),
+    italic: (_traits_of(manager, sel('traitsOfFont:'), font) & 1) != 0,
+  }
+}
+
+def _font_changed(manager) {
+  var pick = _picks.font
+
+  if pick == nil {
+    return
+  }
+
+  var font = send_id(manager, 'convertFont:', pick.current)
+
+  if font == nil {
+    return
+  }
+
+  send_void(font, 'retain')
+  send_void(pick.current, 'release')
+  pick['current'] = font
+  pick['last'] = _font_data(font)
+  pick.backend.answer(pick.changed, pick.last)
+}
+
+def _color_changed(panel) {
+  var pick = _picks.color
+
+  if pick == nil {
+    return
+  }
+
+  pick['last'] = from_ns_color(send(panel, 'color'))
+  pick.backend.answer(pick.changed, pick.last)
+}
+
+/**
+ * Shows the font panel with `spec.font` chosen, passing each font picked
+ * to `changed` and the last, or `nil`, to `done` when the panel closes.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function changed
+ * @param function done
+ */
+def pick_font(backend, window, spec: dict, changed: function, done: function) {
+  var manager = send(cls('NSFontManager'), 'sharedFontManager')
+  var font = ns_font(spec.get('font', {}), nil)
+  var panel = _font_panel(manager, sel('fontPanel:'), true)
+  send_void(font, 'retain')
+  _start('font', {
+    backend,
+    panel,
+    source: manager,
+    changed,
+    done,
+    last: nil,
+    current: font,
+  })
+  _set_selected_font(manager, sel('setSelectedFont:isMultiple:'), font, false)
+  send_void_id(manager, 'setTarget:', _panel_target())
+  _set_action(manager, sel('setAction:'), sel('zugFontChanged:'))
+  send_void_id(panel, 'orderFront:', nil)
+}
+
+/**
+ * Shows the colour panel with `spec.color` chosen, passing each colour
+ * picked to `changed` and the last, or `nil`, to `done` when the panel
+ * closes.
+ *
+ * @param MacBackend backend
+ * @param ?MacWindow window
+ * @param dict spec
+ * @param function changed
+ * @param function done
+ */
+def pick_color(
+  backend, window, spec: dict, changed: function, done: function,
+) {
+  var panel = send(cls('NSColorPanel'), 'sharedColorPanel')
+  _start('color', { backend, panel, source: panel, changed, done, last: nil })
+  send_void_bool(panel, 'setShowsAlpha:', spec.get('alpha', false) == true)
+
+  # The colour is set before the target, so showing it is not a pick.
+  var color = spec.get('color')
+
+  if color != nil {
+    send_void_id(panel, 'setColor:', ns_color(color))
+  }
+
+  send_void_bool(panel, 'setContinuous:', true)
+  send_void_id(panel, 'setTarget:', _panel_target())
+  _set_action(panel, sel('setAction:'), sel('zugColorChanged:'))
+  send_void_id(panel, 'orderFront:', nil)
 }

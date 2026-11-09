@@ -158,6 +158,46 @@ def _weight(css: number) {
   return 0.62
 }
 
+var _family_font = typed(
+  ffi.ptr, [ffi.ptr, ffi.ulong, ffi.long, ffi.double],
+)
+
+# NSItalicFontMask.
+var _ITALIC_MASK = 1
+
+# NSFontManager weights, from 0 to 15, for each hundred of a CSS weight.
+var _MANAGER_WEIGHTS = [2, 3, 4, 5, 6, 8, 9, 10, 12]
+
+/**
+ * The `NSFontManager` weight, 0 to 15, nearest a CSS weight.
+ *
+ * @param number css
+ * @returns number
+ */
+def manager_weight(css: number) {
+  var index = ((css / 100).round() - 1).max(0).min(8)
+  return _MANAGER_WEIGHTS[index]
+}
+
+/**
+ * The CSS weight, 100 to 900, nearest an `NSFontManager` weight.
+ *
+ * @param number weight
+ * @returns number
+ */
+def css_weight(weight: number) {
+  var best = 0
+
+  iter var i = 1; i < _MANAGER_WEIGHTS.length(); i++ {
+    if (_MANAGER_WEIGHTS[i] - weight).abs()
+      < (_MANAGER_WEIGHTS[best] - weight).abs() {
+      best = i
+    }
+  }
+
+  return (best + 1) * 100
+}
+
 var _DESIGNS = {
   rounded: 'NSFontDescriptorSystemDesignRounded',
   serif: 'NSFontDescriptorSystemDesignSerif',
@@ -216,10 +256,20 @@ def ns_font(style: dict, base_size: ?number) {
   var NSFont = cls('NSFont')
   var font = nil
 
+  # A family gets the face nearest its weight and slant; a full font name,
+  # such as Menlo-Bold, names one face.
   if family != nil {
-    font = _font_name_size(
-      NSFont, sel('fontWithName:size:'), ns_string(family), size,
+    font = _family_font(
+      send(cls('NSFontManager'), 'sharedFontManager'),
+      sel('fontWithFamily:traits:weight:size:'), ns_string(family),
+      italic ? _ITALIC_MASK : 0, manager_weight(weight), size,
     )
+
+    if font == nil {
+      font = _font_name_size(
+        NSFont, sel('fontWithName:size:'), ns_string(family), size,
+      )
+    }
   }
 
   if font == nil {
