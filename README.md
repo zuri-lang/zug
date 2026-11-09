@@ -2,12 +2,56 @@
 
 Zug is a toolkit for desktop applications in Zuri. 
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/calculator-dark.png">
+    <img alt="The calculator example: a scientific keypad, a display and a tape of past calculations, all native macOS controls" src="docs/images/calculator-light.png" width="760">
+  </picture>
+  <br>
+  <sub>The <a href="examples/calculator">calculator</a> example. Every key, field and table in it is an AppKit control.</sub>
+</p>
+
 Zug UIs are built on a tree of native widgets built from the application's state.
 
 Zug works out what changed and updates the native views to match just like Flutter and ReactUI does, except for Zug, every
 control is the platform's native control. For example, on macOS a zug button is an `NSButton`, a
 text field an `NSTextField`, a table an `NSTableView`, with the input
 methods, accessibility, dark mode and behaviour that come with them.
+
+<table>
+  <tr>
+    <td width="50%" align="center">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/controls-dark.png">
+        <img alt="Checkboxes, radio buttons, a segmented control, a slider, a stepper, a pop-up menu, text fields, a date picker and a progress bar" src="docs/images/controls-light.png">
+      </picture>
+      <br><sub>Controls, from <a href="examples/controls.zu">examples/controls.zu</a></sub>
+    </td>
+    <td width="50%" align="center">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/containers-dark.png">
+        <img alt="A split view with a long list in the sidebar, and tabs holding a sortable data table" src="docs/images/containers-light.png">
+      </picture>
+      <br><sub>Lists, tabs and tables, from <a href="examples/containers.zu">examples/containers.zu</a></sub>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" align="center">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/notes-dark.png">
+        <img alt="A notes editor with buttons for opening, saving, fonts, colours, renaming, page setup and printing" src="docs/images/notes-light.png">
+      </picture>
+      <br><sub>Every dialog, from <a href="examples/dialogs.zu">examples/dialogs.zu</a></sub>
+    </td>
+    <td width="50%" align="center">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/images/report-dark.png">
+        <img alt="A sales report previewed page by page, with Page Setup, Print and Export PDF buttons" src="docs/images/report-light.png">
+      </picture>
+      <br><sub>Printing, from <a href="examples/printing.zu">examples/printing.zu</a></sub>
+    </td>
+  </tr>
+</table>
 
 ```zuri
 import zug { * }
