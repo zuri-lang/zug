@@ -19,6 +19,23 @@ import ._cocoa {
   parse_shortcut,
 }
 
+# AppKit's fitting sizes and baselines, by kind and the props that change
+# them. A fitting size does not depend on the space offered, so views of
+# one kind with the same such props share it, and a list of a thousand
+# alike buttons asks AppKit once. Measuring a button takes it about a third
+# of a millisecond.
+var _fitting = {}
+var _baselines = {}
+var _REMEMBERED = 4096
+
+def _remember(cache: dict, key: string, value) {
+  if cache.length() >= _REMEMBERED {
+    cache.clear()
+  }
+
+  cache[key] = value
+}
+
 /**
  * The base of every native view.
  *
@@ -190,13 +207,42 @@ class MacView < ViewHost {
    * @returns Size
    */
   measure(constraints: Constraints) {
-    var size = send_size(self.native, 'fittingSize')
-    return Size(size.width, size.height)
+    var key = self._fitting_key()
+    var known = _fitting.get(key)
+
+    if known == nil {
+      var size = send_size(self.native, 'fittingSize')
+      known = Size(size.width, size.height)
+      _remember(_fitting, key, known)
+    }
+
+    return known
   }
 
   baseline() {
-    var offset = send_double(self.native, 'firstBaselineOffsetFromTop')
+    var key = self._fitting_key()
+    var offset = _baselines.get(key)
+
+    if offset == nil {
+      offset = send_double(self.native, 'firstBaselineOffsetFromTop')
+      _remember(_baselines, key, offset)
+    }
+
     return offset > 0 ? offset : nil
+  }
+
+  # The kind and every prop that can change the view's size, which is all
+  # its fitting size and baseline depend on.
+  _fitting_key() {
+    var parts = [self.kind_name]
+
+    for name, prop in kind_spec(self.kind_name).props {
+      if prop.layout {
+        parts.append('${name}=${self.props.get(name)}')
+      }
+    }
+
+    return '\n'.join(parts)
   }
 
   content_insets(slot) {

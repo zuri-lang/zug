@@ -1,0 +1,36 @@
+/**
+ * A small application that `tools/bench.zu` starts to time a cold start.
+ * It prints the time once zug is imported and again once its window has
+ * drawn its first frame, then quits.
+ */
+
+import ..app { * }
+
+echo 'imported ${time()}'
+
+class Probe < StatefulWidget {
+  create_state() {
+    return ProbeState()
+  }
+}
+
+class ProbeState < State {
+  init_state() {
+    current_runtime().add_post_frame_callback(@{
+      echo 'drawn ${time()}'
+      quit_app()
+    })
+  }
+
+  build(context) {
+    return Padding(EdgeInsets.all(20), Column([
+      Text('Hello', { style: TextStyle({ size: 20, weight: 600 }) }),
+      TextField({ placeholder: 'Name' }),
+      Button('Continue', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
+    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+  }
+}
+
+run_app(App({
+  windows: [Window('Startup', Probe(), { size: Size(320, 160) })],
+}))
