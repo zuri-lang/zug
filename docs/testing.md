@@ -96,7 +96,8 @@ The common events are:
 | Checkbox, switch, slider, stepper, date picker, colour well, level | `changed` with `{ value }` |
 | Radio | `changed` with `{ selected: true }` |
 | Dropdown, segmented control, tabs | `changed` with `{ selected }`, an index |
-| Text field, text area, search field, combo box | `changed` with `{ text }`; `submitted`; `escape` for a field |
+| Text field, text area, search field, combo box | `changed` with `{ text }`; `submitted` |
+| Anything that takes focus | `escape` |
 | Data table | `changed` with `{ selected }`, a list of rows; `activated` with `{ row }`; `sorted` with `{ column, ascending }` |
 | Scroll view | `scrolled` with `{ x, y }` |
 | Pointer area | `tap`, `drag` and the rest, with `{ x, y }`, and `dx`, `dy`, `clicks` and `modifiers` where they matter |
@@ -109,7 +110,8 @@ Windows and the system can be acted on too:
 
 - `window().press_key('cmd+k')` presses a key in the first window, and
   `press_key('shift+8', '*')` gives the characters it types. It returns
-  whether anything handled the key.
+  whether anything handled the key. Escape goes first to the focused
+  view's `on_escape`, as on a real display; `view.focus()` focuses a view.
 - `window().resize(Size(400, 300))` resizes it, and `click_close()`
   clicks its close button.
 - `choose_menu('File', 'New')` chooses a menu item.

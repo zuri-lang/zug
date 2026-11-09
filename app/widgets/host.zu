@@ -8,7 +8,9 @@
  *
  * Every host widget takes the options in `HOST_OPTIONS`: `key`,
  * `tooltip`, `accessibility_label` and `accessibility_identifier`. The
- * identifier is also how tests find a view.
+ * identifier is also how tests find a view. A widget that can take
+ * keyboard focus also takes `on_escape`, called when Escape is pressed
+ * while it has focus.
  */
 
 import ..foundation { Key }
@@ -48,6 +50,37 @@ def host_options(own: dict) {
 }
 
 /**
+ * `host_options()` for a widget that can take keyboard focus, which also
+ * takes `on_escape`.
+ *
+ * @param dict own
+ * @returns dict
+ */
+def focus_options(own: dict) {
+  var all = host_options(own)
+  all['on_escape'] = 'function'
+  return all
+}
+
+# A host widget's handlers, with one for Escape when it has `on_escape`.
+# Returning true tells the backend the key was used.
+def _handlers_of(widget) {
+  var handlers = widget.handlers()
+  var on_escape = widget.on_escape
+
+  if on_escape == nil {
+    return handlers
+  }
+
+  var all = handlers.clone()
+  all['escape'] = @(payload) {
+    on_escape()
+    return true
+  }
+  return all
+}
+
+/**
  * The props every view kind takes, read from checked options.
  *
  * @param dict o
@@ -73,6 +106,15 @@ class HostWidget < LeafRenderObjectWidget {
    * @type dict
    */
   var common = {}
+
+  /**
+   * Called when Escape is pressed while the view has keyboard focus. Widgets
+   * that can take focus set it from their `on_escape` option.
+   *
+   * @internal
+   * @type ?function
+   */
+  var on_escape
 
   /**
    * The view kind.
@@ -113,11 +155,11 @@ class HostWidget < LeafRenderObjectWidget {
   }
 
   create_render_object(context) {
-    return RenderHost(self.kind(), self._all_props(context), self.handlers())
+    return RenderHost(self.kind(), self._all_props(context), _handlers_of(self))
   }
 
   update_render_object(context, render_object) {
-    render_object.set_handlers(self.handlers())
+    render_object.set_handlers(_handlers_of(self))
     render_object.set_props(self._all_props(context))
   }
 }
@@ -132,6 +174,12 @@ class SingleChildHostWidget < SingleChildRenderObjectWidget {
    * @type dict
    */
   var common = {}
+
+  /**
+   * @internal
+   * @type ?function
+   */
+  var on_escape
 
   /**
    * @returns string
@@ -180,12 +228,12 @@ class SingleChildHostWidget < SingleChildRenderObjectWidget {
 
   create_render_object(context) {
     return self.make_render_host(
-      self.kind(), self._all_props(context), self.handlers(),
+      self.kind(), self._all_props(context), _handlers_of(self),
     )
   }
 
   update_render_object(context, render_object) {
-    render_object.set_handlers(self.handlers())
+    render_object.set_handlers(_handlers_of(self))
     render_object.set_props(self._all_props(context))
   }
 }
@@ -200,6 +248,12 @@ class MultiChildHostWidget < MultiChildRenderObjectWidget {
    * @type dict
    */
   var common = {}
+
+  /**
+   * @internal
+   * @type ?function
+   */
+  var on_escape
 
   /**
    * @returns string
@@ -247,12 +301,12 @@ class MultiChildHostWidget < MultiChildRenderObjectWidget {
 
   create_render_object(context) {
     return self.make_render_host(
-      self.kind(), self._all_props(context), self.handlers(),
+      self.kind(), self._all_props(context), _handlers_of(self),
     )
   }
 
   update_render_object(context, render_object) {
-    render_object.set_handlers(self.handlers())
+    render_object.set_handlers(_handlers_of(self))
     render_object.set_props(self._all_props(context))
   }
 }

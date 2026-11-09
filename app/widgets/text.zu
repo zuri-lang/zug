@@ -11,7 +11,7 @@
 
 import ..foundation { check_options }
 import ..painting { TextStyle }
-import .host { HostWidget, host_options, common_props }
+import .host { HostWidget, host_options, focus_options, common_props }
 import .style { Style }
 
 /**
@@ -43,7 +43,7 @@ class TextOverflow {
 var _ALIGNS = ['start', 'center', 'end', 'justify']
 var _OVERFLOWS = ['clip', 'ellipsis']
 
-var _TEXT_OPTIONS = host_options({
+var _TEXT_OPTIONS = focus_options({
   style: TextStyle,
   align: 'string',
   max_lines: 'number',
@@ -97,13 +97,14 @@ class Text < HostWidget {
   /**
    * @param string text
    * @param ?dict options: `style`, `align`, `max_lines`, `overflow`,
-   *    `selectable` and the options every host widget takes.
+   *    `selectable`, `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(text: string, options: ?dict) {
     var o = check_options(options, 'Text', _TEXT_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.text = text
     self.style = o.get('style')
     self.align = o.get('align', 'start')

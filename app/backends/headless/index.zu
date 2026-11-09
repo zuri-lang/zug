@@ -610,7 +610,8 @@ class HeadlessWindow < WindowHost {
 
   /**
    * Presses a key as the user would with no control using it, such as
-   * `cmd+k` or `7`. Returns whether the application used it.
+   * `cmd+k` or `7`. Escape goes first to the focused view's `on_escape`,
+   * when it has one. Returns whether the application used it.
    *
    * @param string binding
    * @param ?string characters: what the key types, the key itself for a
@@ -630,6 +631,18 @@ class HeadlessWindow < WindowHost {
 
     if typed == nil {
       typed = key.length() == 1 ? key : ''
+    }
+
+    # Escape goes to the focused view first, as on a real display.
+    var focused = self.backend.focused
+
+    if key == 'escape'
+      and modifiers.is_empty()
+      and focused != nil
+      and !focused.destroyed
+      and focused.dispatch('escape', nil) == true {
+      self.backend.event_handled()
+      return true
     }
 
     var used = self.dispatch(

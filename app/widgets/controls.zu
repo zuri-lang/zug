@@ -35,7 +35,7 @@
 import date
 import ..foundation { Key, Color, check_options }
 import .framework { StatelessWidget }
-import .host { HostWidget, host_options, common_props }
+import .host { HostWidget, host_options, focus_options, common_props }
 import .basic { Row, Column, Box }
 import .button { check_control_size }
 
@@ -45,7 +45,7 @@ def _size_of(o, owner) {
   return size
 }
 
-var _CHECKBOX_OPTIONS = host_options({
+var _CHECKBOX_OPTIONS = focus_options({
   label: 'string',
   on_changed: 'function',
   tristate: 'bool',
@@ -68,14 +68,15 @@ class Checkbox < HostWidget {
   /**
    * @param ?bool value
    * @param ?dict options: `label`, `on_changed` (called with the new
-   *    value), `tristate`, `enabled`, `size` and the options every host
-   *    widget takes.
+   *    value), `tristate`, `enabled`, `size`, `on_escape` and the options
+   *    every host widget takes.
    * @constructor
    */
   @new(value: ?bool, options: ?dict) {
     var o = check_options(options, 'Checkbox', _CHECKBOX_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.label = o.get('label', '')
     self.on_changed = o.get('on_changed')
@@ -112,7 +113,7 @@ class Checkbox < HostWidget {
   }
 }
 
-var _RADIO_OPTIONS = host_options({
+var _RADIO_OPTIONS = focus_options({
   label: 'string',
   on_changed: 'function',
   enabled: 'bool',
@@ -134,14 +135,15 @@ class Radio < HostWidget {
   /**
    * @param any value: what this choice stands for.
    * @param any group_value: the value currently chosen.
-   * @param ?dict options: `label`, `on_changed`, `enabled`, `size` and the
-   *    options every host widget takes.
+   * @param ?dict options: `label`, `on_changed`, `enabled`, `size`,
+   *    `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(value, group_value, options: ?dict) {
     var o = check_options(options, 'Radio', _RADIO_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.group_value = group_value
     self.label = o.get('label', '')
@@ -189,6 +191,7 @@ class RadioGroup < StatelessWidget {
   var items = []
   var value
   var on_changed
+  var on_escape
   var axis = 'vertical'
   var spacing = 6
   var enabled = true
@@ -198,7 +201,8 @@ class RadioGroup < StatelessWidget {
    *    are both.
    * @param any value: the value chosen.
    * @param ?dict options: `on_changed`, `axis` (vertical when left out),
-   *    `spacing`, `enabled` and `key`.
+   *    `spacing`, `enabled`, `on_escape`, given to each radio button, and
+   *    `key`.
    * @constructor
    */
   @new(items: dict|list, value, options: ?dict) {
@@ -207,6 +211,7 @@ class RadioGroup < StatelessWidget {
       {
         key: Key,
         on_changed: 'function',
+        on_escape: 'function',
         axis: 'string',
         spacing: 'number',
         enabled: 'bool',
@@ -218,6 +223,7 @@ class RadioGroup < StatelessWidget {
       : items.map(@(item) => [item, '${item}'])
     self.value = value
     self.on_changed = o.get('on_changed')
+    self.on_escape = o.get('on_escape')
     self.axis = o.get('axis', 'vertical')
     self.spacing = o.get('spacing', self.axis == 'vertical' ? 6 : 16)
     self.enabled = o.get('enabled', true)
@@ -228,6 +234,7 @@ class RadioGroup < StatelessWidget {
       label: item[1],
       on_changed: self.on_changed,
       enabled: self.enabled,
+      on_escape: self.on_escape,
     }))
 
     if self.axis == 'horizontal' {
@@ -241,7 +248,7 @@ class RadioGroup < StatelessWidget {
   }
 }
 
-var _SWITCH_OPTIONS = host_options({
+var _SWITCH_OPTIONS = focus_options({
   on_changed: 'function',
   enabled: 'bool',
   size: 'string',
@@ -258,14 +265,15 @@ class Switch < HostWidget {
 
   /**
    * @param bool value
-   * @param ?dict options: `on_changed`, `enabled`, `size` and the options
-   *    every host widget takes.
+   * @param ?dict options: `on_changed`, `enabled`, `size`, `on_escape` and
+   *    the options every host widget takes.
    * @constructor
    */
   @new(value: bool, options: ?dict) {
     var o = check_options(options, 'Switch', _SWITCH_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.on_changed = o.get('on_changed')
     self.enabled = o.get('enabled', true)
@@ -294,7 +302,7 @@ class Switch < HostWidget {
   }
 }
 
-var _SLIDER_OPTIONS = host_options({
+var _SLIDER_OPTIONS = focus_options({
   min: 'number',
   max: 'number',
   divisions: 'number',
@@ -324,14 +332,15 @@ class Slider < HostWidget {
    * @param number value
    * @param ?dict options: `min` (0), `max` (1), `divisions`, `vertical`,
    *    `on_changed` (called while dragging), `on_change_end` (called when
-   *    the drag ends), `enabled`, `size` and the options every host widget
-   *    takes.
+   *    the drag ends), `enabled`, `size`, `on_escape` and the options every
+   *    host widget takes.
    * @constructor
    */
   @new(value: number, options: ?dict) {
     var o = check_options(options, 'Slider', _SLIDER_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.min = o.get('min', 0)
     self.max = o.get('max', 1)
@@ -382,7 +391,7 @@ class Slider < HostWidget {
   }
 }
 
-var _STEPPER_OPTIONS = host_options({
+var _STEPPER_OPTIONS = focus_options({
   min: 'number',
   max: 'number',
   step: 'number',
@@ -408,14 +417,15 @@ class Stepper < HostWidget {
   /**
    * @param number value
    * @param ?dict options: `min` (0), `max` (100), `step` (1), `wraps`
-   *    from one end to the other, `on_changed`, `enabled`, `size` and the
-   *    options every host widget takes.
+   *    from one end to the other, `on_changed`, `enabled`, `size`,
+   *    `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(value: number, options: ?dict) {
     var o = check_options(options, 'Stepper', _STEPPER_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.min = o.get('min', 0)
     self.max = o.get('max', 100)
@@ -576,7 +586,7 @@ class Segment {
 }
 
 var _MODES = ['one', 'any', 'momentary']
-var _SEGMENTED_OPTIONS = host_options({
+var _SEGMENTED_OPTIONS = focus_options({
   mode: 'string',
   on_changed: 'function',
   on_pressed: 'function',
@@ -603,14 +613,15 @@ class SegmentedControl < HostWidget {
    * @param list segments: strings or `Segment`s.
    * @param any selected
    * @param ?dict options: `mode` (see `SegmentMode`), `on_changed`,
-   *    `on_pressed`, `enabled`, `size` and the options every host widget
-   *    takes.
+   *    `on_pressed`, `enabled`, `size`, `on_escape` and the options every
+   *    host widget takes.
    * @constructor
    */
   @new(segments: list, selected, options: ?dict) {
     var o = check_options(options, 'SegmentedControl', _SEGMENTED_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.segments = segments.map(
       @(segment) => is_string(segment) ? Segment(segment) : segment,
     )
@@ -708,7 +719,7 @@ class DropdownItem {
   }
 }
 
-var _DROPDOWN_OPTIONS = host_options({
+var _DROPDOWN_OPTIONS = focus_options({
   on_changed: 'function',
   enabled: 'bool',
   size: 'string',
@@ -729,13 +740,15 @@ class Dropdown < HostWidget {
    *    and label.
    * @param any value: the value chosen.
    * @param ?dict options: `on_changed` (called with the value chosen),
-   *    `enabled`, `size` and the options every host widget takes.
+   *    `enabled`, `size`, `on_escape` and the options every host widget
+   *    takes.
    * @constructor
    */
   @new(items: list, value, options: ?dict) {
     var o = check_options(options, 'Dropdown', _DROPDOWN_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.items = items.map(
       @(item) => instance_of(item, DropdownItem)
         ? item
@@ -821,7 +834,7 @@ class DateStyle {
   static var GRAPHICAL = 'graphical'
 }
 
-var _DATE_OPTIONS = host_options({
+var _DATE_OPTIONS = focus_options({
   min: date.Date,
   max: date.Date,
   mode: 'string',
@@ -850,7 +863,7 @@ class DatePicker < HostWidget {
    * @param date.Date value
    * @param ?dict options: `min`, `max`, `mode` (see `DateMode`), `style`
    *    (see `DateStyle`), `on_changed` (called with a `date.Date`),
-   *    `enabled` and the options every host widget takes.
+   *    `enabled`, `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(value, options: ?dict) {
@@ -861,6 +874,7 @@ class DatePicker < HostWidget {
     var o = check_options(options, 'DatePicker', _DATE_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.min = o.get('min')
     self.max = o.get('max')
@@ -905,17 +919,18 @@ class ColorWell < HostWidget {
 
   /**
    * @param Color value
-   * @param ?dict options: `on_changed` (called with a `Color`), `enabled`
-   *    and the options every host widget takes.
+   * @param ?dict options: `on_changed` (called with a `Color`), `enabled`,
+   *    `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(value: Color, options: ?dict) {
     var o = check_options(
       options, 'ColorWell',
-      host_options({ on_changed: 'function', enabled: 'bool' }),
+      focus_options({ on_changed: 'function', enabled: 'bool' }),
     )
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.on_changed = o.get('on_changed')
     self.enabled = o.get('enabled', true)
@@ -969,14 +984,14 @@ class LevelIndicator < HostWidget {
   /**
    * @param number value
    * @param ?dict options: `min` (0), `max` (5), `warning` and `critical`
-   *    levels, `style` (see `LevelStyle`), `on_changed` and the options
-   *    every host widget takes.
+   *    levels, `style` (see `LevelStyle`), `on_changed`, `on_escape` and the
+   *    options every host widget takes.
    * @constructor
    */
   @new(value: number, options: ?dict) {
     var o = check_options(
       options, 'LevelIndicator',
-      host_options({
+      focus_options({
         min: 'number',
         max: 'number',
         warning: 'number',
@@ -987,6 +1002,7 @@ class LevelIndicator < HostWidget {
     )
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.value = value
     self.min = o.get('min', 0)
     self.max = o.get('max', 5)

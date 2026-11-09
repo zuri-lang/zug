@@ -56,11 +56,15 @@ var _SELECTION_KEYS = [
   'left', 'right', 'up', 'down', 'home', 'end', 'page_up', 'page_down', 'tab',
 ]
 
+def _is_kind(object, name: string) {
+  return typed(ffi.bool, [ffi.ptr])(object, sel('isKindOfClass:'), cls(name))
+}
+
 /**
  * zug's windows: an `NSWindow` that offers keys no control used to its
- * host before AppKit beeps at them. Text the user can select but not edit
- * swallows every key typed into it, so while it has focus, a key it has
- * no use for is offered to the host first.
+ * host before AppKit beeps at them. A few keys reach the host before the
+ * focused view does: Escape, for the view's `on_escape`, and keys that
+ * text the user can select but not edit would swallow.
  *
  * @type Pointer
  */
@@ -70,7 +74,7 @@ var ZugWindow = define_class('ZugWindow', 'NSWindow', {
 
     catch {
       var host = host_for(this)
-      used = host != nil and host.read_only_key(event)
+      used = host != nil and host.key_first(event)
     } as error {
       report_error(error, 'handling a key')
     }
@@ -512,39 +516,72 @@ class MacWindow < WindowHost {
   }
 
   /**
-   * A key about to go to the focused view. When that view is text the
-   * user can select but not edit, and the key is one such text has no use
-   * for, such as a typed character or Return, zug sees it first. Returns
-   * whether zug used it.
+   * A key about to go to the focused view, which zug sees first in two
+   * cases. Escape goes to the focused view's `escape` handler, when it has
+   * one. And when the focused view is text the user can select but not
+   * edit, a key such text has no use for, such as a typed character or
+   * Return, goes to the window's key handlers. Returns whether zug used
+   * the key.
    *
    * @internal
    * @param Pointer event
    * @returns bool
    */
-  read_only_key(event) {
+  key_first(event) {
     if self.destroyed or send_uint(event, 'type') != _KEY_DOWN {
       return false
     }
 
     var responder = send(self.native, 'firstResponder')
 
-    if responder == nil
-      or !typed(ffi.bool, [ffi.ptr])(
-        responder, sel('isKindOfClass:'), cls('NSTextView'),
-      )
-      or send_bool(responder, 'isEditable') {
+    if responder == nil or responder == self.native {
       return false
     }
 
     var payload = key_payload(event)
 
-    if payload.modifiers.contains('cmd')
+    if payload.key == 'escape' and payload.modifiers.is_empty() {
+      var focused = self._host_of(responder)
+
+      if focused != nil
+        and self.backend.deliver(focused, 'escape', nil) == true {
+        return true
+      }
+    }
+
+    if !_is_kind(responder, 'NSTextView')
+      or send_bool(responder, 'isEditable')
+      or payload.modifiers.contains('cmd')
       or payload.modifiers.contains('ctrl')
       or _SELECTION_KEYS.contains(payload.key) {
       return false
     }
 
     return self.backend.deliver(self, 'key', payload) == true
+  }
+
+  # The view host that `responder`, a native view with keyboard focus,
+  # belongs to: a field editor stands for the field it edits, and a view
+  # inside a host's native view, such as the table in a scroll view,
+  # belongs to that host.
+  _host_of(responder) {
+    var view = responder
+
+    if _is_kind(view, 'NSTextView') and send_bool(view, 'isFieldEditor') {
+      view = send(view, 'delegate')
+    }
+
+    while view != nil and _is_kind(view, 'NSView') {
+      var host = host_for(view)
+
+      if host != nil {
+        return host
+      }
+
+      view = send(view, 'superview')
+    }
+
+    return nil
   }
 
   # What the delegate reports.

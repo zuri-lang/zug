@@ -215,6 +215,7 @@ var _BASE_OPTIONS = {
   on_changed: 'function',
   on_submitted: 'function',
   on_focus_changed: 'function',
+  on_escape: 'function',
 }
 
 /**
@@ -459,10 +460,12 @@ class TextInputState < State {
 
     # A secure field is a different native control, so switching makes a
     # new view.
-    return TextInputHost(
+    var host = TextInputHost(
       self.widget.input_kind(), props, handlers, self.widget.common,
       ValueKey(props.get('secure', false)),
     )
+    host.on_escape = o.get('on_escape')
+    return host
   }
 }
 
@@ -515,7 +518,6 @@ class TextField < TextInput {
       bezel: 'string',
       align: 'string',
       style: TextStyle,
-      on_escape: 'function',
     })
   }
 
@@ -535,12 +537,10 @@ class TextField < TextInput {
 
   extra_handlers(controller) {
     var on_submitted = self.options.get('on_submitted')
-    var on_escape = self.options.get('on_escape')
     return {
       submitted: @(payload) => on_submitted == nil
         ? nil
         : on_submitted(controller.text()),
-      escape: @(payload) => on_escape == nil ? nil : on_escape(),
     }
   }
 }
@@ -554,8 +554,8 @@ class TextArea < TextInput {
   /**
    * @param ?dict options: `controller` or `text`, `read_only`, `style`,
    *    `wrap` (true), `bordered` (true), `max_length`, `input_filter`,
-   *    `autofocus`, `on_changed`, `on_focus_changed` and the options every
-   *    host widget takes.
+   *    `autofocus`, `on_changed`, `on_focus_changed`, `on_escape` and the
+   *    options every host widget takes.
    * @constructor
    */
   @new(options: ?dict) {
@@ -590,7 +590,8 @@ class SearchField < TextInput {
   /**
    * @param ?dict options: `controller` or `text`, `placeholder`,
    *    `enabled`, `size`, `autofocus`, `on_changed`, `on_submitted`,
-   *    `on_focus_changed` and the options every host widget takes.
+   *    `on_focus_changed`, `on_escape` and the options every host widget
+   *    takes.
    * @constructor
    */
   @new(options: ?dict) {
@@ -641,8 +642,8 @@ class ComboBox < TextInput {
    * @param ?dict options: `controller` or `text`, `placeholder`,
    *    `completes` to finish typing from the items, `visible_items`,
    *    `enabled`, `size`, `autofocus`, `on_changed`, `on_selected`,
-   *    `on_submitted`, `on_focus_changed` and the options every host widget
-   *    takes.
+   *    `on_submitted`, `on_focus_changed`, `on_escape` and the options every
+   *    host widget takes.
    * @constructor
    */
   @new(items: list, options: ?dict) {

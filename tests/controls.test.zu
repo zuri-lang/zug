@@ -438,3 +438,154 @@ describe('Image and Icon', @{
     t.dispose()
   })
 })
+
+describe('Escape', @{
+  it('goes to the on_escape of whichever widget has focus', @{
+    var pressed = []
+    var escape = @(name) => @{
+      pressed.append(name)
+    }
+    var t = WidgetTester().pump_widget(Shortcuts({ 'escape': @{
+      pressed.append('window')
+    } }, Column([
+      Text('label', {
+        selectable: true,
+        on_escape: escape('text'),
+        accessibility_identifier: 'text',
+      }),
+      Button('Go', {
+        on_pressed: @{},
+        on_escape: escape('button'),
+        accessibility_identifier: 'button',
+      }),
+      Checkbox(false, {
+        on_changed: @(value) {},
+        on_escape: escape('checkbox'),
+        accessibility_identifier: 'checkbox',
+      }),
+      Radio(1, 1, {
+        label: 'One',
+        on_changed: @(value) {},
+        on_escape: escape('radio'),
+        accessibility_identifier: 'radio',
+      }),
+      Switch(false, {
+        on_changed: @(value) {},
+        on_escape: escape('switch'),
+        accessibility_identifier: 'switch',
+      }),
+      Slider(0.5, {
+        on_changed: @(value) {},
+        on_escape: escape('slider'),
+        accessibility_identifier: 'slider',
+      }),
+      Stepper(1, {
+        on_changed: @(value) {},
+        on_escape: escape('stepper'),
+        accessibility_identifier: 'stepper',
+      }),
+      SegmentedControl(['A', 'B'], 0, {
+        on_changed: @(index) {},
+        on_escape: escape('segmented'),
+        accessibility_identifier: 'segmented',
+      }),
+      Dropdown([DropdownItem('a', 'A')], 'a', {
+        on_changed: @(value) {},
+        on_escape: escape('dropdown'),
+        accessibility_identifier: 'dropdown',
+      }),
+      DatePicker(date.from_time(1700000000), {
+        on_changed: @(value) {},
+        on_escape: escape('date'),
+        accessibility_identifier: 'date',
+      }),
+      ColorWell(Color.RED, {
+        on_changed: @(value) {},
+        on_escape: escape('colour'),
+        accessibility_identifier: 'colour',
+      }),
+      LevelIndicator(1, {
+        on_changed: @(value) {},
+        on_escape: escape('level'),
+        accessibility_identifier: 'level',
+      }),
+      Box({ height: 60, child: TabView([Tab('One', Text('1'))], 0, {
+        on_changed: @(index) {},
+        on_escape: escape('tabs'),
+        accessibility_identifier: 'tabs',
+      }) }),
+      Box({ height: 60, child: DataTable(
+        [DataColumn('a', 'A')], 1, @(row, column) => 'x', {
+          on_escape: escape('table'),
+          accessibility_identifier: 'table',
+        },
+      ) }),
+      TextField({
+        on_escape: escape('field'),
+        accessibility_identifier: 'field',
+      }),
+      Box({ height: 40, child: TextArea({
+        on_escape: escape('area'),
+        accessibility_identifier: 'area',
+      }) }),
+      SearchField({
+        on_escape: escape('search'),
+        accessibility_identifier: 'search',
+      }),
+      ComboBox(['a'], {
+        on_escape: escape('combo'),
+        accessibility_identifier: 'combo',
+      }),
+    ])))
+    var names = [
+      'text', 'button', 'checkbox', 'radio', 'switch', 'slider', 'stepper',
+      'segmented', 'dropdown', 'date', 'colour', 'level', 'tabs', 'table',
+      'field', 'area', 'search', 'combo',
+    ]
+
+    for name in names {
+      t.one(name).focus()
+      expect(t.window().press_key('escape')).to_be_true()
+    }
+
+    expect(pressed).to_equal(names)
+    t.window().clear_focus()
+    t.window().press_key('escape')
+    expect(pressed[-1]).to_be('window')
+    t.dispose()
+  })
+
+  it('passes on from a focused widget with no on_escape', @{
+    var pressed = []
+    var t = WidgetTester().pump_widget(Shortcuts({ 'escape': @{
+      pressed.append('window')
+    } }, Button('Go', { on_pressed: @{}, accessibility_identifier: 'go' })))
+    t.one('go').focus()
+    expect(t.window().press_key('escape')).to_be_true()
+    expect(pressed).to_equal(['window'])
+    t.dispose()
+  })
+
+  it('reaches every radio button of a RadioGroup', @{
+    var pressed = 0
+    var t = WidgetTester().pump_widget(RadioGroup(['a', 'b'], 'a', {
+      on_changed: @(value) {},
+      on_escape: @{
+        pressed++
+      },
+    }))
+    t.find_kind('radio')[1].focus()
+    t.window().press_key('escape')
+    expect(pressed).to_be(1)
+    t.dispose()
+  })
+
+  it('is not an option of widgets that cannot take focus', @{
+    expect(@{
+      Box({ on_escape: @{} })
+    }).to_raise_instance_of(OptionError)
+    expect(@{
+      ProgressBar({ value: 0.5, on_escape: @{} })
+    }).to_raise_instance_of(OptionError)
+  })
+})

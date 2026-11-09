@@ -100,8 +100,10 @@ def mouse_click(view) {
   _send_void_id(window, _sel('sendEvent:'), make(1, 1.0))
 }
 
-# Sends a native window a key going down, as the keyboard does.
-def send_key(window, characters, code) {
+# Sends a native window a key going down. With `through_app`, the key
+# goes through the application first, as the keyboard's keys do, so
+# buttons and menus see their shortcuts.
+def send_key(window, characters, code, through_app: ?bool) {
   var string = _send_string_arg(
     _class('NSString'), _sel('stringWithUTF8String:'), characters,
   )
@@ -111,7 +113,10 @@ def send_key(window, characters, code) {
     10, { x: 0, y: 0 }, 0, 0, _send_long(window, _sel('windowNumber')), nil,
     string, string, false, code,
   )
-  _send_void_id(window, _sel('sendEvent:'), event)
+  var target = through_app == true
+    ? _send(_class('NSApplication'), _sel('sharedApplication'))
+    : window
+  _send_void_id(target, _sel('sendEvent:'), event)
 }
 
 def native_string(object, name) {
@@ -392,6 +397,42 @@ suite('the macOS backend', @{
     expect(reported).to_be_empty()
     expect(submitted).to_equal(['4'])
     expect(seen.focused).to_be_false()
+  })
+
+  it('gives Escape to the focused view before a Cancel button takes it', @{
+    var pressed = []
+    var escape = @(name) => @{
+      pressed.append(name)
+    }
+
+    run_steps(App({ windows: [Window('Escape', Column([
+      TextField({ on_escape: escape('field') }),
+      Expanded(DataTable(
+        [DataColumn('name', 'Name')], 3, @(row, column) => 'row ${row}',
+        { on_escape: escape('table') },
+      )),
+      Button('Cancel', {
+        role: ButtonRole.CANCEL,
+        on_pressed: escape('cancel'),
+      }),
+    ]), { size: Size(240, 200) })] }), [
+      @(runtime) {
+        mouse_click(hosts(runtime, 'text_field')[0].view.native)
+      },
+      @(runtime) {
+        send_key(runtime.windows()[0].view.native, '\u001b', 53, true)
+        mouse_click(hosts(runtime, 'table')[0].view.table)
+      },
+      @(runtime) {
+        var window = runtime.windows()[0].view.native
+        send_key(window, '\u001b', 53, true)
+        runtime.windows()[0].view.clear_focus()
+        send_key(window, '\u001b', 53, true)
+      },
+    ])
+
+    expect(reported).to_be_empty()
+    expect(pressed).to_equal(['field', 'table', 'cancel'])
   })
 
   it('keeps the backend contract', @{

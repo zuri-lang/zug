@@ -23,6 +23,7 @@ Every control also takes a few common options:
 | `accessibility_label` | What VoiceOver reads, when the visible text isn't enough. |
 | `accessibility_identifier` | A name for UI tests and for `WidgetTester` to find it by. |
 | `key` | See [Keys](widgets-and-state.md#keys). |
+| `on_escape` | Called when Escape is pressed while it has keyboard focus. |
 
 Many controls take `size`, one of `ControlSize.MINI`, `SMALL`,
 `REGULAR` (the default) and `LARGE`.

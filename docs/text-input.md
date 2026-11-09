@@ -88,12 +88,11 @@ var digits_only = TextField({
 
 ## TextField
 
-A single line. Return calls `on_submitted` with the text, and Escape
-calls `on_escape`. Besides the options above it takes `placeholder`,
-`obscure: true` for passwords, `read_only`, `enabled`, `bezel`
-(`FieldBezel.ROUNDED`, `SQUARE`, or `NONE` for text that looks like a
-label until edited), `align`, `style`, `autofocus` and
-`on_focus_changed`, called with whether it has focus.
+A single line. Return calls `on_submitted` with the text. Besides the
+options above it takes `placeholder`, `obscure: true` for passwords,
+`read_only`, `enabled`, `bezel` (`FieldBezel.ROUNDED`, `SQUARE`, or
+`NONE` for text that looks like a label until edited), `align`, `style`,
+`autofocus` and `on_focus_changed`, called with whether it has focus.
 
 ## TextArea
 
@@ -136,3 +135,7 @@ field when it first appears, and `controller.request_focus()` focuses it
 later. To take focus away, so that keys go to the window's
 [shortcuts](apps-windows-and-menus.md#the-keyboard) instead, call
 `clear_focus(context)`.
+
+Every text input takes `on_escape`, called when the user presses Escape
+in it. Without one, Escape does what the platform does there: a search
+field, for one, empties itself.

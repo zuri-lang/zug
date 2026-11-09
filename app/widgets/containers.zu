@@ -23,7 +23,7 @@ import ..rendering {
 import .framework { Widget, StatelessWidget, StatefulWidget, State }
 import .host {
   HostWidget, SingleChildHostWidget, MultiChildHostWidget, host_options,
-  common_props,
+  focus_options, common_props,
 }
 import .basic { Column, Row, Padding, Box, Stack, Positioned, Responsive }
 
@@ -479,13 +479,13 @@ class TabView < MultiChildHostWidget {
   /**
    * @param list tabs: `Tab`s.
    * @param number selected: the index of the tab shown.
-   * @param ?dict options: `on_changed` (called with the index chosen) and
-   *    the options every host widget takes.
+   * @param ?dict options: `on_changed` (called with the index chosen),
+   *    `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(tabs: list, selected: number, options: ?dict) {
     var o = check_options(
-      options, 'TabView', host_options({ on_changed: 'function' }),
+      options, 'TabView', focus_options({ on_changed: 'function' }),
     )
 
     for tab in tabs {
@@ -496,6 +496,7 @@ class TabView < MultiChildHostWidget {
 
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.tabs = tabs
     self.children = tabs.map(@(tab) => tab.child)
     self.selected = selected
@@ -695,12 +696,12 @@ class DataTable < HostWidget {
    *    (called with that list), `on_activate` (called with a row when it
    *    is double-clicked or Return is pressed on it), `sort` (`[column id,
    *    ascending]`, shown in the header), `on_sort` (called with a column
-   *    id and whether ascending), `alternating`, `grid`, `header` and the
-   *    options every host widget takes.
+   *    id and whether ascending), `alternating`, `grid`, `header`,
+   *    `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(columns: list, row_count: number, cell: function, options: ?dict) {
-    var o = check_options(options, 'DataTable', host_options({
+    var o = check_options(options, 'DataTable', focus_options({
       selection: 'string',
       selected: 'list',
       on_selection_changed: 'function',
@@ -720,6 +721,7 @@ class DataTable < HostWidget {
 
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.columns = columns
     self.row_count = row_count
     self.cell = cell

@@ -162,6 +162,12 @@ selection or the focus: the arrows, `home`, `end`, `page_up`,
 `page_down`, `tab`, and anything with `cmd` or `ctrl`. A digit or Return
 typed while it's selected still reaches your shortcuts.
 
+Escape goes to the focused widget first. Every widget that can take
+keyboard focus takes `on_escape`, from buttons and checkboxes to tables
+and text fields, and while one has focus its `on_escape` gets Escape
+before your shortcuts or a Cancel button do. A focused widget without
+one passes Escape on as usual.
+
 ```zuri
 import zug { * }
 

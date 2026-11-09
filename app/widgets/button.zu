@@ -15,7 +15,7 @@
 
 import ..foundation { Color, check_options }
 import ..painting { TextStyle }
-import .host { HostWidget, host_options, common_props }
+import .host { HostWidget, host_options, focus_options, common_props }
 
 /**
  * What a button looks like.
@@ -119,7 +119,7 @@ def check_control_size(size: string, owner: string) {
   }
 }
 
-var _BUTTON_OPTIONS = host_options({
+var _BUTTON_OPTIONS = focus_options({
   on_pressed: 'function',
   variant: 'string',
   role: 'string',
@@ -215,13 +215,14 @@ class Button < HostWidget {
    * @param string label
    * @param ?dict options: `on_pressed`, `variant`, `role`, `shortcut`,
    *    `size`, `enabled`, `style`, `selected`, `on_selected_changed`,
-   *    `tint` and the options every host widget takes.
+   *    `tint`, `on_escape` and the options every host widget takes.
    * @constructor
    */
   @new(label: string, options: ?dict) {
     var o = check_options(options, 'Button', _BUTTON_OPTIONS)
     self.key = o.get('key')
     self.common = common_props(o)
+    self.on_escape = o.get('on_escape')
     self.label = label
     self.on_pressed = o.get('on_pressed')
     self.variant = o.get('variant', 'push')
