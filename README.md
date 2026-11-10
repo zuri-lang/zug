@@ -53,6 +53,8 @@ methods, accessibility, dark mode and behaviour that come with them.
   </tr>
 </table>
 
+<p align="center"><a href="docs/images">More screenshots</a>, each in light and dark.</p>
+
 ```zuri
 import zug { * }
 
