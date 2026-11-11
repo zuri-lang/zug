@@ -184,17 +184,14 @@ describe('keys', @{
     var b = Probe('b', log, { key: ValueKey('b') })
     tester.pump_widget(Holder([a, b]))
     expect(texts(tester)).to_equal(['a:1', 'b:1'])
-    tester
-      .state_of(HolderState)
-      .show([
-        Probe('b', log, { key: ValueKey('b') }),
-        Probe('a', log, { key: ValueKey('a') }),
-      ])
+    tester.state_of(HolderState).show([
+      Probe('b', log, { key: ValueKey('b') }),
+      Probe('a', log, { key: ValueKey('a') }),
+    ])
     tester.pump()
     expect(texts(tester)).to_equal(['b:2', 'a:2'])
-    expect(log.filter(
-      @(entry) => entry.starts_with('init'),
-    )).to_equal(['init a', 'init b'])
+    expect(log.filter(@(entry) => entry.starts_with('init')))
+        .to_equal(['init a', 'init b'])
     tester.dispose()
   })
 
@@ -212,17 +209,17 @@ describe('keys', @{
   it('drop the state of a removed keyed child and keep the rest', @{
     var log = []
     var tester = WidgetTester()
-    tester.pump_widget(Holder([
-      Probe('a', log, { key: ValueKey(1) }),
-      Probe('b', log, { key: ValueKey(2) }),
-      Probe('c', log, { key: ValueKey(3) }),
-    ]))
-    tester
-      .state_of(HolderState)
-      .show([
+    tester.pump_widget(
+      Holder([
         Probe('a', log, { key: ValueKey(1) }),
+        Probe('b', log, { key: ValueKey(2) }),
         Probe('c', log, { key: ValueKey(3) }),
-      ])
+      ]),
+    )
+    tester.state_of(HolderState).show([
+      Probe('a', log, { key: ValueKey(1) }),
+      Probe('c', log, { key: ValueKey(3) }),
+    ])
     tester.pump()
     expect(log).to_contain('dispose b')
     expect(log).not.to_contain('dispose a')
@@ -249,9 +246,12 @@ describe('keys', @{
       reported.append(error.message)
     })
     var tester = WidgetTester()
-    tester.pump_widget(Column([
-      Probe('a', [], { key }), Probe('b', [], { key }),
-    ]))
+    tester.pump_widget(
+      Column([
+        Probe('a', [], { key }),
+        Probe('b', [], { key }),
+      ]),
+    )
     set_error_handler(nil)
     expect(reported).to_have_length(1)
     expect(reported[0]).to_contain('may be used once in the tree')
@@ -263,9 +263,9 @@ describe('Inherited', @{
   it('gives the nearest value to widgets below', @{
     var seen = []
     var tester = WidgetTester()
-    tester.pump_widget(Shade(
-      'dark', Shade('light', ShadeReader(seen), nil), nil,
-    ))
+    tester.pump_widget(
+      Shade('dark', Shade('light', ShadeReader(seen), nil), nil),
+    )
     expect(seen).to_equal(['light'])
     tester.dispose()
   })
@@ -323,11 +323,19 @@ describe('Context', @{
     var found = []
 
     var tester = WidgetTester()
-    tester.pump_widget(Padding(EdgeInsets.all(10), Center(Builder(@(context) {
-      found.append(context.find_ancestor_widget(Padding))
-      found.append(context)
-      return Box({ width: 40, height: 30 })
-    }))), { size: Size(200, 100) })
+    tester.pump_widget(
+      Padding(
+        EdgeInsets.all(10),
+        Center(
+          Builder(@(context) {
+            found.append(context.find_ancestor_widget(Padding))
+            found.append(context)
+            return Box({ width: 40, height: 30 })
+          }),
+        ),
+      ),
+      { size: Size(200, 100) },
+    )
 
     expect(instance_of(found[0], Padding)).to_be_true()
     expect(found[1].size()).to_equal(Size(40, 30))

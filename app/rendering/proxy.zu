@@ -3,7 +3,13 @@
  */
 
 import ..foundation {
-  Point, Size, Constraints, EdgeInsets, Alignment, INFINITY, LayoutError,
+  Point,
+  Size,
+  Constraints,
+  EdgeInsets,
+  Alignment,
+  INFINITY,
+  LayoutError,
 }
 import .object { RenderObject }
 
@@ -60,46 +66,48 @@ class RenderPadding < RenderObject {
     var child = self.child()
 
     if child == nil {
-      self.size = self.constraints.constrain(Size(
-        self.padding.horizontal(), self.padding.vertical(),
-      ))
+      self.size = self.constraints.constrain(
+        Size(self.padding.horizontal(), self.padding.vertical()),
+      )
       return
     }
 
     child.layout(self.constraints.deflate(self.padding), true)
     self.place_child(child, self.padding.top_left())
-    self.size = self.constraints.constrain(self.padding.inflate_size(child.size))
+    self.size = self.constraints.constrain(
+      self.padding.inflate_size(child.size),
+    )
   }
 
   compute_min_intrinsic_width(height: number) {
     var child = self.child()
     var inner = child == nil
-      ? 0
-      : child.min_intrinsic_width((height - self.padding.vertical()).max(0))
+        ? 0
+        : child.min_intrinsic_width((height - self.padding.vertical()).max(0))
     return inner + self.padding.horizontal()
   }
 
   compute_max_intrinsic_width(height: number) {
     var child = self.child()
     var inner = child == nil
-      ? 0
-      : child.max_intrinsic_width((height - self.padding.vertical()).max(0))
+        ? 0
+        : child.max_intrinsic_width((height - self.padding.vertical()).max(0))
     return inner + self.padding.horizontal()
   }
 
   compute_min_intrinsic_height(width: number) {
     var child = self.child()
     var inner = child == nil
-      ? 0
-      : child.min_intrinsic_height((width - self.padding.horizontal()).max(0))
+        ? 0
+        : child.min_intrinsic_height((width - self.padding.horizontal()).max(0))
     return inner + self.padding.vertical()
   }
 
   compute_max_intrinsic_height(width: number) {
     var child = self.child()
     var inner = child == nil
-      ? 0
-      : child.max_intrinsic_height((width - self.padding.horizontal()).max(0))
+        ? 0
+        : child.max_intrinsic_height((width - self.padding.horizontal()).max(0))
     return inner + self.padding.vertical()
   }
 }
@@ -145,11 +153,13 @@ class RenderAlign < RenderObject {
    * @param ?number height_factor
    */
   configure(
-    alignment: Alignment, width_factor: ?number, height_factor: ?number,
+    alignment: Alignment,
+    width_factor: ?number,
+    height_factor: ?number,
   ) {
-    if alignment != self.alignment
-      or width_factor != self.width_factor
-      or height_factor != self.height_factor {
+    if alignment != self.alignment or
+        width_factor != self.width_factor or
+        height_factor != self.height_factor {
       self.alignment = alignment
       self.width_factor = width_factor
       self.height_factor = height_factor
@@ -158,26 +168,27 @@ class RenderAlign < RenderObject {
   }
 
   perform_layout() {
-    var shrink_width = self.width_factor != nil
-      or !self.constraints.has_bounded_width()
-    var shrink_height = self.height_factor != nil
-      or !self.constraints.has_bounded_height()
+    var shrink_width = self.width_factor != nil or
+        !self.constraints.has_bounded_width()
+    var shrink_height = self.height_factor != nil or
+        !self.constraints.has_bounded_height()
     var child = self.child()
 
     if child == nil {
-      self.size = self.constraints.constrain(Size(
-        shrink_width ? 0 : INFINITY, shrink_height ? 0 : INFINITY,
-      ))
+      self.size = self.constraints.constrain(
+        Size(shrink_width ? 0 : INFINITY, shrink_height ? 0 : INFINITY),
+      )
       return
     }
 
     child.layout(self.constraints.loosen(), true)
     var width = shrink_width
-      ? child.size.width * (self.width_factor == nil ? 1 : self.width_factor)
-      : INFINITY
+        ? child.size.width * (self.width_factor == nil ? 1 : self.width_factor)
+        : INFINITY
     var height = shrink_height
-      ? child.size.height * (self.height_factor == nil ? 1 : self.height_factor)
-      : INFINITY
+        ? child.size.height *
+              (self.height_factor == nil ? 1 : self.height_factor)
+        : INFINITY
     self.size = self.constraints.constrain(Size(width, height))
     self.place_child(child, self.alignment.offset_for(child.size, self.size))
   }
@@ -185,33 +196,33 @@ class RenderAlign < RenderObject {
   compute_min_intrinsic_width(height: number) {
     var child = self.child()
     return child == nil
-      ? 0
-      : child.min_intrinsic_width(height)
-        * (self.width_factor == nil ? 1 : self.width_factor)
+        ? 0
+        : child.min_intrinsic_width(height) *
+              (self.width_factor == nil ? 1 : self.width_factor)
   }
 
   compute_max_intrinsic_width(height: number) {
     var child = self.child()
     return child == nil
-      ? 0
-      : child.max_intrinsic_width(height)
-        * (self.width_factor == nil ? 1 : self.width_factor)
+        ? 0
+        : child.max_intrinsic_width(height) *
+              (self.width_factor == nil ? 1 : self.width_factor)
   }
 
   compute_min_intrinsic_height(width: number) {
     var child = self.child()
     return child == nil
-      ? 0
-      : child.min_intrinsic_height(width)
-        * (self.height_factor == nil ? 1 : self.height_factor)
+        ? 0
+        : child.min_intrinsic_height(width) *
+              (self.height_factor == nil ? 1 : self.height_factor)
   }
 
   compute_max_intrinsic_height(width: number) {
     var child = self.child()
     return child == nil
-      ? 0
-      : child.max_intrinsic_height(width)
-        * (self.height_factor == nil ? 1 : self.height_factor)
+        ? 0
+        : child.max_intrinsic_height(width) *
+              (self.height_factor == nil ? 1 : self.height_factor)
   }
 }
 
@@ -269,8 +280,8 @@ class RenderConstrained < RenderObject {
 
     var value = compute()
     return self.extra.min_width == INFINITY
-      ? value
-      : self.extra.constrain_width(value)
+        ? value
+        : self.extra.constrain_width(value)
   }
 
   _intrinsic_height(compute) {
@@ -280,8 +291,8 @@ class RenderConstrained < RenderObject {
 
     var value = compute()
     return self.extra.min_height == INFINITY
-      ? value
-      : self.extra.constrain_height(value)
+        ? value
+        : self.extra.constrain_height(value)
   }
 
   compute_min_intrinsic_width(height: number) {
@@ -348,8 +359,8 @@ class RenderLimited < RenderObject {
       c.has_bounded_width() ? c.max_width : c.constrain_width(self.max_width),
       c.min_height,
       c.has_bounded_height()
-        ? c.max_height
-        : c.constrain_height(self.max_height),
+          ? c.max_height
+          : c.constrain_height(self.max_height),
     )
   }
 
@@ -399,8 +410,8 @@ class RenderFractional < RenderObject {
    * @param ?number height_factor
    */
   configure(width_factor: ?number, height_factor: ?number) {
-    if width_factor != self.width_factor
-      or height_factor != self.height_factor {
+    if width_factor != self.width_factor or
+        height_factor != self.height_factor {
       self.width_factor = width_factor
       self.height_factor = height_factor
       self.mark_needs_layout()
@@ -416,7 +427,9 @@ class RenderFractional < RenderObject {
 
     if self.width_factor != nil {
       if !c.has_bounded_width() {
-        raise LayoutError('a Box with a width_factor needs a bounded width, but was given ${c}')
+        raise LayoutError(
+          'a Box with a width_factor needs a bounded width, but was given ${c}',
+        )
       }
 
       min_width = c.max_width * self.width_factor
@@ -425,7 +438,9 @@ class RenderFractional < RenderObject {
 
     if self.height_factor != nil {
       if !c.has_bounded_height() {
-        raise LayoutError('a Box with a height_factor needs a bounded height, but was given ${c}')
+        raise LayoutError(
+          'a Box with a height_factor needs a bounded height, but was given ${c}',
+        )
       }
 
       min_height = c.max_height * self.height_factor
@@ -471,7 +486,9 @@ class RenderAspectRatio < RenderObject {
    */
   set_ratio(ratio: number) {
     if !(ratio > 0 and ratio.is_finite()) {
-      raise ValueError('an aspect ratio must be above zero and finite, got ${ratio}')
+      raise ValueError(
+        'an aspect ratio must be above zero and finite, got ${ratio}',
+      )
     }
 
     if ratio != self.ratio {
@@ -516,7 +533,9 @@ class RenderAspectRatio < RenderObject {
     }
 
     if !width.is_finite() or !height.is_finite() {
-      raise LayoutError('AspectRatio needs a bounded width or height, but was given ${c}')
+      raise LayoutError(
+        'AspectRatio needs a bounded width or height, but was given ${c}',
+      )
     }
 
     return c.constrain(Size(width, height))
@@ -650,8 +669,8 @@ class RenderVisibility < RenderObject {
     }
 
     self.size = self.visible and child != nil
-      ? child.size
-      : self.constraints.smallest()
+        ? child.size
+        : self.constraints.smallest()
   }
 
   collect_hosts(slot, out: list) {
@@ -736,18 +755,26 @@ class RenderResponsive < RenderObject {
   }
 
   compute_min_intrinsic_width(height: number) {
-    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+    raise LayoutError(
+      'a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints',
+    )
   }
 
   compute_max_intrinsic_width(height: number) {
-    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+    raise LayoutError(
+      'a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints',
+    )
   }
 
   compute_min_intrinsic_height(width: number) {
-    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+    raise LayoutError(
+      'a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints',
+    )
   }
 
   compute_max_intrinsic_height(width: number) {
-    raise LayoutError('a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints')
+    raise LayoutError(
+      'a Responsive cannot report intrinsic sizes, since what it builds depends on its constraints',
+    )
   }
 }

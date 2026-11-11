@@ -66,17 +66,14 @@ class MenuItem {
    * @constructor
    */
   @new(label: string, options: ?dict) {
-    var o = check_options(
-      options, 'MenuItem',
-      {
-        on_selected: 'function',
-        shortcut: 'string',
-        enabled: 'bool',
-        checked: 'bool',
-        role: 'string',
-        items: 'list',
-      },
-    )
+    var o = check_options(options, 'MenuItem', {
+      on_selected: 'function',
+      shortcut: 'string',
+      enabled: 'bool',
+      checked: 'bool',
+      role: 'string',
+      items: 'list',
+    })
     self.label = label
     self.on_selected = o.get('on_selected')
     self.shortcut = o.get('shortcut')
@@ -86,7 +83,9 @@ class MenuItem {
     self.items = o.get('items')
 
     if self.role != nil and !MENU_ROLES.contains(self.role) {
-      raise ValueError("'${self.role}' is not a menu role; the roles are ${', '.join(MENU_ROLES)}")
+      raise ValueError(
+        "'${self.role}' is not a menu role; the roles are ${', '.join(MENU_ROLES)}",
+      )
     }
   }
 
@@ -186,7 +185,9 @@ var _WINDOW_ITEMS = [
  * @returns list
  */
 def menu_bar_spec(title: string, bar, handlers: dict) {
-  var app_items = [{ role: 'about', title: 'About ${title}' }]
+  var app_items = [
+    { role: 'about', title: 'About ${title}' },
+  ]
 
   if bar != nil and !bar.app_items.is_empty() {
     app_items.append({ separator: true })
@@ -202,7 +203,9 @@ def menu_bar_spec(title: string, bar, handlers: dict) {
     { role: 'quit', title: 'Quit ${title}', shortcut: 'cmd+q' },
   ])
 
-  var menus = [{ title, items: app_items }]
+  var menus = [
+    { title, items: app_items },
+  ]
   var titles = []
   var custom = bar == nil ? [] : bar.menus
 
@@ -233,9 +236,11 @@ def menu_bar_spec(title: string, bar, handlers: dict) {
       at = menus.length() - 1
     }
 
-    menus.insert(
-      { title: 'Window', items: _WINDOW_ITEMS, window_menu: true }, at,
-    )
+    menus.insert({
+      title: 'Window',
+      items: _WINDOW_ITEMS,
+      window_menu: true,
+    }, at)
   }
 
   return menus

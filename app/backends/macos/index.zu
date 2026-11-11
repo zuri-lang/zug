@@ -10,25 +10,60 @@
 
 import ffi
 import .. ..foundation {
-  Rect, Size, UnsupportedError, BackendError, report_error,
+  Rect,
+  Size,
+  UnsupportedError,
+  BackendError,
+  report_error,
 }
 import .. ..backend { Backend, CAPABILITIES, kind_names }
 import ._runtime {
-  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
-  send_void_int, send_int, send_rect, typed, ns_string, zuri_string,
-  from_ns_array, ns_array, push_pool, pop_pool, retain, release, create,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_int,
+  send_rect,
+  typed,
+  ns_string,
+  zuri_string,
+  from_ns_array,
+  ns_array,
+  push_pool,
+  pop_pool,
+  retain,
+  release,
+  create,
   CGPoint,
 }
 import ._classes {
-  ZugAppDelegate, set_application_host, host_for, registered_count,
+  ZugAppDelegate,
+  set_application_host,
+  host_for,
+  registered_count,
 }
 import ._loop { on_before_waiting, wake, now, MacTimer }
 import ._cocoa { ns_font }
 import ._views { MacText, MacButton, MacBox }
 import ._controls {
-  MacCheckbox, MacRadio, MacSwitch, MacSlider, MacStepper, MacProgress,
-  MacSegmented, MacPopup, MacDatePicker, MacColorWell, MacLevel, MacSeparator,
-  MacGroupBox, MacImage,
+  MacCheckbox,
+  MacRadio,
+  MacSwitch,
+  MacSlider,
+  MacStepper,
+  MacProgress,
+  MacSegmented,
+  MacPopup,
+  MacDatePicker,
+  MacColorWell,
+  MacLevel,
+  MacSeparator,
+  MacGroupBox,
+  MacImage,
 }
 import ._text_input { MacTextField, MacTextArea }
 import ._containers { MacScroll, MacTabs, MacSplit, MacTable, MacVisualEffect }
@@ -45,54 +80,85 @@ var _FACTORIES = {
   button: @(backend, props, dispatch) => MacButton(backend, props, dispatch),
   box: @(backend, props, dispatch) => MacBox(backend, props, dispatch),
   checkbox: @(backend, props, dispatch) => MacCheckbox(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   radio: @(backend, props, dispatch) => MacRadio(backend, props, dispatch),
   switch: @(backend, props, dispatch) => MacSwitch(backend, props, dispatch),
   slider: @(backend, props, dispatch) => MacSlider(backend, props, dispatch),
   stepper: @(backend, props, dispatch) => MacStepper(backend, props, dispatch),
   progress: @(backend, props, dispatch) => MacProgress(
-    backend, 'progress', props, dispatch,
+    backend,
+    'progress',
+    props,
+    dispatch,
   ),
   spinner: @(backend, props, dispatch) => MacProgress(
-    backend, 'spinner', props, dispatch,
+    backend,
+    'spinner',
+    props,
+    dispatch,
   ),
   segmented: @(backend, props, dispatch) => MacSegmented(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   popup: @(backend, props, dispatch) => MacPopup(backend, props, dispatch),
   date_picker: @(backend, props, dispatch) => MacDatePicker(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   color_well: @(backend, props, dispatch) => MacColorWell(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   level: @(backend, props, dispatch) => MacLevel(backend, props, dispatch),
   separator: @(backend, props, dispatch) => MacSeparator(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   group_box: @(backend, props, dispatch) => MacGroupBox(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   image: @(backend, props, dispatch) => MacImage(backend, props, dispatch),
   text_field: @(backend, props, dispatch) => MacTextField(
-    backend, 'text_field', props, dispatch,
+    backend,
+    'text_field',
+    props,
+    dispatch,
   ),
   search_field: @(backend, props, dispatch) => MacTextField(
-    backend, 'search_field', props, dispatch,
+    backend,
+    'search_field',
+    props,
+    dispatch,
   ),
   combo_box: @(backend, props, dispatch) => MacTextField(
-    backend, 'combo_box', props, dispatch,
+    backend,
+    'combo_box',
+    props,
+    dispatch,
   ),
   text_area: @(backend, props, dispatch) => MacTextArea(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   scroll: @(backend, props, dispatch) => MacScroll(backend, props, dispatch),
   tabs: @(backend, props, dispatch) => MacTabs(backend, props, dispatch),
   split: @(backend, props, dispatch) => MacSplit(backend, props, dispatch),
   table: @(backend, props, dispatch) => MacTable(backend, props, dispatch),
   visual_effect: @(backend, props, dispatch) => MacVisualEffect(
-    backend, props, dispatch,
+    backend,
+    props,
+    dispatch,
   ),
   canvas: @(backend, props, dispatch) => MacCanvas(backend, props, dispatch),
   pointer: @(backend, props, dispatch) => MacPointer(backend, props, dispatch),
@@ -164,8 +230,12 @@ class MacBackend < Backend {
     set_application_host(self)
     send_void_id(self.app, 'setDelegate:', self._app_delegate)
     typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ulong, ffi.ptr])(
-      self.app, sel('addObserver:forKeyPath:options:context:'),
-      self._app_delegate, ns_string('effectiveAppearance'), 0, nil,
+      self.app,
+      sel('addObserver:forKeyPath:options:context:'),
+      self._app_delegate,
+      ns_string('effectiveAppearance'),
+      0,
+      nil,
     )
     self.set_menu_bar(default_menus(self.app_name), @(event, payload) => nil)
     on_before_waiting(@{
@@ -182,20 +252,37 @@ class MacBackend < Backend {
     send_void_id(self.app, 'stop:', nil)
 
     # stop: takes effect once the loop handles another event, so post one.
-    var make = typed(
+    var make = typed(ffi.ptr, [
+      ffi.ulong,
+      CGPoint,
+      ffi.ulong,
+      ffi.double,
+      ffi.long,
       ffi.ptr,
-      [
-        ffi.ulong, CGPoint, ffi.ulong, ffi.double, ffi.long, ffi.ptr, ffi.short,
-        ffi.long, ffi.long,
-      ],
-    )
+      ffi.short,
+      ffi.long,
+      ffi.long,
+    ])
     var event = make(
       cls('NSEvent'),
-      sel('otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:'),
-      15, { x: 0, y: 0 }, 0, 0, 0, nil, 0, 0, 0,
+      sel(
+        'otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:',
+      ),
+      15,
+      { x: 0, y: 0 },
+      0,
+      0,
+      0,
+      nil,
+      0,
+      0,
+      0,
     )
     typed(ffi.void, [ffi.ptr, ffi.bool])(
-      self.app, sel('postEvent:atStart:'), event, true,
+      self.app,
+      sel('postEvent:atStart:'),
+      event,
+      true,
     )
   }
 
@@ -260,7 +347,8 @@ class MacBackend < Backend {
       self.delegate.on_event_handled()
     } as error {
       report_error(
-        error, "handling the '${event}' event of a ${view.kind()} view",
+        error,
+        "handling the '${event}' event of a ${view.kind()} view",
       )
     }
 
@@ -282,10 +370,12 @@ class MacBackend < Backend {
   frame_interval() {
     var screen = send(cls('NSScreen'), 'mainScreen')
 
-    if screen != nil
-      and _responds(
-        screen, sel('respondsToSelector:'), sel('maximumFramesPerSecond'),
-      ) {
+    if screen != nil and
+        _responds(
+          screen,
+          sel('respondsToSelector:'),
+          sel('maximumFramesPerSecond'),
+        ) {
       var rate = send_int(screen, 'maximumFramesPerSecond')
 
       if rate > 0 {
@@ -322,7 +412,11 @@ class MacBackend < Backend {
 
     var send_action = typed(ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr])
     return send_action(
-      self.app, sel('sendAction:to:from:'), sel(action), nil, nil,
+      self.app,
+      sel('sendAction:to:from:'),
+      sel(action),
+      nil,
+      nil,
     )
   }
 
@@ -330,7 +424,10 @@ class MacBackend < Backend {
     self._menu_dispatch = dispatch
     self._menu_items = {}
     var bar = build_menu_bar(
-      menus, self.app_name, self._app_delegate, self._menu_items,
+      menus,
+      self.app_name,
+      self._app_delegate,
+      self._menu_items,
     )
     send_void_id(self.app, 'setMainMenu:', bar)
     release(bar)
@@ -426,7 +523,11 @@ class MacBackend < Backend {
   }
 
   print_pages(
-    window, spec: dict, count: function, paint: function, done: function,
+    window,
+    spec: dict,
+    count: function,
+    paint: function,
+    done: function,
   ) {
     print_pages(self, window, spec, count, paint, done)
   }
@@ -462,7 +563,10 @@ class MacBackend < Backend {
     var type = ffi.open().symbol('NSPasteboardTypeString').read(ffi.ptr)
     send_int(board, 'clearContents')
     typed(ffi.bool, [ffi.ptr, ffi.ptr])(
-      board, sel('setString:forType:'), ns_string(text), type,
+      board,
+      sel('setString:forType:'),
+      ns_string(text),
+      type,
     )
   }
 
@@ -479,13 +583,15 @@ class MacBackend < Backend {
     # AppKit then reports the change of effectiveAppearance, which is how
     # zug hears of it.
     send_void_id(
-      self.app, 'setAppearance:',
+      self.app,
+      'setAppearance:',
       name == nil
-        ? nil
-        : send_id(
-          cls('NSAppearance'), 'appearanceNamed:',
-          ffi.open().symbol(name).read(ffi.ptr),
-        ),
+          ? nil
+          : send_id(
+              cls('NSAppearance'),
+              'appearanceNamed:',
+              ffi.open().symbol(name).read(ffi.ptr),
+            ),
     )
   }
 
@@ -494,11 +600,13 @@ class MacBackend < Backend {
     var aqua = ffi.open().symbol('NSAppearanceNameAqua').read(ffi.ptr)
     var dark = ffi.open().symbol('NSAppearanceNameDarkAqua').read(ffi.ptr)
     var best = send_id(
-      current, 'bestMatchFromAppearancesWithNames:', ns_array([aqua, dark]),
+      current,
+      'bestMatchFromAppearancesWithNames:',
+      ns_array([aqua, dark]),
     )
     return best != nil and zuri_string(best) == zuri_string(dark)
-      ? 'dark'
-      : 'light'
+        ? 'dark'
+        : 'light'
   }
 
   screens() {
@@ -511,8 +619,10 @@ class MacBackend < Backend {
       found.append({
         frame: Rect(frame.origin.x, 0, frame.size.width, height),
         visible_frame: Rect(
-          visible.origin.x, height - visible.origin.y - visible.size.height,
-          visible.size.width, visible.size.height,
+          visible.origin.x,
+          height - visible.origin.y - visible.size.height,
+          visible.size.width,
+          visible.size.height,
         ),
         scale: typed(ffi.double, [])(screen, sel('backingScaleFactor')),
       })
@@ -533,7 +643,9 @@ class MacBackend < Backend {
     }
 
     typed(ffi.bool, [ffi.ptr])(
-      send(cls('NSWorkspace'), 'sharedWorkspace'), sel('openURL:'), address,
+      send(cls('NSWorkspace'), 'sharedWorkspace'),
+      sel('openURL:'),
+      address,
     )
   }
 

@@ -23,14 +23,26 @@ class ProbeState < State {
   }
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Column([
-      Text('Hello', { style: TextStyle({ size: 20, weight: 600 }) }),
-      TextField({ placeholder: 'Name' }),
-      Button('Continue', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
-    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Text('Hello', {
+            style: TextStyle({ size: 20, weight: 600 }),
+          }),
+          TextField({ placeholder: 'Name' }),
+          Button('Continue', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
+        ],
+        { spacing: 10, align_items: AlignItems.STRETCH },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Startup', Probe(), { size: Size(320, 160) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Startup', Probe(), { size: Size(320, 160) }),
+    ],
+  }),
+)

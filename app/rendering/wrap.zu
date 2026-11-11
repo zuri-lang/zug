@@ -67,15 +67,19 @@ class RenderWrap < RenderObject {
    * @param string align_items
    */
   configure(
-    axis: string, spacing: number, run_spacing: number, justify: string,
-    run_justify: string, align_items: string,
+    axis: string,
+    spacing: number,
+    run_spacing: number,
+    justify: string,
+    run_justify: string,
+    align_items: string,
   ) {
-    if axis != self.axis
-      or spacing != self.spacing
-      or run_spacing != self.run_spacing
-      or justify != self.justify
-      or run_justify != self.run_justify
-      or align_items != self.align_items {
+    if axis != self.axis or
+        spacing != self.spacing or
+        run_spacing != self.run_spacing or
+        justify != self.justify or
+        run_justify != self.run_justify or
+        align_items != self.align_items {
       self.axis = axis
       self.spacing = spacing
       self.run_spacing = run_spacing
@@ -100,8 +104,8 @@ class RenderWrap < RenderObject {
     var horizontal = self.axis == 'horizontal'
     var c = self.constraints
     var child_constraints = horizontal
-      ? Constraints(0, c.max_width, 0, INFINITY)
-      : Constraints(0, INFINITY, 0, c.max_height)
+        ? Constraints(0, c.max_width, 0, INFINITY)
+        : Constraints(0, INFINITY, 0, c.max_height)
     var runs = []
     var current = { children: [], main: 0, cross: 0 }
 
@@ -110,8 +114,8 @@ class RenderWrap < RenderObject {
       var main = self._main(child.size)
       var cross = self._cross(child.size)
       var needed = current.children.is_empty()
-        ? main
-        : current.main + self.spacing + main
+          ? main
+          : current.main + self.spacing + main
 
       if !current.children.is_empty() and needed > max_main {
         runs.append(current)
@@ -178,13 +182,15 @@ class RenderWrap < RenderObject {
     }
 
     var wanted = horizontal
-      ? Size(content_main, content_cross)
-      : Size(content_cross, content_main)
+        ? Size(content_main, content_cross)
+        : Size(content_cross, content_main)
     self.size = c.constrain(wanted)
     var main_size = self._main(self.size)
     var cross_size = self._cross(self.size)
     var run_spread = self._spread(
-      self.run_justify, (cross_size - content_cross).max(0), runs.length(),
+      self.run_justify,
+      (cross_size - content_cross).max(0),
+      runs.length(),
       self.run_spacing,
     )
     var cross_position = run_spread[0]
@@ -192,7 +198,10 @@ class RenderWrap < RenderObject {
     for run in runs {
       var count = run.children.length()
       var spread = self._spread(
-        self.justify, (main_size - run.main).max(0), count, self.spacing,
+        self.justify,
+        (main_size - run.main).max(0),
+        count,
+        self.spacing,
       )
       var main_position = spread[0]
 
@@ -235,9 +244,9 @@ class RenderWrap < RenderObject {
       total += child.max_intrinsic_width(INFINITY)
     }
 
-    return total
-      + (self.children.length() > 1
-        ? self.spacing * (self.children.length() - 1)
-        : 0)
+    return total +
+        (self.children.length() > 1
+            ? self.spacing * (self.children.length() - 1)
+            : 0)
   }
 }

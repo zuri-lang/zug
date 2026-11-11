@@ -88,8 +88,8 @@ class Widget {
    * @returns bool
    */
   static can_update(previous: Widget, next: Widget) {
-    return zuri.reflect.class_of(previous) == zuri.reflect.class_of(next)
-      and previous.key == next.key
+    return zuri.reflect.class_of(previous) == zuri.reflect.class_of(next) and
+        previous.key == next.key
   }
 
   @to_string() {
@@ -176,7 +176,9 @@ class State {
    */
   context() {
     if self.element == nil {
-      raise LifecycleError('the context of a ${typeof(self)} was used after it was disposed')
+      raise LifecycleError(
+        'the context of a ${typeof(self)} was used after it was disposed',
+      )
     }
 
     return self.element
@@ -241,7 +243,9 @@ class State {
    */
   set_state(change: ?function) {
     if self.element == nil {
-      raise LifecycleError('set_state() was called on a ${typeof(self)} that is not in the tree')
+      raise LifecycleError(
+        'set_state() was called on a ${typeof(self)} that is not in the tree',
+      )
     }
 
     if change != nil {
@@ -359,7 +363,9 @@ class RenderObjectWidget < Widget {
    * @returns RenderObject
    */
   create_render_object(context) {
-    raise NotImplementedError('${typeof(self)} must define create_render_object()')
+    raise NotImplementedError(
+      '${typeof(self)} must define create_render_object()',
+    )
   }
 
   /**
@@ -435,9 +441,9 @@ class IndexedSlot {
   }
 
   @eq(other) {
-    return instance_of(other, IndexedSlot)
-      and self.index == other.index
-      and self.previous == other.previous
+    return instance_of(other, IndexedSlot) and
+        self.index == other.index and
+        self.previous == other.previous
   }
 }
 
@@ -736,7 +742,9 @@ class Element < Context {
 
     if key != nil and instance_of(key, GlobalKey) {
       if key.element != nil and key.element != self {
-        raise ZugError('the ${key} is used by two widgets at once: ${key.element.widget} and ${self.widget}; a GlobalKey may be used once in the tree')
+        raise ZugError(
+          'the ${key} is used by two widgets at once: ${key.element.widget} and ${self.widget}; a GlobalKey may be used once in the tree',
+        )
       }
 
       key.element = self
@@ -918,7 +926,9 @@ class Element < Context {
       }
 
       var child = self.update_child(
-        old_child, widget, IndexedSlot(new_top, previous),
+        old_child,
+        widget,
+        IndexedSlot(new_top, previous),
       )
       result[new_top] = child
       previous = child
@@ -930,7 +940,8 @@ class Element < Context {
     # final previous sibling.
     while old_top <= old_bottom and new_top <= new_bottom {
       if !Widget.can_update(
-        old_children[old_bottom].widget, widgets[new_bottom],
+        old_children[old_bottom].widget,
+        widgets[new_bottom],
       ) {
         break
       }
@@ -975,7 +986,9 @@ class Element < Context {
       }
 
       var child = self.update_child(
-        match, widget, IndexedSlot(new_top, previous),
+        match,
+        widget,
+        IndexedSlot(new_top, previous),
       )
       result[new_top] = child
       previous = child
@@ -988,7 +1001,9 @@ class Element < Context {
     # The matched bottom.
     while old_top <= old_bottom and new_top <= new_bottom {
       var child = self.update_child(
-        old_children[old_top], widgets[new_top], IndexedSlot(new_top, previous),
+        old_children[old_top],
+        widgets[new_top],
+        IndexedSlot(new_top, previous),
       )
       result[new_top] = child
       previous = child
@@ -1168,12 +1183,14 @@ class ComponentElement < Element {
 
     if !failed and built != nil and !instance_of(built, Widget) {
       report_error(
-        ZugError('build() of ${self.widget} returned ${typeof(built)}, not a widget'),
+        ZugError(
+          'build() of ${self.widget} returned ${typeof(built)}, not a widget',
+        ),
         'building ${self.widget}',
       )
       built = _error_builder == nil
-        ? nil
-        : _error_builder(ZugError('build() returned ${typeof(built)}'))
+          ? nil
+          : _error_builder(ZugError('build() returned ${typeof(built)}'))
     }
 
     self.dirty = false
@@ -1221,7 +1238,9 @@ class StatefulElement < ComponentElement {
     var state = widget.create_state()
 
     if !instance_of(state, State) {
-      raise ZugError('create_state() of ${widget} returned ${typeof(state)}, not a State')
+      raise ZugError(
+        'create_state() of ${widget} returned ${typeof(state)}, not a State',
+      )
     }
 
     self.state = state
@@ -1399,7 +1418,9 @@ class RenderObjectElement < Element {
     self.render_object = self.widget.create_render_object(self)
 
     if !instance_of(self.render_object, RenderObject) {
-      raise ZugError('create_render_object() of ${self.widget} returned ${typeof(self.render_object)}, not a RenderObject')
+      raise ZugError(
+        'create_render_object() of ${self.widget} returned ${typeof(self.render_object)}, not a RenderObject',
+      )
     }
 
     self.attach_render_object(slot)
@@ -1455,7 +1476,9 @@ class RenderObjectElement < Element {
 
     if self._ancestor != nil {
       self._ancestor.move_render_object_child(
-        self.render_object, previous, slot,
+        self.render_object,
+        previous,
+        slot,
       )
     }
   }
@@ -1564,7 +1587,8 @@ class MultiChildRenderObjectElement < RenderObjectElement {
 
     iter var i = 0; i < self.widget.children.length(); i++ {
       var child = self.inflate_widget(
-        self.widget.children[i], IndexedSlot(i, previous),
+        self.widget.children[i],
+        IndexedSlot(i, previous),
       )
       made.append(child)
       previous = child
@@ -1653,9 +1677,9 @@ class BuildOwner {
     self._dirty.append(element)
     self._needs_sort = true
 
-    if self._dirty.length() == 1
-      and !self._building
-      and self.on_build_scheduled != nil {
+    if self._dirty.length() == 1 and
+        !self._building and
+        self.on_build_scheduled != nil {
       self.on_build_scheduled()
     }
   }

@@ -28,10 +28,43 @@ var SYMBOLS = { '+': '+', '-': '−', '*': '×', '/': '÷', '^': '^' }
  * @type list
  */
 var KEYS = [
-  '.', '+', '-', '*', '/', '^', '(', ')', '=', '%', 'negate', 'clear',
-  'all_clear', 'backspace', 'mc', 'm+', 'm-', 'mr', 'square', 'cube', 'sqrt',
-  'cbrt', 'reciprocal', 'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'ln',
-  'log', 'exp', 'pow10', 'factorial', 'pi', 'e', 'rand',
+  '.',
+  '+',
+  '-',
+  '*',
+  '/',
+  '^',
+  '(',
+  ')',
+  '=',
+  '%',
+  'negate',
+  'clear',
+  'all_clear',
+  'backspace',
+  'mc',
+  'm+',
+  'm-',
+  'mr',
+  'square',
+  'cube',
+  'sqrt',
+  'cbrt',
+  'reciprocal',
+  'sin',
+  'cos',
+  'tan',
+  'asin',
+  'acos',
+  'atan',
+  'ln',
+  'log',
+  'exp',
+  'pow10',
+  'factorial',
+  'pi',
+  'e',
+  'rand',
 ]
 
 /**
@@ -441,9 +474,9 @@ class Calculator {
       return
     }
 
-    if self._awaiting
-      and !self._operators.is_empty()
-      and self._operators[-1] != '(' {
+    if self._awaiting and
+        !self._operators.is_empty() and
+        self._operators[-1] != '(' {
       self._operators[-1] = op
       self._tokens[-1] = SYMBOLS[op]
       return
@@ -522,7 +555,8 @@ class Calculator {
         var before = self.value
         var result = self._compute(before, self._repeat[0], self._repeat[1])
         self._tokens = [
-          self._text(before), SYMBOLS[self._repeat[0]],
+          self._text(before),
+          SYMBOLS[self._repeat[0]],
           self._text(self._repeat[1]),
         ]
 
@@ -600,9 +634,9 @@ class Calculator {
     var x = self.operand()
     var shown = '${self._operand_token()}%'
 
-    if !self._operators.is_empty()
-      and ['+', '-'].contains(self._operators[-1])
-      and !self._values.is_empty() {
+    if !self._operators.is_empty() and
+        ['+', '-'].contains(self._operators[-1]) and
+        !self._values.is_empty() {
       x = self._values[-1] * x / 100
     } else {
       x = x / 100
@@ -618,8 +652,8 @@ class Calculator {
 
     if self.entry != '' {
       self.entry = self.entry.starts_with('-')
-        ? self.entry[1, self.entry.length()]
-        : '-' + self.entry
+          ? self.entry[1, self.entry.length()]
+          : '-' + self.entry
       return
     }
 
@@ -702,9 +736,9 @@ class Calculator {
       }
       when 'asin', 'acos' {
         if x >= -1 and x <= 1 {
-          result = _tidy(from_radians(
-            name == 'asin' ? x.asin() : x.acos(), self.angle,
-          ))
+          result = _tidy(
+            from_radians(name == 'asin' ? x.asin() : x.acos(), self.angle),
+          )
         }
 
         text = '${name}(${shown})'
@@ -807,9 +841,9 @@ class Calculator {
 
     # A value made by a function key shows what made it until an operator
     # takes it.
-    if !self.just_evaluated
-      and self._operand_text != nil
-      and self._operand_text != '' {
+    if !self.just_evaluated and
+        self._operand_text != nil and
+        self._operand_text != '' {
       parts.append(self._operand_text)
     }
 

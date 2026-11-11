@@ -100,7 +100,13 @@ class ControlSize {
 }
 
 var _VARIANTS = [
-  'push', 'flexible', 'square', 'toolbar', 'inline', 'circular', 'borderless',
+  'push',
+  'flexible',
+  'square',
+  'toolbar',
+  'inline',
+  'circular',
+  'borderless',
   'help',
 ]
 var _ROLES = ['normal', 'primary', 'cancel', 'destructive']
@@ -115,7 +121,9 @@ var _SIZES = ['mini', 'small', 'regular', 'large']
  */
 def check_control_size(size: string, owner: string) {
   if !_SIZES.contains(size) {
-    raise ValueError("size of ${owner} must be one of ControlSize's values (${', '.join(_SIZES)}), got '${size}'")
+    raise ValueError(
+      "size of ${owner} must be one of ControlSize's values (${', '.join(_SIZES)}), got '${size}'",
+    )
   }
 }
 
@@ -236,11 +244,15 @@ class Button < HostWidget {
     self.tint = o.get('tint')
 
     if !_VARIANTS.contains(self.variant) {
-      raise ValueError("variant of Button must be one of ButtonVariant's values (${', '.join(_VARIANTS)}), got '${self.variant}'")
+      raise ValueError(
+        "variant of Button must be one of ButtonVariant's values (${', '.join(_VARIANTS)}), got '${self.variant}'",
+      )
     }
 
     if !_ROLES.contains(self.role) {
-      raise ValueError("role of Button must be one of ButtonRole's values (${', '.join(_ROLES)}), got '${self.role}'")
+      raise ValueError(
+        "role of Button must be one of ButtonRole's values (${', '.join(_ROLES)}), got '${self.role}'",
+      )
     }
 
     check_control_size(self.size, 'Button')
@@ -253,8 +265,8 @@ class Button < HostWidget {
    * @returns bool
    */
   is_interactive() {
-    return self.enabled
-      and (self.on_pressed != nil or self.on_selected_changed != nil)
+    return self.enabled and
+        (self.on_pressed != nil or self.on_selected_changed != nil)
   }
 
   kind() {
@@ -281,9 +293,9 @@ class Button < HostWidget {
 
     return {
       pressed: @(payload) {
-        if on_selected_changed != nil
-          and is_dict(payload)
-          and payload.contains('selected') {
+        if on_selected_changed != nil and
+            is_dict(payload) and
+            payload.contains('selected') {
           on_selected_changed(payload.selected)
         }
 

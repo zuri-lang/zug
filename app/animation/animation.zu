@@ -3,7 +3,11 @@
  */
 
 import ..foundation {
-  Observable, Duration, Deferred, LifecycleError, check_options,
+  Observable,
+  Duration,
+  Deferred,
+  LifecycleError,
+  check_options,
 }
 import ..widgets { current_runtime }
 import .curve { Curve }
@@ -95,23 +99,22 @@ class Animation < Observable {
    * @constructor
    */
   @new(options: ?dict) {
-    var o = check_options(
-      options, 'Animation',
-      {
-        duration: Duration,
-        reverse_duration: Duration,
-        lower: 'number',
-        upper: 'number',
-        value: 'number',
-      },
-    )
+    var o = check_options(options, 'Animation', {
+      duration: Duration,
+      reverse_duration: Duration,
+      lower: 'number',
+      upper: 'number',
+      value: 'number',
+    })
     self.duration = o.get('duration')
     self.reverse_duration = o.get('reverse_duration')
     self.lower = o.get('lower', 0)
     self.upper = o.get('upper', 1)
 
     if !(self.lower < self.upper) {
-      raise ValueError('an Animation needs lower below upper, got ${self.lower} and ${self.upper}')
+      raise ValueError(
+        'an Animation needs lower below upper, got ${self.lower} and ${self.upper}',
+      )
     }
 
     self._value = self._clamp(o.get('value', self.lower))
@@ -184,14 +187,13 @@ class Animation < Observable {
    * @throws ValueError When there is no duration to use
    */
   animate_to(target: number, options: ?dict) {
-    var o = check_options(
-      options, 'Animation.animate_to', { duration: Duration, curve: Curve },
-    )
+    var o = check_options(options, 'Animation.animate_to', {
+      duration: Duration,
+      curve: Curve,
+    })
     var goal = self._clamp(target)
     var given = o.get('duration')
-    var seconds = given != nil
-      ? given.in_seconds()
-      : self._duration_to(goal)
+    var seconds = given != nil ? given.in_seconds() : self._duration_to(goal)
     return self._run(goal, seconds, o.get('curve', Curve.LINEAR))
   }
 
@@ -209,19 +211,22 @@ class Animation < Observable {
    *    whole number of at least 1
    */
   repeat(options: ?dict) {
-    var o = check_options(
-      options, 'Animation.repeat', { reverse: 'bool', count: 'number' },
-    )
+    var o = check_options(options, 'Animation.repeat', {
+      reverse: 'bool',
+      count: 'number',
+    })
     var count = o.get('count')
 
     if count != nil and (!is_int(count) or count < 1) {
-      raise ValueError('an Animation repeats a whole number of times, at least 1, got ${count}')
+      raise ValueError(
+        'an Animation repeats a whole number of times, at least 1, got ${count}',
+      )
     }
 
     var reverse = o.get('reverse', false)
 
-    if self._full_seconds(self.upper) <= 0
-      or (reverse and self._full_seconds(self.lower) <= 0) {
+    if self._full_seconds(self.upper) <= 0 or
+        (reverse and self._full_seconds(self.lower) <= 0) {
       raise ValueError('an Animation cannot repeat with no duration')
     }
 
@@ -265,8 +270,8 @@ class Animation < Observable {
   # The seconds of a whole run towards `target`.
   _full_seconds(target: number) {
     var length = target == self.lower and self.reverse_duration != nil
-      ? self.reverse_duration
-      : self.duration
+        ? self.reverse_duration
+        : self.duration
 
     if length == nil {
       raise ValueError('an Animation needs a duration to run')

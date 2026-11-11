@@ -35,16 +35,23 @@ class WindowedState < State {
   var inside
 
   build(context) {
-    return App({ windows: [Window('One', Column([
-      TextField({
-        controller: TextController(),
-        accessibility_identifier: 'field',
-      }),
-      Builder(@(inner) {
-        self.inside = inner
-        return Text('x')
-      }),
-    ]))] })
+    return App({
+      windows: [
+        Window(
+          'One',
+          Column([
+            TextField({
+              controller: TextController(),
+              accessibility_identifier: 'field',
+            }),
+            Builder(@(inner) {
+              self.inside = inner
+              return Text('x')
+            }),
+          ]),
+        ),
+      ],
+    })
   }
 }
 
@@ -65,14 +72,14 @@ describe('Promise', @{
     var seen = []
     var inner = Deferred()
     Promise.resolved(1)
-      .then(@(value) => value + 1)
-      .then(@(value) => inner.promise)
-      .then(@(value) {
-        raise ValueError('bad ${value}')
-      })
-      .catch_error(@(error) {
-        seen.append(error.message)
-      })
+        .then(@(value) => value + 1)
+        .then(@(value) => inner.promise)
+        .then(@(value) {
+          raise ValueError('bad ${value}')
+        })
+        .catch_error(@(error) {
+          seen.append(error.message)
+        })
     run_microtasks()
     inner.resolve(10)
     run_microtasks()
@@ -85,7 +92,10 @@ describe('Promise', @{
       seen.append(values)
     })
     run_microtasks()
-    expect(seen).to_equal([[1, 2]])
+    expect(seen)
+        .to_equal([
+          [1, 2],
+        ])
   })
 
   it('reports a rejection nothing handles', @{
@@ -155,25 +165,35 @@ describe('Timer', @{
 describe('keys', @{
   it('go to the deepest handler first, and stop where used', @{
     var seen = []
-    var t = WidgetTester().pump_widget(Shortcuts({
-      'escape': @{
-        seen.append('outer escape')
-      },
-      'cmd+k': @{
-        seen.append('outer cmd+k')
-      },
-    }, KeyListener(Shortcuts({ 'escape': @{
-      seen.append('inner escape')
-    } }, Text('x')), {
-      on_key: @(event) {
-        if event.characters.is_number() {
-          seen.append('digit ${event.characters}')
-          return true
-        }
+    var t = WidgetTester().pump_widget(
+      Shortcuts(
+        {
+          'escape': @{
+            seen.append('outer escape')
+          },
+          'cmd+k': @{
+            seen.append('outer cmd+k')
+          },
+        },
+        KeyListener(
+          Shortcuts({
+            'escape': @{
+              seen.append('inner escape')
+            },
+          }, Text('x')),
+          {
+            on_key: @(event) {
+              if event.characters.is_number() {
+                seen.append('digit ${event.characters}')
+                return true
+              }
 
-        return false
-      },
-    })))
+              return false
+            },
+          },
+        ),
+      ),
+    )
     var window = t.window()
     expect(window.press_key('escape')).to_be_true()
     expect(window.press_key('7')).to_be_true()
@@ -185,11 +205,16 @@ describe('keys', @{
 
   it('match single characters by what they type', @{
     var seen = []
-    var t = WidgetTester().pump_widget(Shortcuts({ '+': @{
-      seen.append('plus')
-    }, '*': @{
-      seen.append('times')
-    } }, Text('x')))
+    var t = WidgetTester().pump_widget(
+      Shortcuts({
+        '+': @{
+          seen.append('plus')
+        },
+        '*': @{
+          seen.append('times')
+        },
+      }, Text('x')),
+    )
     t.window().press_key('shift+=', '+')
     t.window().press_key('shift+8', '*')
     expect(seen).to_equal(['plus', 'times'])
@@ -199,11 +224,18 @@ describe('keys', @{
   it('stop when the handler leaves the tree', @{
     var on = ObservableValue(true)
     var seen = []
-    var t = WidgetTester().pump_widget(Observer(
-      on, @(context) => on.value() ? Shortcuts({ 'a': @{
-        seen.append('a')
-      } }, Text('x')) : Text('y'),
-    ))
+    var t = WidgetTester().pump_widget(
+      Observer(
+        on,
+        @(context) => on.value()
+            ? Shortcuts({
+                'a': @{
+                  seen.append('a')
+                },
+              }, Text('x'))
+            : Text('y'),
+      ),
+    )
     on.set(false)
     t.pump()
     expect(t.window().press_key('a')).to_be_false()
@@ -237,26 +269,38 @@ describe('keys', @{
 describe('menus', @{
   it('build the bar with the application menu, Edit and Window', @{
     var chosen = []
-    var t = WidgetTester().pump_app(App({
-      title: 'Calc',
-      menu_bar: MenuBar([
-        Menu(
-          'View',
-          [MenuItem('Basic', { shortcut: 'cmd+1', checked: true, on_selected: @{
-            chosen.append('basic')
-          } })],
+    var t = WidgetTester().pump_app(
+      App({
+        title: 'Calc',
+        menu_bar: MenuBar(
+          [
+            Menu('View', [
+              MenuItem('Basic', {
+                shortcut: 'cmd+1',
+                checked: true,
+                on_selected: @{
+                  chosen.append('basic')
+                },
+              }),
+            ]),
+          ],
+          {
+            app_items: [
+              MenuItem('Settings…', {
+                shortcut: 'cmd+,',
+                on_selected: @{
+                  chosen.append('settings')
+                },
+              }),
+            ],
+          },
         ),
-      ], {
-        app_items: [MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{
-          chosen.append('settings')
-        } })],
+        windows: [Window('Calc', Text('x'))],
       }),
-      windows: [Window('Calc', Text('x'))],
-    }))
+    )
     var menus = t.backend.menus
-    expect(menus.map(
-      @(menu) => menu.title,
-    )).to_equal(['Calc', 'Edit', 'View', 'Window'])
+    expect(menus.map(@(menu) => menu.title))
+        .to_equal(['Calc', 'Edit', 'View', 'Window'])
     expect(menus[0].items[0].title).to_be('About Calc')
     expect(menus[0].items[-1].role).to_be('quit')
     t.choose_menu('Calc', 'Settings…')
@@ -274,10 +318,16 @@ describe('menus', @{
 
 describe('Style and Appearance', @{
   it('give Text its default style', @{
-    var t = WidgetTester().pump_widget(Style(
-      StyleSheet({ text: TextStyle({ size: 20, color: Color.RED }) }),
-      Text('styled', { style: TextStyle({ weight: 700 }) }),
-    ))
+    var t = WidgetTester().pump_widget(
+      Style(
+        StyleSheet({
+          text: TextStyle({ size: 20, color: Color.RED }),
+        }),
+        Text('styled', {
+          style: TextStyle({ weight: 700 }),
+        }),
+      ),
+    )
     var style = t.one('styled').props.style
     expect(style.size).to_be(20)
     expect(style.weight).to_be(700)
@@ -286,9 +336,9 @@ describe('Style and Appearance', @{
   })
 
   it('rebuild what reads the appearance when it changes', @{
-    var t = WidgetTester().pump_widget(Builder(
-      @(context) => Text('mode ${Appearance.of(context)}'),
-    ))
+    var t = WidgetTester().pump_widget(
+      Builder(@(context) => Text('mode ${Appearance.of(context)}')),
+    )
     expect(t.find_text('mode light')).to_have_length(1)
     t.backend.set_appearance('dark')
     expect(t.find_text('mode dark')).to_have_length(1)
@@ -297,12 +347,20 @@ describe('Style and Appearance', @{
 
   it('show the appearance the App chose, whatever the system shows', @{
     var chosen = ObservableValue(Appearance.DARK)
-    var t = WidgetTester().pump_app(Observer(chosen, @(context) => App({
-      appearance: chosen.value(),
-      windows: [Window('One', Builder(
-        @(inner) => Text('mode ${Appearance.of(inner)}'),
-      ))],
-    })))
+    var t = WidgetTester().pump_app(
+      Observer(
+        chosen,
+        @(context) => App({
+          appearance: chosen.value(),
+          windows: [
+            Window(
+              'One',
+              Builder(@(inner) => Text('mode ${Appearance.of(inner)}')),
+            ),
+          ],
+        }),
+      ),
+    )
     expect(t.find_text('mode dark')).to_have_length(1)
 
     # The system changing does not change what the App chose.
@@ -334,27 +392,30 @@ describe('dialogs and the clipboard', @{
   it('resolve an alert with the button chosen', @{
     var t = WidgetTester().pump_widget(Text('x'))
     var answers = []
-    show_alert(
-      nil,
-      {
-        title: 'Delete?',
-        buttons: ['Delete', 'Cancel'],
-        style: AlertStyle.WARNING,
-      },
-    ).then(@(answer) {
+    show_alert(nil, {
+      title: 'Delete?',
+      buttons: ['Delete', 'Cancel'],
+      style: AlertStyle.WARNING,
+    }).then(@(answer) {
       answers.append(answer)
     })
     var dialog = t.backend.dialogs[0]
     expect(dialog.spec.buttons).to_equal(['Delete', 'Cancel'])
     t.backend.answer_dialog({ button: 1, suppressed: false })
-    expect(answers).to_equal([{ button: 1, suppressed: false }])
+    expect(answers)
+        .to_equal([
+          { button: 1, suppressed: false },
+        ])
     t.dispose()
   })
 
   it('resolve file pickers with paths or nil', @{
     var t = WidgetTester().pump_widget(Text('x'))
     var paths = []
-    pick_files(nil, { types: ['csv'], multiple: true }).then(@(chosen) {
+    pick_files(nil, {
+      types: ['csv'],
+      multiple: true,
+    }).then(@(chosen) {
       paths.append(chosen)
     })
     save_file(nil, { name: 'out.csv' }).then(@(chosen) {
@@ -362,7 +423,11 @@ describe('dialogs and the clipboard', @{
     })
     t.backend.answer_dialog(['/a.csv', '/b.csv'])
     t.backend.answer_dialog(nil)
-    expect(paths).to_equal([['/a.csv', '/b.csv'], nil])
+    expect(paths)
+        .to_equal([
+          ['/a.csv', '/b.csv'],
+          nil,
+        ])
     t.dispose()
   })
 
@@ -371,9 +436,12 @@ describe('dialogs and the clipboard', @{
     var picked = []
     var result = []
     var base = TextStyle({ size: 12, color: Color.RED, design: 'rounded' })
-    pick_font(nil, { style: base, on_changed: @(style) {
-      picked.append(style)
-    } }).then(@(style) {
+    pick_font(nil, {
+      style: base,
+      on_changed: @(style) {
+        picked.append(style)
+      },
+    }).then(@(style) {
       result.append(style)
     })
     expect(t.backend.dialogs[0].spec.font).to_equal({ size: 12 })
@@ -412,7 +480,10 @@ describe('dialogs and the clipboard', @{
     t.backend.change_dialog({ size: 20 })
     pick_font(nil)
     t.pump()
-    expect(first).to_equal([TextStyle({ size: 20 })])
+    expect(first)
+        .to_equal([
+          TextStyle({ size: 20 }),
+        ])
     expect(t.backend.dialogs.length()).to_be(1)
     t.dispose()
   })
@@ -421,15 +492,17 @@ describe('dialogs and the clipboard', @{
     var t = WidgetTester().pump_widget(Text('x'))
     var picked = []
     var result = []
-    pick_color(nil, { color: Color.RED, alpha: true, on_changed: @(color) {
-      picked.append(color)
-    } }).then(@(color) {
-      result.append(color)
-    })
-    expect(t.backend.dialogs[0].spec).to_equal({
+    pick_color(nil, {
       color: Color.RED,
       alpha: true,
+      on_changed: @(color) {
+        picked.append(color)
+      },
+    }).then(@(color) {
+      result.append(color)
     })
+    expect(t.backend.dialogs[0].spec)
+        .to_equal({ color: Color.RED, alpha: true })
     t.backend.answer_dialog(Color.BLUE)
     expect(picked).to_equal([Color.BLUE])
     expect(result).to_equal([Color.BLUE])
@@ -460,18 +533,23 @@ describe('background work', @{
     }
 
     expect(results).to_contain(144)
-    expect(results.filter(
-      @(item) => is_string(item) and item.lines()[0] == 'ValueError: nope',
-    )).to_have_length(1)
+    expect(
+      results.filter(
+        @(item) => is_string(item) and item.lines()[0] == 'ValueError: nope',
+      ),
+    )
+        .to_have_length(1)
     t.dispose()
   })
 
   it('exchanges messages with a worker', @{
     var t = WidgetTester().pump_widget(Text('x'))
     var replies = []
-    var worker = Worker(echo_worker, { on_message: @(reply) {
-      replies.append(reply)
-    } })
+    var worker = Worker(echo_worker, {
+      on_message: @(reply) {
+        replies.append(reply)
+      },
+    })
     worker.send(1)
     worker.send(2)
 
@@ -488,11 +566,11 @@ describe('background work', @{
 describe('PromiseBuilder', @{
   it('rebuilds when the promise settles', @{
     var deferred = Deferred()
-    var t = WidgetTester().pump_widget(PromiseBuilder(
-      deferred.promise, @(context, snapshot) {
+    var t = WidgetTester().pump_widget(
+      PromiseBuilder(deferred.promise, @(context, snapshot) {
         return Text(snapshot.is_pending() ? 'waiting' : 'got ${snapshot.value}')
-      },
-    ))
+      }),
+    )
     expect(t.find_text('waiting')).to_have_length(1)
     deferred.resolve(7)
     t.pump()
@@ -505,15 +583,21 @@ describe('show_dialog', @{
   it('shows a sheet on the window, and resolves with what close gets', @{
     var results = []
     var inside = nil
-    var t = WidgetTester().pump_widget(Builder(@(context) {
-      inside = context
-      return Text('main')
-    }))
-    show_dialog(inside, @(close) => Button('Done', {
-      on_pressed: @{
-        close(42)
-      },
-    }), { title: 'Question' }).then(@(result) {
+    var t = WidgetTester().pump_widget(
+      Builder(@(context) {
+        inside = context
+        return Text('main')
+      }),
+    )
+    show_dialog(
+      inside,
+      @(close) => Button('Done', {
+        on_pressed: @{
+          close(42)
+        },
+      }),
+      { title: 'Question' },
+    ).then(@(result) {
       results.append(result)
     })
     t.pump()
@@ -548,14 +632,27 @@ describe('show_dialog', @{
     var open = ObservableValue(true)
     var inside = nil
     var results = []
-    var t = WidgetTester().pump_app(Observer(open, @(context) => App({
-      windows: open.value()
-        ? [Window('One', Builder(@(inner) {
-          inside = inner
-          return Text('one')
-        }), { key: ValueKey('one') })]
-        : [Window('Two', Text('two'), { key: ValueKey('two') })],
-    })))
+    var t = WidgetTester().pump_app(
+      Observer(
+        open,
+        @(context) => App({
+          windows: open.value()
+              ? [
+                  Window(
+                    'One',
+                    Builder(@(inner) {
+                      inside = inner
+                      return Text('one')
+                    }),
+                    { key: ValueKey('one') },
+                  ),
+                ]
+              : [
+                  Window('Two', Text('two'), { key: ValueKey('two') }),
+                ],
+        }),
+      ),
+    )
     show_dialog(inside, @(close) => Text('asking')).then(@(result) {
       results.append(result)
     })
@@ -578,11 +675,11 @@ describe('printing', @{
     })
     expect(setup.page_size()).to_equal(Size(792, 612))
     expect(setup.printable_size()).to_equal(Size(720, 540))
-    expect(PageSetup({ paper_size: Size(842, 595) }).paper_size).to_equal(
-      PaperSize.A4,
-    )
-    expect(setup.copy_with({ orientation: PageOrientation.PORTRAIT })
-      .page_size()).to_equal(PaperSize.LETTER)
+    expect(PageSetup({ paper_size: Size(842, 595) }).paper_size)
+        .to_equal(PaperSize.A4)
+    expect(
+      setup.copy_with({ orientation: PageOrientation.PORTRAIT }).page_size(),
+    ).to_equal(PaperSize.LETTER)
     expect(@{
       PageSetup({ margins: EdgeInsets.all(400) })
     }).to_raise_instance_of(ValueError)
@@ -634,18 +731,19 @@ describe('printing', @{
     var job = t.backend.printed[0]
     expect(job.title).to_be('Report')
     expect(job.pages.length()).to_be(3)
-    expect(job.pages[2]).to_equal([['text', 'page 3', Point(0, 0)]])
+    expect(job.pages[2])
+        .to_equal([
+          ['text', 'page 3', Point(0, 0)],
+        ])
     t.dispose()
   })
 
   it('prints nothing when the dialog is cancelled', @{
     var t = WidgetTester().pump_widget(Text('x'))
     var results = []
-    print_pages(nil, { pages: 2, paint: @(painter, page) {} }).then(
-      @(printed) {
-        results.append(printed)
-      },
-    )
+    print_pages(nil, { pages: 2, paint: @(painter, page) {} }).then(@(printed) {
+      results.append(printed)
+    })
     t.backend.answer_dialog(false)
     t.pump()
     expect(results).to_equal([false])
@@ -655,9 +753,12 @@ describe('printing', @{
 
   it('saves pages as a PDF without asking', @{
     var t = WidgetTester().pump_widget(Text('x'))
-    save_pdf('/reports/q3.pdf', { pages: 2, paint: @(painter, page) {
-      painter.fill_rect(Rect(0, 0, 10, 10), Color.RED)
-    } })
+    save_pdf('/reports/q3.pdf', {
+      pages: 2,
+      paint: @(painter, page) {
+        painter.fill_rect(Rect(0, 0, 10, 10), Color.RED)
+      },
+    })
     expect(t.backend.dialogs).to_be_empty()
     expect(t.backend.printed[0].path).to_be('/reports/q3.pdf')
     expect(t.backend.printed[0].pages.length()).to_be(2)
@@ -673,9 +774,10 @@ describe('printing', @{
       save_pdf('/x.pdf', { pages: 1.5, paint: @(painter, page) {} })
     }).to_raise_instance_of(ValueError)
     expect(@{
-      save_pdf(
-        '/x.pdf', { pages: @(painter) => -1, paint: @(painter, page) {} },
-      )
+      save_pdf('/x.pdf', {
+        pages: @(painter) => -1,
+        paint: @(painter, page) {},
+      })
     }).to_raise_instance_of(ValueError)
     t.dispose()
   })

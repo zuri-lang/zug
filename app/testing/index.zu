@@ -70,10 +70,11 @@ class WidgetTester {
       var size = options == nil ? nil : options.get('size')
       var title = options == nil ? nil : options.get('title')
       shown = App({
-        windows: [Window(
-          title == nil ? 'Test' : title, widget,
-          { size: size == nil ? Size(800, 600) : size },
-        )],
+        windows: [
+          Window(title == nil ? 'Test' : title, widget, {
+            size: size == nil ? Size(800, 600) : size,
+          }),
+        ],
       })
     }
 
@@ -186,11 +187,9 @@ class WidgetTester {
    * @returns list
    */
   find_identifier(identifier: string) {
-    return self
-      .views()
-      .filter(
-        @(view) => view.props.get('accessibility_identifier') == identifier,
-      )
+    return self.views().filter(
+      @(view) => view.props.get('accessibility_identifier') == identifier,
+    )
   }
 
   /**
@@ -213,7 +212,9 @@ class WidgetTester {
     }
 
     if found.length() != 1 {
-      raise ZugError("expected one view named '${target}', found ${found.length()}")
+      raise ZugError(
+        "expected one view named '${target}', found ${found.length()}",
+      )
     }
 
     return found[0]

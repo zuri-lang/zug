@@ -37,21 +37,19 @@ class ViewerState < State {
   }
 
   open(context) {
-    pick_files(context, {
-      title: 'Choose an image to show.',
-      types: _TYPES,
-    }).then(@(paths) {
-      if paths == nil or !self.mounted() {
-        return
-      }
+    pick_files(context, { title: 'Choose an image to show.', types: _TYPES })
+        .then(@(paths) {
+          if paths == nil or !self.mounted() {
+            return
+          }
 
-      self.set_state(@{
-        self.path = paths[0]
-        self.rotation = 0
-        self.flip_horizontal = false
-        self.flip_vertical = false
-      })
-    })
+          self.set_state(@{
+            self.path = paths[0]
+            self.rotation = 0
+            self.flip_horizontal = false
+            self.flip_vertical = false
+          })
+        })
   }
 
   # What the image is and how it is shown, for the status line.
@@ -74,65 +72,76 @@ class ViewerState < State {
   }
 
   build(context) {
-    var changed = self.rotation != 0
-      or self.flip_horizontal
-      or self.flip_vertical
+    var changed = self.rotation != 0 or
+        self.flip_horizontal or
+        self.flip_vertical
 
-    var tools = Row([
-      Button('Open…', {
-        shortcut: 'cmd+o',
-        on_pressed: @{
-          self.open(context)
-        },
-      }),
-      Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
-      Button('Turn Left', {
-        shortcut: 'cmd+l',
-        tooltip: 'Turn a quarter anticlockwise',
-        on_pressed: @{
-          self.turn(-90)
-        },
-      }),
-      Button('Turn Right', {
-        shortcut: 'cmd+r',
-        tooltip: 'Turn a quarter clockwise',
-        on_pressed: @{
-          self.turn(90)
-        },
-      }),
-      Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
-      Button('Flip Across', {
-        selected: self.flip_horizontal,
-        on_selected_changed: @(on) {
-          self.set_state(@{
-            self.flip_horizontal = on
-          })
-        },
-      }),
-      Button('Flip Down', {
-        selected: self.flip_vertical,
-        on_selected_changed: @(on) {
-          self.set_state(@{
-            self.flip_vertical = on
-          })
-        },
-      }),
-      Spacer(),
-      Button('Reset', {
-        on_pressed: !changed ? nil : @{
-          self.set_state(@{
-            self.rotation = 0
-            self.flip_horizontal = false
-            self.flip_vertical = false
-          })
-        },
-      }),
-    ], { spacing: 8 })
+    var tools = Row(
+      [
+        Button('Open…', {
+          shortcut: 'cmd+o',
+          on_pressed: @{
+            self.open(context)
+          },
+        }),
+        Box({
+          height: 20,
+          child: Separator({ axis: Axis.VERTICAL }),
+        }),
+        Button('Turn Left', {
+          shortcut: 'cmd+l',
+          tooltip: 'Turn a quarter anticlockwise',
+          on_pressed: @{
+            self.turn(-90)
+          },
+        }),
+        Button('Turn Right', {
+          shortcut: 'cmd+r',
+          tooltip: 'Turn a quarter clockwise',
+          on_pressed: @{
+            self.turn(90)
+          },
+        }),
+        Box({
+          height: 20,
+          child: Separator({ axis: Axis.VERTICAL }),
+        }),
+        Button('Flip Across', {
+          selected: self.flip_horizontal,
+          on_selected_changed: @(on) {
+            self.set_state(@{
+              self.flip_horizontal = on
+            })
+          },
+        }),
+        Button('Flip Down', {
+          selected: self.flip_vertical,
+          on_selected_changed: @(on) {
+            self.set_state(@{
+              self.flip_vertical = on
+            })
+          },
+        }),
+        Spacer(),
+        Button('Reset', {
+          on_pressed: !changed
+              ? nil
+              : @{
+                  self.set_state(@{
+                    self.rotation = 0
+                    self.flip_horizontal = false
+                    self.flip_vertical = false
+                  })
+                },
+        }),
+      ],
+      { spacing: 8 },
+    )
 
     # The image takes the room there is, shrunk to fit when it is larger
     # but never enlarged.
-    var picture = Responsive(@(inner, constraints) => Image(
-      ImageSource.file(self.path), {
+    var picture = Responsive(
+      @(inner, constraints) => Image(ImageSource.file(self.path), {
         width: constraints.max_width,
         height: constraints.max_height,
         fit: ImageFit.SCALE_DOWN,
@@ -140,38 +149,47 @@ class ViewerState < State {
         flip_horizontal: self.flip_horizontal,
         flip_vertical: self.flip_vertical,
         accessibility_identifier: 'picture',
-      },
-    ))
+      }),
+    )
 
-    return Column([
-      Padding(EdgeInsets.all(12), tools),
-      Expanded(Box({
-        color: Color.system('under_page_background'),
-        padding: EdgeInsets.all(16),
-        child: picture,
-      })),
-      Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 6 }), Text(
-        self.describe(),
-        {
-          style: TextStyle({
-            size: 11,
-            color: Color.system('secondary_label'),
+    return Column(
+      [
+        Padding(EdgeInsets.all(12), tools),
+        Expanded(
+          Box({
+            color: Color.system('under_page_background'),
+            padding: EdgeInsets.all(16),
+            child: picture,
           }),
-          max_lines: 1,
-          overflow: TextOverflow.ELLIPSIS,
-          accessibility_identifier: 'status',
-        },
-      )),
-    ], { align_items: AlignItems.STRETCH })
+        ),
+        Padding(
+          EdgeInsets.symmetric({ horizontal: 12, vertical: 6 }),
+          Text(self.describe(), {
+            style: TextStyle({
+              size: 11,
+              color: Color.system('secondary_label'),
+            }),
+            max_lines: 1,
+            overflow: TextOverflow.ELLIPSIS,
+            accessibility_identifier: 'status',
+          }),
+        ),
+      ],
+      { align_items: AlignItems.STRETCH },
+    )
   }
 }
 
 if __root__ == __file__ {
-  run_app(App({
-    title: 'Images',
-    windows: [Window('Images', Viewer(), {
-      size: Size(720, 560),
-      min_size: Size(480, 360),
-    })],
-  }))
+  run_app(
+    App({
+      title: 'Images',
+      windows: [
+        Window('Images', Viewer(), {
+          size: Size(720, 560),
+          min_size: Size(480, 360),
+        }),
+      ],
+    }),
+  )
 }

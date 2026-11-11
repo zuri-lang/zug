@@ -66,9 +66,10 @@ class ImageSource {
    * @returns ImageSource
    */
   static symbol(name: string, options: ?dict) {
-    var o = check_options(
-      options, 'ImageSource.symbol', { size: 'number', weight: 'number' },
-    )
+    var o = check_options(options, 'ImageSource.symbol', {
+      size: 'number',
+      weight: 'number',
+    })
     return ImageSource({
       symbol: name,
       size: o.get('size', 13),
@@ -85,8 +86,8 @@ class ImageSource {
     var theirs = other.data
 
     if mine.contains('bytes') or theirs.contains('bytes') {
-      return mine.get('bytes') == theirs.get('bytes')
-        and id(mine.get('bytes')) == id(theirs.get('bytes'))
+      return mine.get('bytes') == theirs.get('bytes') and
+          id(mine.get('bytes')) == id(theirs.get('bytes'))
     }
 
     return mine == theirs
@@ -180,7 +181,8 @@ class Image < StatelessWidget {
    */
   @new(source: ImageSource, options: ?dict) {
     var o = check_options(
-      options, 'Image',
+      options,
+      'Image',
       host_options({
         width: 'number',
         height: 'number',
@@ -195,11 +197,15 @@ class Image < StatelessWidget {
     var rotation = o.get('rotation', 0)
 
     if !is_int(rotation) or rotation % 90 != 0 {
-      raise ValueError('rotation of Image must be a multiple of 90 degrees, got ${rotation}')
+      raise ValueError(
+        'rotation of Image must be a multiple of 90 degrees, got ${rotation}',
+      )
     }
 
     if !_FITS.contains(o.get('fit', 'contain')) {
-      raise ValueError("fit of Image must be one of ImageFit's values, got '${o.get('fit')}'")
+      raise ValueError(
+        "fit of Image must be one of ImageFit's values, got '${o.get('fit')}'",
+      )
     }
 
     self.key = o.get('key')
@@ -210,7 +216,10 @@ class Image < StatelessWidget {
   build(context) {
     var o = self.options
     var view = ImageView(
-      self.source, o.get('fit', 'contain'), o.get('tint'), common_props(o),
+      self.source,
+      o.get('fit', 'contain'),
+      o.get('tint'),
+      common_props(o),
     )
     view.rotation = ((o.get('rotation', 0) % 360) + 360) % 360
     view.flip_horizontal = o.get('flip_horizontal', false)
@@ -243,7 +252,8 @@ class Icon < StatelessWidget {
    */
   @new(name: string, options: ?dict) {
     var o = check_options(
-      options, 'Icon',
+      options,
+      'Icon',
       host_options({ size: 'number', weight: 'number', color: Color }),
     )
     self.key = o.get('key')
@@ -257,7 +267,9 @@ class Icon < StatelessWidget {
   build(context) {
     return ImageView(
       ImageSource.symbol(self.name, { size: self.size, weight: self.weight }),
-      'none', self.color, self.common,
+      'none',
+      self.color,
+      self.common,
     )
   }
 }
@@ -276,7 +288,9 @@ class GroupBox < SingleChildHostWidget {
    */
   @new(child: Widget, options: ?dict) {
     var o = check_options(
-      options, 'GroupBox', host_options({ title: 'string' }),
+      options,
+      'GroupBox',
+      host_options({ title: 'string' }),
     )
     self.key = o.get('key')
     self.common = common_props(o)

@@ -595,7 +595,11 @@ class Backend {
    * @param function done
    */
   print_pages(
-    window, spec: dict, count: function, paint: function, done: function,
+    window,
+    spec: dict,
+    count: function,
+    paint: function,
+    done: function,
   ) {
     raise NotImplementedError('print_pages')
   }

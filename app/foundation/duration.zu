@@ -32,7 +32,9 @@ class Duration {
    */
   @new(milliseconds: number) {
     if milliseconds < 0 or !milliseconds.is_finite() {
-      raise RangeError('a duration must be finite and not negative, got ${milliseconds}ms')
+      raise RangeError(
+        'a duration must be finite and not negative, got ${milliseconds}ms',
+      )
     }
 
     self.milliseconds = milliseconds
@@ -121,8 +123,8 @@ class Duration {
   }
 
   @eq(other) {
-    return instance_of(other, Duration)
-      and self.milliseconds == other.milliseconds
+    return instance_of(other, Duration) and
+        self.milliseconds == other.milliseconds
   }
 
   @to_string() {

@@ -260,7 +260,9 @@ class TextInput < StatefulWidget {
     var limit = o.get('max_length')
 
     if limit != nil and (!is_int(limit) or limit < 0) {
-      raise ValueError('max_length of ${owner} must be a whole number, got ${limit}')
+      raise ValueError(
+        'max_length of ${owner} must be a whole number, got ${limit}',
+      )
     }
 
     self.key = o.get('key')
@@ -455,13 +457,16 @@ class TextInputState < State {
     var on_focus_changed = o.get('on_focus_changed')
     handlers['changed'] = @(payload) => self._changed(payload)
     handlers['focus_changed'] = @(payload) => on_focus_changed == nil
-      ? nil
-      : on_focus_changed(payload.focused)
+        ? nil
+        : on_focus_changed(payload.focused)
 
     # A secure field is a different native control, so switching makes a
     # new view.
     var host = TextInputHost(
-      self.widget.input_kind(), props, handlers, self.widget.common,
+      self.widget.input_kind(),
+      props,
+      handlers,
+      self.widget.common,
       ValueKey(props.get('secure', false)),
     )
     host.on_escape = o.get('on_escape')
@@ -539,8 +544,8 @@ class TextField < TextInput {
     var on_submitted = self.options.get('on_submitted')
     return {
       submitted: @(payload) => on_submitted == nil
-        ? nil
-        : on_submitted(controller.text()),
+          ? nil
+          : on_submitted(controller.text()),
     }
   }
 }
@@ -559,10 +564,12 @@ class TextArea < TextInput {
    * @constructor
    */
   @new(options: ?dict) {
-    self.setup(
-      options, 'TextArea',
-      { read_only: 'bool', style: TextStyle, wrap: 'bool', bordered: 'bool' },
-    )
+    self.setup(options, 'TextArea', {
+      read_only: 'bool',
+      style: TextStyle,
+      wrap: 'bool',
+      bordered: 'bool',
+    })
   }
 
   input_kind() {
@@ -595,9 +602,10 @@ class SearchField < TextInput {
    * @constructor
    */
   @new(options: ?dict) {
-    self.setup(
-      options, 'SearchField', { placeholder: 'string', size: 'string' },
-    )
+    self.setup(options, 'SearchField', {
+      placeholder: 'string',
+      size: 'string',
+    })
   }
 
   input_kind() {
@@ -617,8 +625,8 @@ class SearchField < TextInput {
     var on_submitted = self.options.get('on_submitted')
     return {
       submitted: @(payload) => on_submitted == nil
-        ? nil
-        : on_submitted(controller.text()),
+          ? nil
+          : on_submitted(controller.text()),
     }
   }
 }
@@ -647,16 +655,13 @@ class ComboBox < TextInput {
    * @constructor
    */
   @new(items: list, options: ?dict) {
-    self.setup(
-      options, 'ComboBox',
-      {
-        placeholder: 'string',
-        completes: 'bool',
-        visible_items: 'number',
-        size: 'string',
-        on_selected: 'function',
-      },
-    )
+    self.setup(options, 'ComboBox', {
+      placeholder: 'string',
+      completes: 'bool',
+      visible_items: 'number',
+      size: 'string',
+      on_selected: 'function',
+    })
     self.items = items.map(@(item) => '${item}')
   }
 
@@ -699,8 +704,8 @@ class ComboBox < TextInput {
         }
       },
       submitted: @(payload) => on_submitted == nil
-        ? nil
-        : on_submitted(controller.text()),
+          ? nil
+          : on_submitted(controller.text()),
     }
   }
 }

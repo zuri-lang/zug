@@ -3,9 +3,7 @@
  */
 
 import ..foundation { Key, check_options }
-import ..rendering {
-  RenderTable, ColumnWidth, AlignItems, check_align_items,
-}
+import ..rendering { RenderTable, ColumnWidth, AlignItems, check_align_items }
 import .framework { Widget, MultiChildRenderObjectWidget }
 
 /**
@@ -72,17 +70,14 @@ class Table < MultiChildRenderObjectWidget {
    * @constructor
    */
   @new(rows: list, options: ?dict) {
-    var o = check_options(
-      options, 'Table',
-      {
-        key: Key,
-        columns: 'list',
-        align_items: 'string',
-        spacing: 'number',
-        column_spacing: 'number',
-        row_spacing: 'number',
-      },
-    )
+    var o = check_options(options, 'Table', {
+      key: Key,
+      columns: 'list',
+      align_items: 'string',
+      spacing: 'number',
+      column_spacing: 'number',
+      row_spacing: 'number',
+    })
     var children = []
     var lengths = []
 
@@ -90,12 +85,16 @@ class Table < MultiChildRenderObjectWidget {
       var row = rows[r]
 
       if !is_list(row) {
-        raise TypeError('row ${r} of a Table must be a list of widgets, got ${typeof(row)}')
+        raise TypeError(
+          'row ${r} of a Table must be a list of widgets, got ${typeof(row)}',
+        )
       }
 
       iter var c = 0; c < row.length(); c++ {
         if !instance_of(row[c], Widget) {
-          raise TypeError('cell ${c} of row ${r} of a Table must be a widget, got ${typeof(row[c])}')
+          raise TypeError(
+            'cell ${c} of row ${r} of a Table must be a widget, got ${typeof(row[c])}',
+          )
         }
 
         children.append(row[c])
@@ -108,7 +107,9 @@ class Table < MultiChildRenderObjectWidget {
 
     iter var c = 0; c < columns.length(); c++ {
       if !instance_of(columns[c], ColumnWidth) {
-        raise TypeError('column ${c} of a Table must be a ColumnWidth, got ${typeof(columns[c])}')
+        raise TypeError(
+          'column ${c} of a Table must be a ColumnWidth, got ${typeof(columns[c])}',
+        )
       }
     }
 
@@ -132,7 +133,10 @@ class Table < MultiChildRenderObjectWidget {
 
   update_render_object(context, render_object) {
     render_object.configure(
-      self.row_lengths, self.columns, self.align_items, self.column_spacing,
+      self.row_lengths,
+      self.columns,
+      self.align_items,
+      self.column_spacing,
       self.row_spacing,
     )
   }

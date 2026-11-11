@@ -13,8 +13,15 @@
  */
 
 import ..foundation {
-  Point, Size, Rect, Constraints, EdgeInsets, INFINITY, values_equal,
-  report_error, BackendError,
+  Point,
+  Size,
+  Rect,
+  Constraints,
+  EdgeInsets,
+  INFINITY,
+  values_equal,
+  report_error,
+  BackendError,
 }
 import ..backend { kind_spec }
 import .object { RenderObject }
@@ -203,7 +210,9 @@ class RenderHost < RenderObject {
     }
 
     return self.owner.run_handler(
-      handler, payload, "the '${event}' handler of a ${self.kind} view",
+      handler,
+      payload,
+      "the '${event}' handler of a ${self.kind} view",
     )
   }
 
@@ -225,8 +234,8 @@ class RenderHost < RenderObject {
    */
   native_value(name: string) {
     return self._native.contains(name)
-      ? self._native[name]
-      : self.props.get(name)
+        ? self._native[name]
+        : self.props.get(name)
   }
 
   # Views.
@@ -242,7 +251,9 @@ class RenderHost < RenderObject {
     }
 
     if self.owner == nil or self.owner.backend == nil {
-      raise BackendError("a '${self.kind}' view was needed while no backend was running")
+      raise BackendError(
+        "a '${self.kind}' view was needed while no backend was running",
+      )
     }
 
     self.view = self.create_view(self.owner.backend)
@@ -280,8 +291,8 @@ class RenderHost < RenderObject {
     var changes = {}
 
     for name, value in self._pending {
-      if !(self._native.contains(name)
-        and values_equal(self._native[name], value)) {
+      if !(self._native.contains(name) and
+          values_equal(self._native[name], value)) {
         changes[name] = value
       }
     }
@@ -440,24 +451,27 @@ class RenderHost < RenderObject {
   # Commit.
 
   commit(origin: Point, host, forced: bool) {
-    if !forced
-      and !self.needs_commit
-      and !self.child_needs_commit
-      and !self._props_dirty
-      and self._stale.is_empty()
-      and !self.structure_dirty {
+    if !forced and
+        !self.needs_commit and
+        !self.child_needs_commit and
+        !self._props_dirty and
+        self._stale.is_empty() and
+        !self.structure_dirty {
       return
     }
 
     var position = self.parent_data == nil
-      ? origin
-      : origin + self.parent_data.offset
+        ? origin
+        : origin + self.parent_data.offset
     self.ensure_view()
     self.flush_props()
 
     if forced or self.needs_commit {
       var frame = Rect(
-        position.x, position.y, self.size.width, self.size.height,
+        position.x,
+        position.y,
+        self.size.width,
+        self.size.height,
       )
 
       if frame != self._frame {
@@ -653,37 +667,37 @@ class RenderHostInset < RenderHost {
   compute_min_intrinsic_width(height: number) {
     var insets = self.content_insets(nil)
     var child = self.child()
-    return insets.horizontal()
-      + (child == nil
-        ? 0
-        : child.min_intrinsic_width((height - insets.vertical()).max(0)))
+    return insets.horizontal() +
+        (child == nil
+            ? 0
+            : child.min_intrinsic_width((height - insets.vertical()).max(0)))
   }
 
   compute_max_intrinsic_width(height: number) {
     var insets = self.content_insets(nil)
     var child = self.child()
-    return insets.horizontal()
-      + (child == nil
-        ? 0
-        : child.max_intrinsic_width((height - insets.vertical()).max(0)))
+    return insets.horizontal() +
+        (child == nil
+            ? 0
+            : child.max_intrinsic_width((height - insets.vertical()).max(0)))
   }
 
   compute_min_intrinsic_height(width: number) {
     var insets = self.content_insets(nil)
     var child = self.child()
-    return insets.vertical()
-      + (child == nil
-        ? 0
-        : child.min_intrinsic_height((width - insets.horizontal()).max(0)))
+    return insets.vertical() +
+        (child == nil
+            ? 0
+            : child.min_intrinsic_height((width - insets.horizontal()).max(0)))
   }
 
   compute_max_intrinsic_height(width: number) {
     var insets = self.content_insets(nil)
     var child = self.child()
-    return insets.vertical()
-      + (child == nil
-        ? 0
-        : child.max_intrinsic_height((width - insets.horizontal()).max(0)))
+    return insets.vertical() +
+        (child == nil
+            ? 0
+            : child.max_intrinsic_height((width - insets.horizontal()).max(0)))
   }
 
   compute_baseline() {

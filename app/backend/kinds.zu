@@ -174,16 +174,13 @@ def define_kind(name: string, spec: dict) {
     raise ValueError("the view kind '${name}' is already defined")
   }
 
-  var o = check_options(
-    spec, 'define_kind',
-    {
-      props: 'dict',
-      events: 'dict',
-      width: 'string',
-      height: 'string',
-      container: 'bool',
-    },
-  )
+  var o = check_options(spec, 'define_kind', {
+    props: 'dict',
+    events: 'dict',
+    width: 'string',
+    height: 'string',
+    container: 'bool',
+  })
   var kind = KindSpec(name)
 
   for prop, entry in _COMMON {
@@ -192,7 +189,9 @@ def define_kind(name: string, spec: dict) {
 
   for prop, entry in o.get('props', {}) {
     kind.props[prop] = PropSpec(
-      entry[0], entry[1], entry.length() > 2 ? entry[2] : true,
+      entry[0],
+      entry[1],
+      entry.length() > 2 ? entry[2] : true,
     )
   }
 
@@ -497,10 +496,7 @@ define_kind('level', {
   width: 'fill',
 })
 
-define_kind('separator', {
-  width: 'fill',
-  height: 'fill',
-})
+define_kind('separator', { width: 'fill', height: 'fill' })
 
 define_kind('group_box', {
   props: {

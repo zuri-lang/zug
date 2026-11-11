@@ -66,18 +66,20 @@ class NotesState < State {
       style: AlertStyle.WARNING,
       buttons: ['Discard', 'Cancel'],
       suppression: 'Don’t ask again',
-    }).then(self.if_open(@(answer) {
-      if answer.button != 0 {
-        self.say('Kept your changes.')
-        return
-      }
+    }).then(
+      self.if_open(@(answer) {
+        if answer.button != 0 {
+          self.say('Kept your changes.')
+          return
+        }
 
-      if answer.suppressed {
-        self.ask_before_discarding = false
-      }
+        if answer.suppressed {
+          self.ask_before_discarding = false
+        }
 
-      self.start_over()
-    }))
+        self.start_over()
+      }),
+    )
   }
 
   start_over() {
@@ -94,30 +96,32 @@ class NotesState < State {
     pick_files(context, {
       title: 'Choose a note to open.',
       types: ['txt', 'md'],
-    }).then(self.if_open(@(paths) {
-      if paths == nil {
-        self.say('Opened nothing.')
-        return
-      }
+    }).then(
+      self.if_open(@(paths) {
+        if paths == nil {
+          self.say('Opened nothing.')
+          return
+        }
 
-      var path = paths[0]
-      var contents = nil
+        var path = paths[0]
+        var contents = nil
 
-      catch {
-        contents = file(path).read()
-      } as error {
-        self.problem(context, 'Couldn’t open “${os.base_name(path)}”', error)
-        return
-      }
+        catch {
+          contents = file(path).read()
+        } as error {
+          self.problem(context, 'Couldn’t open “${os.base_name(path)}”', error)
+          return
+        }
 
-      self.text.set_text(contents)
-      self.set_state(@{
-        self.path = path
-        self.title = _without_extension(os.base_name(path))
-        self.edited = false
-        self.status = 'Opened ${path}.'
-      })
-    }))
+        self.text.set_text(contents)
+        self.set_state(@{
+          self.path = path
+          self.title = _without_extension(os.base_name(path))
+          self.edited = false
+          self.status = 'Opened ${path}.'
+        })
+      }),
+    )
   }
 
   save_note(context) {
@@ -126,26 +130,28 @@ class NotesState < State {
       name: '${self.title}.txt',
       types: ['txt'],
       directory: self.path == nil ? nil : os.dir_name(self.path),
-    }).then(self.if_open(@(path) {
-      if path == nil {
-        self.say('Saved nothing.')
-        return
-      }
+    }).then(
+      self.if_open(@(path) {
+        if path == nil {
+          self.say('Saved nothing.')
+          return
+        }
 
-      catch {
-        file(path, 'w').write(self.text.text())
-      } as error {
-        self.problem(context, 'Couldn’t save “${os.base_name(path)}”', error)
-        return
-      }
+        catch {
+          file(path, 'w').write(self.text.text())
+        } as error {
+          self.problem(context, 'Couldn’t save “${os.base_name(path)}”', error)
+          return
+        }
 
-      self.set_state(@{
-        self.path = path
-        self.title = _without_extension(os.base_name(path))
-        self.edited = false
-        self.status = 'Saved to ${path}.'
-      })
-    }))
+        self.set_state(@{
+          self.path = path
+          self.title = _without_extension(os.base_name(path))
+          self.edited = false
+          self.status = 'Saved to ${path}.'
+        })
+      }),
+    )
   }
 
   problem(context, title: string, error) {
@@ -188,23 +194,30 @@ class NotesState < State {
       paint: @(painter, page) {
         for item in self.pages_of(painter)[page] {
           painter.text(
-            item[0], Point(0, item[1]), self.style, painter.size().width,
+            item[0],
+            Point(0, item[1]),
+            self.style,
+            painter.size().width,
           )
         }
       },
-    }).then(self.if_open(@(printed) {
-      self.say(printed ? 'Printed “${self.title}”.' : 'Not printed.')
-    }))
+    }).then(
+      self.if_open(@(printed) {
+        self.say(printed ? 'Printed “${self.title}”.' : 'Not printed.')
+      }),
+    )
   }
 
   # The paper is kept for the next print.
   choose_paper(context) {
-    page_setup(context, { setup: self.setup }).then(self.if_open(@(setup) {
-      if setup != nil {
-        self.setup = setup
-        self.say('Set the paper to print on.')
-      }
-    }))
+    page_setup(context, { setup: self.setup }).then(
+      self.if_open(@(setup) {
+        if setup != nil {
+          self.setup = setup
+          self.say('Set the paper to print on.')
+        }
+      }),
+    )
   }
 
   # The note changes font as the user picks in the chooser.
@@ -216,9 +229,11 @@ class NotesState < State {
           self.style = style
         })
       }),
-    }).then(self.if_open(@(style) {
-      self.say(style == nil ? 'Kept the font.' : 'Set the font.')
-    }))
+    }).then(
+      self.if_open(@(style) {
+        self.say(style == nil ? 'Kept the font.' : 'Set the font.')
+      }),
+    )
   }
 
   choose_colour(context) {
@@ -229,29 +244,34 @@ class NotesState < State {
           self.style = self.style.copy_with({ color })
         })
       }),
-    }).then(self.if_open(@(color) {
-      self.say(
-        color == nil
-          ? 'Kept the colour.'
-          : 'Coloured the text ${color.to_hex()}.',
-      )
-    }))
+    }).then(
+      self.if_open(@(color) {
+        self.say(
+          color == nil
+              ? 'Kept the colour.'
+              : 'Coloured the text ${color.to_hex()}.',
+        )
+      }),
+    )
   }
 
   rename(context) {
-    show_dialog(
-      context, @(close) => RenameSheet(self.title, close), { title: 'Rename' },
-    ).then(self.if_open(@(title) {
-      if title == nil or title.trim() == '' {
-        self.say('Kept the title.')
-        return
-      }
+    show_dialog(context, @(close) => RenameSheet(self.title, close), {
+      title: 'Rename',
+    })
+        .then(
+          self.if_open(@(title) {
+            if title == nil or title.trim() == '' {
+              self.say('Kept the title.')
+              return
+            }
 
-      self.set_state(@{
-        self.title = title.trim()
-        self.status = 'Renamed the note “${self.title}”.'
-      })
-    }))
+            self.set_state(@{
+              self.title = title.trim()
+              self.status = 'Renamed the note “${self.title}”.'
+            })
+          }),
+        )
   }
 
   build(context) {
@@ -275,7 +295,10 @@ class NotesState < State {
             self.save_note(context)
           },
         }),
-        Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
+        Box({
+          height: 20,
+          child: Separator({ axis: Axis.VERTICAL }),
+        }),
         Button('Font…', {
           shortcut: 'cmd+t',
           on_pressed: @{
@@ -292,7 +315,10 @@ class NotesState < State {
             self.rename(context)
           },
         }),
-        Box({ height: 20, child: Separator({ axis: Axis.VERTICAL }) }),
+        Box({
+          height: 20,
+          child: Separator({ axis: Axis.VERTICAL }),
+        }),
         Button('Page Setup…', {
           shortcut: 'cmd+shift+p',
           on_pressed: @{
@@ -306,21 +332,18 @@ class NotesState < State {
           },
         }),
       ],
-      {
-        spacing: 8,
-      },
+      { spacing: 8 },
     )
 
-    var heading = Row([
-      Text(self.title, {
-        style: Style.of(context).title,
-      }),
-      Text(self.edited ? 'Edited' : '', {
-        style: TextStyle({
-          color: Color.system('secondary_label'),
+    var heading = Row(
+      [
+        Text(self.title, { style: Style.of(context).title }),
+        Text(self.edited ? 'Edited' : '', {
+          style: TextStyle({ color: Color.system('secondary_label') }),
         }),
-      }),
-    ], { spacing: 8 })
+      ],
+      { spacing: 8 },
+    )
 
     return Padding(
       EdgeInsets.all(12),
@@ -328,18 +351,20 @@ class NotesState < State {
         [
           tools,
           heading,
-          Expanded(TextArea({
-            controller: self.text,
-            style: self.style,
-            on_changed: @(text) {
-              if !self.edited {
-                self.set_state(@{
-                  self.edited = true
-                })
-              }
-            },
-            accessibility_identifier: 'note',
-          })),
+          Expanded(
+            TextArea({
+              controller: self.text,
+              style: self.style,
+              on_changed: @(text) {
+                if !self.edited {
+                  self.set_state(@{
+                    self.edited = true
+                  })
+                }
+              },
+              accessibility_identifier: 'note',
+            }),
+          ),
           Text(self.status, {
             style: TextStyle({
               size: 11,
@@ -350,10 +375,7 @@ class NotesState < State {
             accessibility_identifier: 'status',
           }),
         ],
-        {
-          spacing: 10,
-          align_items: AlignItems.STRETCH,
-        },
+        { spacing: 10, align_items: AlignItems.STRETCH },
       ),
     )
   }
@@ -391,32 +413,38 @@ class RenameState < State {
     return Box({
       width: 320,
       padding: EdgeInsets.all(20),
-      child: Column([
-        Text('Rename the note', { style: Style.of(context).headline }),
-        TextField({
-          controller: self.field,
-          autofocus: true,
-          on_submitted: @(text) {
-            close(text)
-          },
-          accessibility_identifier: 'new title',
-        }),
-        Row([
-          Spacer(),
-          Button('Cancel', {
-            role: ButtonRole.CANCEL,
-            on_pressed: @{
-              close(nil)
+      child: Column(
+        [
+          Text('Rename the note', { style: Style.of(context).headline }),
+          TextField({
+            controller: self.field,
+            autofocus: true,
+            on_submitted: @(text) {
+              close(text)
             },
+            accessibility_identifier: 'new title',
           }),
-          Button('Rename', {
-            role: ButtonRole.PRIMARY,
-            on_pressed: @{
-              close(self.field.text())
-            },
-          }),
-        ], { spacing: 8 }),
-      ], { spacing: 12, align_items: AlignItems.STRETCH }),
+          Row(
+            [
+              Spacer(),
+              Button('Cancel', {
+                role: ButtonRole.CANCEL,
+                on_pressed: @{
+                  close(nil)
+                },
+              }),
+              Button('Rename', {
+                role: ButtonRole.PRIMARY,
+                on_pressed: @{
+                  close(self.field.text())
+                },
+              }),
+            ],
+            { spacing: 8 },
+          ),
+        ],
+        { spacing: 12, align_items: AlignItems.STRETCH },
+      ),
     })
   }
 }
@@ -427,11 +455,15 @@ def _without_extension(name: string) {
 }
 
 if __root__ == __file__ {
-  run_app(App({
-    title: 'Notes',
-    windows: [Window('Notes', Notes(), {
-      size: Size(720, 460),
-      min_size: Size(420, 260),
-    })],
-  }))
+  run_app(
+    App({
+      title: 'Notes',
+      windows: [
+        Window('Notes', Notes(), {
+          size: Size(720, 460),
+          min_size: Size(420, 260),
+        }),
+      ],
+    }),
+  )
 }

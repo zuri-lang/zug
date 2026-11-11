@@ -9,8 +9,13 @@
  */
 
 import ..foundation {
-  report_error, run_microtasks, has_microtasks, set_microtask_waker,
-  values_equal, ZugError, LifecycleError,
+  report_error,
+  run_microtasks,
+  has_microtasks,
+  set_microtask_waker,
+  values_equal,
+  ZugError,
+  LifecycleError,
 }
 import ..backend { BackendDelegate, create_backend }
 import ..rendering { PipelineOwner, RenderWindowSet, RenderWindow }
@@ -148,7 +153,9 @@ class Runtime < BackendDelegate {
       self.request_frame()
     }
     self.pipeline.on_handler = @(handler, payload, context) => self.run_handler(
-      handler, payload, context,
+      handler,
+      payload,
+      context,
     )
   }
 
@@ -302,7 +309,9 @@ class Runtime < BackendDelegate {
 
     if self._ticker_timer == nil and self._started {
       self._ticker_timer = self.backend.start_timer(
-        self.backend.frame_interval(), true, @{
+        self.backend.frame_interval(),
+        true,
+        @{
           self.request_frame()
         },
       )
@@ -408,11 +417,11 @@ class Runtime < BackendDelegate {
 
     # A frame that failed would fail the same way again at once, so it
     # waits for the next change instead.
-    if has_microtasks()
-      or (!failed
-        and (self._pending_root != nil
-          or self.build_owner.has_dirty()
-          or self.pipeline.has_work())) {
+    if has_microtasks() or
+        (!failed and
+            (self._pending_root != nil or
+                self.build_owner.has_dirty() or
+                self.pipeline.has_work())) {
       self.request_frame()
     }
 
@@ -461,7 +470,9 @@ class Runtime < BackendDelegate {
     }
 
     var answer = self.run_handler(
-      self.on_quit_requested_handler, nil, 'the quit request handler',
+      self.on_quit_requested_handler,
+      nil,
+      'the quit request handler',
     )
     return answer != false
   }

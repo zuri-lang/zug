@@ -26,17 +26,24 @@ describe('settings', @{
     settings.keep_history = true
     settings.appearance = 'dark'
     settings.recents = ['1+1']
-    save_state(dir, settings, [{ expression: '1 + 1', result: 2 }])
+    save_state(dir, settings, [
+      { expression: '1 + 1', result: 2 },
+    ])
     var state = load_state(dir)
     expect(state.settings.places).to_be(2)
     expect(state.settings.angle).to_be('rad')
     expect(state.settings.appearance).to_be('dark')
     expect(state.settings.recents).to_equal(['1+1'])
-    expect(state.history).to_equal([{ expression: '1 + 1', result: 2 }])
+    expect(state.history)
+        .to_equal([
+          { expression: '1 + 1', result: 2 },
+        ])
   })
 
   it('leave the history out when it is not kept', @{
-    save_state(dir, Settings(), [{ expression: '1 + 1', result: 2 }])
+    save_state(dir, Settings(), [
+      { expression: '1 + 1', result: 2 },
+    ])
     expect(load_state(dir).history).to_be_empty()
   })
 

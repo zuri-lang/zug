@@ -45,9 +45,9 @@ class ListingState < State {
   var names = ['a', 'b', 'c']
 
   build(context) {
-    return Column(self.names.map(
-      @(name) => Text(name, { key: ValueKey(name) }),
-    ))
+    return Column(
+      self.names.map(@(name) => Text(name, { key: ValueKey(name) })),
+    )
   }
 
   show(names) {
@@ -61,14 +61,17 @@ describe('host props', @{
   it('sends a view only the props that changed', @{
     var label = ObservableValue('one')
     var t = WidgetTester()
-    t.pump_widget(Observer(
-      label, @(context) => Text(label.value(), { tooltip: 'tip' }),
-    ))
+    t.pump_widget(
+      Observer(label, @(context) => Text(label.value(), { tooltip: 'tip' })),
+    )
     var view = t.one('one')
     expect(view.updates).to_be_empty()
     label.set('two')
     t.pump()
-    expect(view.updates).to_equal([{ text: 'two' }])
+    expect(view.updates)
+        .to_equal([
+          { text: 'two' },
+        ])
     label.set('two')
     t.pump()
     expect(view.updates).to_have_length(1)
@@ -86,7 +89,12 @@ describe('host props', @{
 
   it('disables a button with nothing to call', @{
     var t = WidgetTester()
-    t.pump_widget(Column([Button('Dead'), Button('Live', { on_pressed: @{} })]))
+    t.pump_widget(
+      Column([
+        Button('Dead'),
+        Button('Live', { on_pressed: @{} }),
+      ]),
+    )
     expect(t.one('Dead').props.enabled).to_be_false()
     expect(t.one('Live').props.enabled).to_be_true()
     expect(@{
@@ -124,15 +132,13 @@ describe('native children', @{
     var t = WidgetTester()
     t.pump_widget(Listing())
     var window = t.window()
-    expect(window
-      .all_children()
-      .map(@(view) => view.text())).to_equal(['a', 'b', 'c'])
+    expect(window.all_children().map(@(view) => view.text()))
+        .to_equal(['a', 'b', 'c'])
     var before = t.one('b')
     t.state_of(ListingState).show(['c', 'a', 'b'])
     t.pump()
-    expect(window
-      .all_children()
-      .map(@(view) => view.text())).to_equal(['c', 'a', 'b'])
+    expect(window.all_children().map(@(view) => view.text()))
+        .to_equal(['c', 'a', 'b'])
     expect(t.one('b')).to_be(before)
     t.dispose()
   })
@@ -144,24 +150,24 @@ describe('native children', @{
     t.state_of(ListingState).show(['a', 'c'])
     t.pump()
     expect(b.destroyed).to_be_true()
-    expect(t
-      .window()
-      .all_children()
-      .map(@(view) => view.text())).to_equal(['a', 'c'])
+    expect(t.window().all_children().map(@(view) => view.text()))
+        .to_equal(['a', 'c'])
     t.dispose()
   })
 
   it('nest inside decorated boxes, positioned relative to them', @{
     var t = WidgetTester()
-    t.pump_widget(Padding(
-      EdgeInsets.all(20),
-      Box({
-        color: Color.GRAY,
-        padding: EdgeInsets.all(5),
-        accessibility_identifier: 'card',
-        child: Text('inside'),
-      }),
-    ))
+    t.pump_widget(
+      Padding(
+        EdgeInsets.all(20),
+        Box({
+          color: Color.GRAY,
+          padding: EdgeInsets.all(5),
+          accessibility_identifier: 'card',
+          child: Text('inside'),
+        }),
+      ),
+    )
     var card = t.one('card')
     var inside = t.one('inside')
     expect(inside.parent_view).to_be(card)
@@ -178,9 +184,13 @@ describe('event handlers', @{
       reported.append(context)
     })
     var t = WidgetTester()
-    t.pump_widget(Button('Bad', { on_pressed: @{
-      raise ValueError('handler failed')
-    } }))
+    t.pump_widget(
+      Button('Bad', {
+        on_pressed: @{
+          raise ValueError('handler failed')
+        },
+      }),
+    )
     t.tap('Bad')
     set_error_handler(nil)
     expect(reported).to_have_length(1)
@@ -191,12 +201,16 @@ describe('event handlers', @{
   it('run microtasks the handler scheduled before the next frame', @{
     var order = []
     var t = WidgetTester()
-    t.pump_widget(Button('Go', { on_pressed: @{
-      order.append('handler')
-      schedule_microtask(@{
-        order.append('microtask')
-      })
-    } }))
+    t.pump_widget(
+      Button('Go', {
+        on_pressed: @{
+          order.append('handler')
+          schedule_microtask(@{
+            order.append('microtask')
+          })
+        },
+      }),
+    )
     t.tap('Go')
     expect(order).to_equal(['handler', 'microtask'])
     t.dispose()
@@ -213,9 +227,13 @@ describe('windows', @{
 
   it('stay open when on_close_request refuses', @{
     var t = WidgetTester()
-    t.pump_widget(App({
-      windows: [Window('Keep', Text('x'), { on_close_request: @() => false })],
-    }))
+    t.pump_widget(
+      App({
+        windows: [
+          Window('Keep', Text('x'), { on_close_request: @() => false }),
+        ],
+      }),
+    )
     expect(t.window().click_close()).to_be_false()
     expect(t.window().shown).to_be_true()
     t.dispose()
@@ -224,9 +242,17 @@ describe('windows', @{
   it('quit the application when the last one closes', @{
     var closed = []
     var t = WidgetTester()
-    t.pump_widget(App({ windows: [Window('Only', Text('x'), { on_closed: @{
-      closed.append(true)
-    } })] }))
+    t.pump_widget(
+      App({
+        windows: [
+          Window('Only', Text('x'), {
+            on_closed: @{
+              closed.append(true)
+            },
+          }),
+        ],
+      }),
+    )
     expect(t.window().click_close()).to_be_true()
     expect(closed).to_equal([true])
     expect(t.backend.quits).to_be(1)
@@ -236,17 +262,21 @@ describe('windows', @{
   it('open and close as the list of windows changes', @{
     var many = ObservableValue(false)
     var t = WidgetTester()
-    t.pump_app(Observer(many, @(context) {
-      var windows = [Window('Main', Text('main'), { key: ValueKey('main') })]
+    t.pump_app(
+      Observer(many, @(context) {
+        var windows = [
+          Window('Main', Text('main'), { key: ValueKey('main') }),
+        ]
 
-      if many.value() {
-        windows.append(Window(
-          'Second', Text('second'), { key: ValueKey('second') },
-        ))
-      }
+        if many.value() {
+          windows.append(
+            Window('Second', Text('second'), { key: ValueKey('second') }),
+          )
+        }
 
-      return App({ windows })
-    }))
+        return App({ windows })
+      }),
+    )
     expect(t.backend.windows).to_have_length(1)
     many.set(true)
     t.pump()

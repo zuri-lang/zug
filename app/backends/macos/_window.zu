@@ -4,15 +4,43 @@
 
 import ffi
 import .. ..foundation {
-  Size, Rect, EdgeInsets, Constraints, BackendError, report_error,
+  Size,
+  Rect,
+  EdgeInsets,
+  Constraints,
+  BackendError,
+  report_error,
 }
 import .. ..backend { WindowHost, kind_spec }
 import ._runtime {
-  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
-  send_void_int, send_void_uint, send_void_size, send_void_point, send_size,
-  send_rect, send_uint, send_bool, typed, typed_super, super_of, define_class,
-  ns_string, zuri_string, retain, release, rect, create_with_frame, CGRect,
-  CGSize, CGPoint,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_void_uint,
+  send_void_size,
+  send_void_point,
+  send_size,
+  send_rect,
+  send_uint,
+  send_bool,
+  typed,
+  typed_super,
+  super_of,
+  define_class,
+  ns_string,
+  zuri_string,
+  retain,
+  release,
+  rect,
+  create_with_frame,
+  CGRect,
+  CGSize,
+  CGPoint,
 }
 import ._classes { register, unregister, host_for, shared_window_delegate }
 import ._cocoa { ns_color, finite }
@@ -53,7 +81,15 @@ var _KEY_DOWN = 10
 # Keys that text the user can select but not edit uses, to move the
 # selection or the focus.
 var _SELECTION_KEYS = [
-  'left', 'right', 'up', 'down', 'home', 'end', 'page_up', 'page_down', 'tab',
+  'left',
+  'right',
+  'up',
+  'down',
+  'home',
+  'end',
+  'page_up',
+  'page_down',
+  'tab',
 ]
 
 def _is_kind(object, name: string) {
@@ -69,31 +105,45 @@ def _is_kind(object, name: string) {
  * @type Pointer
  */
 var ZugWindow = define_class('ZugWindow', 'NSWindow', {
-  'sendEvent:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
-    var used = false
+  'sendEvent:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, event) {
+      var used = false
 
-    catch {
+      catch {
+        var host = host_for(this)
+        used = host != nil and host.key_first(event)
+      } as error {
+        report_error(error, 'handling a key')
+      }
+
+      if !used {
+        typed_super(ffi.void, [ffi.ptr])(
+          super_of(this, cls('NSWindow')),
+          sel('sendEvent:'),
+          event,
+        )
+      }
+    },
+  ],
+  'keyDown:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, event) {
       var host = host_for(this)
-      used = host != nil and host.key_first(event)
-    } as error {
-      report_error(error, 'handling a key')
-    }
 
-    if !used {
-      typed_super(
-        ffi.void, [ffi.ptr],
-      )(super_of(this, cls('NSWindow')), sel('sendEvent:'), event)
-    }
-  }],
-  'keyDown:': ['v@:@', ffi.void, [ffi.ptr], @(this, event) {
-    var host = host_for(this)
-
-    if host == nil or !host.key_down(event) {
-      typed_super(
-        ffi.void, [ffi.ptr],
-      )(super_of(this, cls('NSWindow')), sel('keyDown:'), event)
-    }
-  }],
+      if host == nil or !host.key_down(event) {
+        typed_super(ffi.void, [ffi.ptr])(
+          super_of(this, cls('NSWindow')),
+          sel('keyDown:'),
+          event,
+        )
+      }
+    },
+  ],
 })
 
 /**
@@ -231,13 +281,17 @@ class MacWindow < WindowHost {
     self.native = init(
       send(ZugWindow, 'alloc'),
       sel('initWithContentRect:styleMask:backing:defer:'),
-      rect(0, 0, size.width, size.height), self._style_mask(), 2, true,
+      rect(0, 0, size.width, size.height),
+      self._style_mask(),
+      2,
+      true,
     )
     send_void_bool(self.native, 'setReleasedWhenClosed:', false)
     send_void_id(self.native, 'setDelegate:', shared_window_delegate())
 
     self.content = create_with_frame(
-      'ZugView', rect(0, 0, size.width, size.height),
+      'ZugView',
+      rect(0, 0, size.width, size.height),
     )
     send_void_id(self.native, 'setContentView:', self.content)
     register(self.native, self)
@@ -283,10 +337,10 @@ class MacWindow < WindowHost {
     }
 
     var frame = send_rect(screen, 'frame')
-    send_void_point(
-      self.native, 'setFrameTopLeftPoint:',
-      { x: position.x, y: frame.size.height - position.y },
-    )
+    send_void_point(self.native, 'setFrameTopLeftPoint:', {
+      x: position.x,
+      y: frame.size.height - position.y,
+    })
   }
 
   /**
@@ -300,30 +354,32 @@ class MacWindow < WindowHost {
     using name {
       when 'title' {
         send_void_id(
-          self.native, 'setTitle:', ns_string(value == nil ? '' : value),
+          self.native,
+          'setTitle:',
+          ns_string(value == nil ? '' : value),
         )
       }
       when 'size' {
         if value != nil {
-          send_void_size(
-            self.native, 'setContentSize:',
-            { width: value.width, height: value.height },
-          )
+          send_void_size(self.native, 'setContentSize:', {
+            width: value.width,
+            height: value.height,
+          })
         }
       }
       when 'min_size' {
         var size = value == nil ? Size(1, 1) : value
-        send_void_size(
-          self.native, 'setContentMinSize:',
-          { width: size.width, height: size.height },
-        )
+        send_void_size(self.native, 'setContentMinSize:', {
+          width: size.width,
+          height: size.height,
+        })
       }
       when 'max_size' {
         var size = value == nil ? Size(100000, 100000) : value
-        send_void_size(
-          self.native, 'setContentMaxSize:',
-          { width: finite(size.width), height: finite(size.height) },
-        )
+        send_void_size(self.native, 'setContentMaxSize:', {
+          width: finite(size.width),
+          height: finite(size.height),
+        })
       }
       when 'resizable', 'closable', 'minimizable' {
         send_void_uint(self.native, 'setStyleMask:', self._style_mask())
@@ -331,18 +387,23 @@ class MacWindow < WindowHost {
       when 'title_bar' {
         send_void_uint(self.native, 'setStyleMask:', self._style_mask())
         send_void_bool(
-          self.native, 'setTitlebarAppearsTransparent:', value != 'normal',
+          self.native,
+          'setTitlebarAppearsTransparent:',
+          value != 'normal',
         )
         send_void_int(
-          self.native, 'setTitleVisibility:', value == 'hidden' ? 1 : 0,
+          self.native,
+          'setTitleVisibility:',
+          value == 'hidden' ? 1 : 0,
         )
       }
       when 'background' {
         send_void_id(
-          self.native, 'setBackgroundColor:',
+          self.native,
+          'setBackgroundColor:',
           value == nil
-            ? send(cls('NSColor'), 'windowBackgroundColor')
-            : ns_color(value),
+              ? send(cls('NSColor'), 'windowBackgroundColor')
+              : ns_color(value),
         )
       }
       when 'visible' {
@@ -416,12 +477,18 @@ class MacWindow < WindowHost {
 
     if at == 0 {
       add(
-        self.content, sel('addSubview:positioned:relativeTo:'), child.native,
-        -1, self.children.is_empty() ? nil : self.children[0].native,
+        self.content,
+        sel('addSubview:positioned:relativeTo:'),
+        child.native,
+        -1,
+        self.children.is_empty() ? nil : self.children[0].native,
       )
     } else {
       add(
-        self.content, sel('addSubview:positioned:relativeTo:'), child.native, 1,
+        self.content,
+        sel('addSubview:positioned:relativeTo:'),
+        child.native,
+        1,
         self.children[at - 1].native,
       )
     }
@@ -471,10 +538,10 @@ class MacWindow < WindowHost {
   }
 
   set_content_size_to(size: Size) {
-    send_void_size(
-      self.native, 'setContentSize:',
-      { width: size.width, height: size.height },
-    )
+    send_void_size(self.native, 'setContentSize:', {
+      width: size.width,
+      height: size.height,
+    })
   }
 
   show() {
@@ -505,7 +572,10 @@ class MacWindow < WindowHost {
     self._shown = true
     self.sheet_parent = window
     typed(ffi.void, [ffi.ptr, ffi.ptr])(
-      window.native, sel('beginSheet:completionHandler:'), self.native, nil,
+      window.native,
+      sel('beginSheet:completionHandler:'),
+      self.native,
+      nil,
     )
     self.clear_focus()
   }
@@ -583,17 +653,17 @@ class MacWindow < WindowHost {
     if payload.key == 'escape' and payload.modifiers.is_empty() {
       var focused = self._host_of(responder)
 
-      if focused != nil
-        and self.backend.deliver(focused, 'escape', nil) == true {
+      if focused != nil and
+          self.backend.deliver(focused, 'escape', nil) == true {
         return true
       }
     }
 
-    if !_is_kind(responder, 'NSTextView')
-      or send_bool(responder, 'isEditable')
-      or payload.modifiers.contains('cmd')
-      or payload.modifiers.contains('ctrl')
-      or _SELECTION_KEYS.contains(payload.key) {
+    if !_is_kind(responder, 'NSTextView') or
+        send_bool(responder, 'isEditable') or
+        payload.modifiers.contains('cmd') or
+        payload.modifiers.contains('ctrl') or
+        _SELECTION_KEYS.contains(payload.key) {
       return false
     }
 
@@ -655,9 +725,10 @@ class MacWindow < WindowHost {
     }
 
     var size = self.content_size()
-    self.backend.deliver(
-      self, 'resized', { width: size.width, height: size.height },
-    )
+    self.backend.deliver(self, 'resized', {
+      width: size.width,
+      height: size.height,
+    })
     self.backend.draw_now()
   }
 

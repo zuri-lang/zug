@@ -4,7 +4,13 @@
  */
 
 import ..foundation {
-  Point, Size, Rect, EdgeInsets, Alignment, Color, values_equal,
+  Point,
+  Size,
+  Rect,
+  EdgeInsets,
+  Alignment,
+  Color,
+  values_equal,
 }
 import ..painting { Border, Shadow }
 import .curve { Curve }
@@ -24,7 +30,14 @@ def can_lerp(a, b) {
   }
 
   for type in [
-    Color, Point, Size, Rect, EdgeInsets, Alignment, Border, Shadow,
+    Color,
+    Point,
+    Size,
+    Rect,
+    EdgeInsets,
+    Alignment,
+    Border,
+    Shadow,
   ] {
     if instance_of(a, type) and instance_of(b, type) {
       return true
@@ -65,15 +78,19 @@ def lerp(a, b, t: number) {
 
   if instance_of(a, Rect) and instance_of(b, Rect) {
     return Rect(
-      _mix(a.x, b.x, t), _mix(a.y, b.y, t), _grow(a.width, b.width, t),
+      _mix(a.x, b.x, t),
+      _mix(a.y, b.y, t),
+      _grow(a.width, b.width, t),
       _grow(a.height, b.height, t),
     )
   }
 
   if instance_of(a, EdgeInsets) and instance_of(b, EdgeInsets) {
     return EdgeInsets(
-      _grow(a.left, b.left, t), _grow(a.top, b.top, t),
-      _grow(a.right, b.right, t), _grow(a.bottom, b.bottom, t),
+      _grow(a.left, b.left, t),
+      _grow(a.top, b.top, t),
+      _grow(a.right, b.right, t),
+      _grow(a.bottom, b.bottom, t),
     )
   }
 
@@ -148,7 +165,9 @@ class Tween {
    */
   @new(begin, end, curve: ?Curve) {
     if !can_lerp(begin, end) {
-      raise TypeError('a Tween cannot run from ${typeof(begin)} to ${typeof(end)}')
+      raise TypeError(
+        'a Tween cannot run from ${typeof(begin)} to ${typeof(end)}',
+      )
     }
 
     self.begin = begin

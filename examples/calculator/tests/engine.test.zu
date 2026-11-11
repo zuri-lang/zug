@@ -22,9 +22,8 @@ describe('entering numbers', @{
   })
 
   it('groups thousands as they are typed', @{
-    expect(press([
-      '1', '2', '3', '4', '5', '6', '7',
-    ]).display()).to_be('1,234,567')
+    expect(press(['1', '2', '3', '4', '5', '6', '7']).display())
+        .to_be('1,234,567')
   })
 
   it('ignores a second point and digits past the limit', @{
@@ -62,9 +61,8 @@ describe('arithmetic', @{
   })
 
   it('evaluates parentheses', @{
-    expect(press([
-      '(', '2', '+', '3', ')', '*', '4', '=',
-    ]).display()).to_be('20')
+    expect(press(['(', '2', '+', '3', ')', '*', '4', '=']).display())
+        .to_be('20')
     expect(press(['2', '(', '3', '+', '4', ')', '=']).display()).to_be('14')
     expect(press(['(', '1', '+', '2', '=']).display()).to_be('3')
   })
@@ -75,9 +73,8 @@ describe('arithmetic', @{
   })
 
   it('avoids binary rounding in what it shows', @{
-    expect(press([
-      '0', '.', '1', '+', '0', '.', '2', '=',
-    ]).display()).to_be('0.3')
+    expect(press(['0', '.', '1', '+', '0', '.', '2', '=']).display())
+        .to_be('0.3')
   })
 
   it('starts afresh when a digit follows a result', @{
@@ -88,13 +85,11 @@ describe('arithmetic', @{
 
 describe('percent, sign and clear', @{
   it('takes a percentage of the value being added to', @{
-    expect(press([
-      '2', '0', '0', '+', '1', '0', '%', '=',
-    ]).display()).to_be('220')
+    expect(press(['2', '0', '0', '+', '1', '0', '%', '=']).display())
+        .to_be('220')
     expect(press(['5', '0', '%']).display()).to_be('0.5')
-    expect(press([
-      '2', '0', '0', '*', '1', '0', '%', '=',
-    ]).display()).to_be('20')
+    expect(press(['2', '0', '0', '*', '1', '0', '%', '=']).display())
+        .to_be('20')
   })
 
   it('changes sign', @{
@@ -186,9 +181,8 @@ describe('functions and memory', @{
 describe('history', @{
   it('records each finished calculation', @{
     var calculator = press(['2', '+', '3', '=', '*', '4', '='])
-    expect(calculator.history.map(
-      @(entry) => entry.expression,
-    )).to_equal(['2 + 3', '5 × 4'])
+    expect(calculator.history.map(@(entry) => entry.expression))
+        .to_equal(['2 + 3', '5 × 4'])
     expect(calculator.history.map(@(entry) => entry.result)).to_equal([5, 20])
   })
 

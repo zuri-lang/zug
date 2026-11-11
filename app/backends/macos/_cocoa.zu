@@ -6,7 +6,15 @@
 import ffi
 import .. ..foundation { Color, INFINITY, Size }
 import ._runtime {
-  cls, sel, send, send_id, send_id_double, typed, ns_string, CGSize, CGRect,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_id_double,
+  typed,
+  ns_string,
+  CGSize,
+  CGRect,
 }
 
 /**
@@ -91,13 +99,17 @@ def ns_color(color: Color) {
     }
 
     return color.alpha < 1
-      ? send_id_double(base, 'colorWithAlphaComponent:', color.alpha)
-      : base
+        ? send_id_double(base, 'colorWithAlphaComponent:', color.alpha)
+        : base
   }
 
   return _srgb(
-    NSColor, sel('colorWithSRGBRed:green:blue:alpha:'), color.red / 255,
-    color.green / 255, color.blue / 255, color.alpha,
+    NSColor,
+    sel('colorWithSRGBRed:green:blue:alpha:'),
+    color.red / 255,
+    color.green / 255,
+    color.blue / 255,
+    color.alpha,
   )
 }
 
@@ -158,9 +170,7 @@ def _weight(css: number) {
   return 0.62
 }
 
-var _family_font = typed(
-  ffi.ptr, [ffi.ptr, ffi.ulong, ffi.long, ffi.double],
-)
+var _family_font = typed(ffi.ptr, [ffi.ptr, ffi.ulong, ffi.long, ffi.double])
 
 # NSItalicFontMask.
 var _ITALIC_MASK = 1
@@ -189,8 +199,8 @@ def css_weight(weight: number) {
   var best = 0
 
   iter var i = 1; i < _MANAGER_WEIGHTS.length(); i++ {
-    if (_MANAGER_WEIGHTS[i] - weight).abs()
-      < (_MANAGER_WEIGHTS[best] - weight).abs() {
+    if (_MANAGER_WEIGHTS[i] - weight).abs() <
+        (_MANAGER_WEIGHTS[best] - weight).abs() {
       best = i
     }
   }
@@ -239,7 +249,8 @@ def system_font_size() {
  */
 def ns_font(style: dict, base_size: ?number) {
   var size = style.get(
-    'size', base_size == nil ? system_font_size() : base_size,
+    'size',
+    base_size == nil ? system_font_size() : base_size,
   )
   var weight = style.get('weight', 400)
   var family = style.get('family')
@@ -261,13 +272,19 @@ def ns_font(style: dict, base_size: ?number) {
   if family != nil {
     font = _family_font(
       send(cls('NSFontManager'), 'sharedFontManager'),
-      sel('fontWithFamily:traits:weight:size:'), ns_string(family),
-      italic ? _ITALIC_MASK : 0, manager_weight(weight), size,
+      sel('fontWithFamily:traits:weight:size:'),
+      ns_string(family),
+      italic ? _ITALIC_MASK : 0,
+      manager_weight(weight),
+      size,
     )
 
     if font == nil {
       font = _font_name_size(
-        NSFont, sel('fontWithName:size:'), ns_string(family), size,
+        NSFont,
+        sel('fontWithName:size:'),
+        ns_string(family),
+        size,
       )
     }
   }
@@ -275,28 +292,39 @@ def ns_font(style: dict, base_size: ?number) {
   if font == nil {
     if digits {
       font = _font_size_weight(
-        NSFont, sel('monospacedDigitSystemFontOfSize:weight:'), size,
+        NSFont,
+        sel('monospacedDigitSystemFontOfSize:weight:'),
+        size,
         _weight(weight),
       )
     } else if design == 'monospaced' {
       font = _font_size_weight(
-        NSFont, sel('monospacedSystemFontOfSize:weight:'), size,
+        NSFont,
+        sel('monospacedSystemFontOfSize:weight:'),
+        size,
         _weight(weight),
       )
     } else {
       font = _font_size_weight(
-        NSFont, sel('systemFontOfSize:weight:'), size, _weight(weight),
+        NSFont,
+        sel('systemFontOfSize:weight:'),
+        size,
+        _weight(weight),
       )
 
       if design == 'rounded' or design == 'serif' {
         var descriptor = send_id(
-          send(font, 'fontDescriptor'), 'fontDescriptorWithDesign:',
+          send(font, 'fontDescriptor'),
+          'fontDescriptorWithDesign:',
           _design(design),
         )
 
         if descriptor != nil {
           font = _font_descriptor_size(
-            NSFont, sel('fontWithDescriptor:size:'), descriptor, size,
+            NSFont,
+            sel('fontWithDescriptor:size:'),
+            descriptor,
+            size,
           )
         }
       }
@@ -305,10 +333,15 @@ def ns_font(style: dict, base_size: ?number) {
 
   if italic {
     var italic_descriptor = _descriptor_traits(
-      send(font, 'fontDescriptor'), sel('fontDescriptorWithSymbolicTraits:'), 1,
+      send(font, 'fontDescriptor'),
+      sel('fontDescriptorWithSymbolicTraits:'),
+      1,
     )
     var slanted = _font_descriptor_size(
-      NSFont, sel('fontWithDescriptor:size:'), italic_descriptor, size,
+      NSFont,
+      sel('fontWithDescriptor:size:'),
+      italic_descriptor,
+      size,
     )
 
     if slanted != nil {

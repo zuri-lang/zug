@@ -69,13 +69,18 @@ def registered_count() {
 var ZugView = define_class('ZugView', 'NSView', {
   isFlipped: ['${B}@:', ffi.bool, [], @(this) => true, true],
   wantsUpdateLayer: ['${B}@:', ffi.bool, [], @(this) => true, true],
-  updateLayer: ['v@:', ffi.void, [], @(this) {
-    var host = host_for(this)
+  updateLayer: [
+    'v@:',
+    ffi.void,
+    [],
+    @(this) {
+      var host = host_for(this)
 
-    if host != nil {
-      host.update_layer()
-    }
-  }],
+      if host != nil {
+        host.update_layer()
+      }
+    },
+  ],
 })
 
 /**
@@ -85,13 +90,18 @@ var ZugView = define_class('ZugView', 'NSView', {
  * @type Pointer
  */
 var ZugTarget = define_class('ZugTarget', 'NSObject', {
-  'zugAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
-    var host = host_for(sender)
+  'zugAction:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, sender) {
+      var host = host_for(sender)
 
-    if host != nil {
-      host.on_action()
-    }
-  }],
+      if host != nil {
+        host.on_action()
+      }
+    },
+  ],
 })
 
 var _target = nil
@@ -115,38 +125,64 @@ def shared_target() {
  * @type Pointer
  */
 var ZugWindowDelegate = define_class('ZugWindowDelegate', 'NSObject', {
-  'windowShouldClose:': ['${B}@:@', ffi.bool, [ffi.ptr], @(this, window) {
-    var host = host_for(window)
-    return host == nil ? true : host.should_close()
-  }, true],
-  'windowWillClose:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'windowShouldClose:': [
+    '${B}@:@',
+    ffi.bool,
+    [ffi.ptr],
+    @(this, window) {
+      var host = host_for(window)
+      return host == nil ? true : host.should_close()
+    },
+    true,
+  ],
+  'windowWillClose:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.did_close()
-    }
-  }],
-  'windowDidResize:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.did_close()
+      }
+    },
+  ],
+  'windowDidResize:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.did_resize()
-    }
-  }],
-  'windowDidBecomeKey:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.did_resize()
+      }
+    },
+  ],
+  'windowDidBecomeKey:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.did_change_key(true)
-    }
-  }],
-  'windowDidResignKey:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.did_change_key(true)
+      }
+    },
+  ],
+  'windowDidResignKey:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.did_change_key(false)
-    }
-  }],
+      if host != nil {
+        host.did_change_key(false)
+      }
+    },
+  ],
 })
 
 var _window_delegate = nil
@@ -182,39 +218,63 @@ def set_application_host(backend) {
  * @type Pointer
  */
 var ZugAppDelegate = define_class('ZugAppDelegate', 'NSObject', {
-  'applicationShouldTerminate:': ['Q@:@', ffi.ulong, [ffi.ptr], @(this, app) {
-    return _application == nil or _application.should_terminate() ? 1 : 0
-  }, 1],
+  'applicationShouldTerminate:': [
+    'Q@:@',
+    ffi.ulong,
+    [ffi.ptr],
+    @(this, app) {
+      return _application == nil or _application.should_terminate() ? 1 : 0
+    },
+    1,
+  ],
   'applicationShouldTerminateAfterLastWindowClosed:': [
-    '${B}@:@', ffi.bool, [ffi.ptr], @(this, app) => false, false,
+    '${B}@:@',
+    ffi.bool,
+    [ffi.ptr],
+    @(this, app) => false,
+    false,
   ],
   'applicationShouldHandleReopen:hasVisibleWindows:': [
-    '${B}@:@${B}', ffi.bool, [ffi.ptr, ffi.bool], @(this, app, visible) {
+    '${B}@:@${B}',
+    ffi.bool,
+    [ffi.ptr, ffi.bool],
+    @(this, app, visible) {
       if !visible and _application != nil {
         _application.reopen()
       }
 
       return true
-    }, true,
+    },
+    true,
   ],
   'applicationDidFinishLaunching:': [
-    'v@:@', ffi.void, [ffi.ptr], @(this, note) {
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
       if _application != nil {
         _application.did_finish_launching()
       }
     },
   ],
   'observeValueForKeyPath:ofObject:change:context:': [
-    'v@:@@@^v', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr],
+    'v@:@@@^v',
+    ffi.void,
+    [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr],
     @(this, path, object, change, context) {
       if _application != nil {
         _application.appearance_changed()
       }
     },
   ],
-  'zugMenuAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, item) {
-    if _application != nil {
-      _application.menu_action(item)
-    }
-  }],
+  'zugMenuAction:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, item) {
+      if _application != nil {
+        _application.menu_action(item)
+      }
+    },
+  ],
 })

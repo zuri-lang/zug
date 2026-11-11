@@ -109,27 +109,26 @@ class PageSetup {
    * @constructor
    */
   @new(options: ?dict) {
-    var o = check_options(
-      options, 'PageSetup',
-      {
-        paper_size: Size,
-        orientation: 'string',
-        margins: EdgeInsets,
-        paper_name: 'string',
-      },
-    )
+    var o = check_options(options, 'PageSetup', {
+      paper_size: Size,
+      orientation: 'string',
+      margins: EdgeInsets,
+      paper_name: 'string',
+    })
     var size = o.get('paper_size', PaperSize.A4)
 
     # Upright, whichever way round it was given.
     self.paper_size = size.width > size.height
-      ? Size(size.height, size.width)
-      : size
+        ? Size(size.height, size.width)
+        : size
     self.orientation = o.get('orientation', 'portrait')
     self.margins = o.get('margins', EdgeInsets.all(72))
     self.paper_name = o.get('paper_name')
 
     if !_ORIENTATIONS.contains(self.orientation) {
-      raise ValueError("orientation of PageSetup must be one of PageOrientation's values (portrait, landscape), got '${self.orientation}'")
+      raise ValueError(
+        "orientation of PageSetup must be one of PageOrientation's values (portrait, landscape), got '${self.orientation}'",
+      )
     }
 
     var printable = self.printable_size()
@@ -147,8 +146,8 @@ class PageSetup {
   page_size() {
     var size = self.paper_size
     return self.orientation == 'landscape'
-      ? Size(size.height, size.width)
-      : size
+        ? Size(size.height, size.width)
+        : size
   }
 
   /**
@@ -191,9 +190,9 @@ class PageSetup {
   }
 
   @eq(other) {
-    return instance_of(other, PageSetup)
-      and self.paper_size == other.paper_size
-      and self.orientation == other.orientation
-      and self.margins == other.margins
+    return instance_of(other, PageSetup) and
+        self.paper_size == other.paper_size and
+        self.orientation == other.orientation and
+        self.margins == other.margins
   }
 }

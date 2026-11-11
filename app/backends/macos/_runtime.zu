@@ -32,32 +32,39 @@ var foundation = ffi.open(
  *
  * @type Library
  */
-var appkit = ffi.open(
-  '/System/Library/Frameworks/AppKit.framework/AppKit', { global: true },
-)
+var appkit = ffi.open('/System/Library/Frameworks/AppKit.framework/AppKit', {
+  global: true,
+})
 
 /**
  * CoreFoundation.
  *
  * @type Library
  */
-var core_foundation = ffi.open('/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation')
+var core_foundation = ffi.open(
+  '/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation',
+)
 
 /**
  * CoreGraphics.
  *
  * @type Library
  */
-var core_graphics = ffi.open('/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics')
+var core_graphics = ffi.open(
+  '/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics',
+)
 
 /**
  * QuartzCore.
  *
  * @type Library
  */
-var quartz = ffi.open('/System/Library/Frameworks/QuartzCore.framework/QuartzCore')
+var quartz = ffi.open(
+  '/System/Library/Frameworks/QuartzCore.framework/QuartzCore',
+)
 
-var _c = _objc.declare('
+var _c = _objc.declare(
+  '
   #include <stdbool.h>
   typedef void *id;
   void *objc_getClass(const char *name);
@@ -72,7 +79,8 @@ var _c = _objc.declare('
   void objc_autoreleasePoolPop(void *pool);
   void *objc_retain(void *obj);
   void objc_release(void *obj);
-')
+',
+)
 
 var _intel = ffi.platform().arch == 'x86_64'
 
@@ -82,9 +90,9 @@ var _intel = ffi.platform().arch == 'x86_64'
  * @type StructType
  */
 var CGPoint = ffi
-  .struct('CGPoint')
-  .add_field('x', ffi.double)
-  .add_field('y', ffi.double)
+    .struct('CGPoint')
+    .add_field('x', ffi.double)
+    .add_field('y', ffi.double)
 
 /**
  * `CGSize`, also `NSSize`.
@@ -92,9 +100,9 @@ var CGPoint = ffi
  * @type StructType
  */
 var CGSize = ffi
-  .struct('CGSize')
-  .add_field('width', ffi.double)
-  .add_field('height', ffi.double)
+    .struct('CGSize')
+    .add_field('width', ffi.double)
+    .add_field('height', ffi.double)
 
 /**
  * `CGRect`, also `NSRect`.
@@ -102,9 +110,9 @@ var CGSize = ffi
  * @type StructType
  */
 var CGRect = ffi
-  .struct('CGRect')
-  .add_field('origin', CGPoint)
-  .add_field('size', CGSize)
+    .struct('CGRect')
+    .add_field('origin', CGPoint)
+    .add_field('size', CGSize)
 
 /**
  * `NSRange`.
@@ -112,9 +120,9 @@ var CGRect = ffi
  * @type StructType
  */
 var NSRange = ffi
-  .struct('NSRange')
-  .add_field('location', ffi.ulong)
-  .add_field('length', ffi.ulong)
+    .struct('NSRange')
+    .add_field('location', ffi.ulong)
+    .add_field('length', ffi.ulong)
 
 /**
  * `NSEdgeInsets`.
@@ -122,16 +130,16 @@ var NSRange = ffi
  * @type StructType
  */
 var NSEdgeInsets = ffi
-  .struct('NSEdgeInsets')
-  .add_field('top', ffi.double)
-  .add_field('left', ffi.double)
-  .add_field('bottom', ffi.double)
-  .add_field('right', ffi.double)
+    .struct('NSEdgeInsets')
+    .add_field('top', ffi.double)
+    .add_field('left', ffi.double)
+    .add_field('bottom', ffi.double)
+    .add_field('right', ffi.double)
 
 var _ObjcSuper = ffi
-  .struct('objc_super')
-  .add_field('receiver', ffi.ptr)
-  .add_field('super_class', ffi.ptr)
+    .struct('objc_super')
+    .add_field('receiver', ffi.ptr)
+    .add_field('super_class', ffi.ptr)
 
 var _selectors = {}
 var _classes = {}
@@ -232,7 +240,9 @@ def typed_super(ret, params: list) {
     }
 
     found = _objc.function(
-      symbol, ret, [ffi.pointer(_ObjcSuper), ffi.ptr] + params,
+      symbol,
+      ret,
+      [ffi.pointer(_ObjcSuper), ffi.ptr] + params,
     )
     _super_senders[key] = found
   }
@@ -540,7 +550,9 @@ def create(name: string) {
  */
 def create_with_frame(name: string, rect: ?dict) {
   return send_id_rect(
-    send(cls(name), 'alloc'), 'initWithFrame:', rect == nil ? ZERO_RECT : rect,
+    send(cls(name), 'alloc'),
+    'initWithFrame:',
+    rect == nil ? ZERO_RECT : rect,
   )
 }
 
@@ -549,7 +561,10 @@ def create_with_frame(name: string, rect: ?dict) {
  *
  * @type dict
  */
-var ZERO_RECT = { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
+var ZERO_RECT = {
+  origin: { x: 0, y: 0 },
+  size: { width: 0, height: 0 },
+}
 
 /**
  * A `CGRect` from a position and size.
@@ -561,7 +576,10 @@ var ZERO_RECT = { origin: { x: 0, y: 0 }, size: { width: 0, height: 0 } }
  * @returns dict
  */
 def rect(x: number, y: number, width: number, height: number) {
-  return { origin: { x, y }, size: { width, height } }
+  return {
+    origin: { x, y },
+    size: { width, height },
+  }
 }
 
 /**
@@ -842,16 +860,16 @@ def _guard(fn: function, context: string, fallback) {
 # Blocks.
 
 var _BlockDescriptor = ffi
-  .struct('Block_descriptor')
-  .add_field('reserved', ffi.ulong)
-  .add_field('size', ffi.ulong)
+    .struct('Block_descriptor')
+    .add_field('reserved', ffi.ulong)
+    .add_field('size', ffi.ulong)
 var _BlockLiteral = ffi
-  .struct('Block_literal')
-  .add_field('isa', ffi.ptr)
-  .add_field('flags', ffi.int)
-  .add_field('reserved', ffi.int)
-  .add_field('invoke', ffi.ptr)
-  .add_field('descriptor', ffi.ptr)
+    .struct('Block_literal')
+    .add_field('isa', ffi.ptr)
+    .add_field('flags', ffi.int)
+    .add_field('reserved', ffi.int)
+    .add_field('invoke', ffi.ptr)
+    .add_field('descriptor', ffi.ptr)
 var _global_block_class = ffi.open().symbol('_NSConcreteGlobalBlock')
 var _live_blocks = {}
 
@@ -881,23 +899,21 @@ class Block {
    */
   @new(fn: function, params: list) {
     self._callback = ffi.callback(
-      _guard_block(fn), ffi.function_type(ffi.void, [ffi.ptr] + params),
+      _guard_block(fn),
+      ffi.function_type(ffi.void, [ffi.ptr] + params),
     )
     self._descriptor = ffi.alloc(_BlockDescriptor)
     self._descriptor.set(0, { reserved: 0, size: _BlockLiteral.size() })
     self.pointer = ffi.alloc(_BlockLiteral)
 
     # BLOCK_IS_GLOBAL.
-    self.pointer.set(
-      0,
-      {
-        isa: _global_block_class,
-        flags: 1 << 28,
-        reserved: 0,
-        invoke: self._callback.pointer(),
-        descriptor: self._descriptor,
-      },
-    )
+    self.pointer.set(0, {
+      isa: _global_block_class,
+      flags: 1 << 28,
+      reserved: 0,
+      invoke: self._callback.pointer(),
+      descriptor: self._descriptor,
+    })
     _live_blocks[id(self)] = self
   }
 

@@ -15,11 +15,11 @@ var _focus_changes = 0
 class RenderWindowSet < RenderObject {
 
   setup_parent_data(child: RenderObject) {
-    if !instance_of(child, RenderWindow)
-      and !instance_of(child, RenderWindowSet) {
+    if !instance_of(child, RenderWindow) and
+        !instance_of(child, RenderWindowSet) {
       raise LayoutError(
-        'only windows can be placed at the top of an application, not ${typeof(child)}; '
-          + "build an App with windows, such as App({ windows: [Window('Title', content)] })",
+        'only windows can be placed at the top of an application, not ${typeof(child)}; ' +
+            "build an App with windows, such as App({ windows: [Window('Title', content)] })",
       )
     }
 

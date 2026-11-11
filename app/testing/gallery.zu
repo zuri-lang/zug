@@ -13,7 +13,8 @@ import math
 import .. { * }
 
 var _ROWS = [
-  ['Ada Lovelace', '36', 'Analyst'], ['Charles Babbage', '79', 'Engineer'],
+  ['Ada Lovelace', '36', 'Analyst'],
+  ['Charles Babbage', '79', 'Engineer'],
   ['Grace Hopper', '85', 'Admiral'],
 ]
 
@@ -37,31 +38,32 @@ var _ROWS = [
  * @returns Widget
  */
 def gallery_app(changed, options: ?dict) {
-  var o = check_options(
-    options, 'gallery_app', { menus: 'bool', second_window: 'bool' },
-  )
+  var o = check_options(options, 'gallery_app', {
+    menus: 'bool',
+    second_window: 'bool',
+  })
   var menus = o.get('menus', true)
   var second_window = o.get('second_window', true)
 
   return Observer(changed, @(context) {
     var alt = changed.value()
-    var windows = [Window(
-      alt ? 'zug gallery, second set' : 'zug gallery', Gallery(changed, alt), {
-        size: Size(780, 680),
-        resizable: !alt,
-        min_size: Size(300, 200),
-      },
-    )]
+    var windows = [
+      Window(
+        alt ? 'zug gallery, second set' : 'zug gallery',
+        Gallery(changed, alt),
+        { size: Size(780, 680), resizable: !alt, min_size: Size(300, 200) },
+      ),
+    ]
 
     if alt and second_window {
-      windows.append(Window(
-        'zug gallery, second window', Center(Text('A second window')), {
+      windows.append(
+        Window('zug gallery, second window', Center(Text('A second window')), {
           size: Size(240, 120),
           on_closed: @{
             changed.set(false)
           },
-        },
-      ))
+        }),
+      )
     }
 
     return App({
@@ -73,30 +75,40 @@ def gallery_app(changed, options: ?dict) {
 }
 
 def _menu_bar(changed, alt: bool) {
-  return MenuBar([Menu('Gallery', [
-    MenuItem('First Set', {
-      shortcut: 'cmd+1',
-      checked: !alt,
-      on_selected: @{
-        changed.set(false)
-      },
-    }),
-    MenuItem('Second Set', {
-      shortcut: 'cmd+2',
-      checked: alt,
-      on_selected: @{
-        changed.set(true)
-      },
-    }),
-    MenuItem.separator(),
-    MenuItem('More', { items: [MenuItem(alt ? 'Inner, second set' : 'Inner', {
-      enabled: !alt,
-      on_selected: @{},
-    })] }),
-  ])], { app_items: [MenuItem('Settings…', {
-    shortcut: 'cmd+,',
-    on_selected: @{},
-  })] })
+  return MenuBar(
+    [
+      Menu('Gallery', [
+        MenuItem('First Set', {
+          shortcut: 'cmd+1',
+          checked: !alt,
+          on_selected: @{
+            changed.set(false)
+          },
+        }),
+        MenuItem('Second Set', {
+          shortcut: 'cmd+2',
+          checked: alt,
+          on_selected: @{
+            changed.set(true)
+          },
+        }),
+        MenuItem.separator(),
+        MenuItem('More', {
+          items: [
+            MenuItem(alt ? 'Inner, second set' : 'Inner', {
+              enabled: !alt,
+              on_selected: @{},
+            }),
+          ],
+        }),
+      ]),
+    ],
+    {
+      app_items: [
+        MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+      ],
+    },
+  )
 }
 
 # The values the user can change, as each set starts them.
@@ -185,110 +197,157 @@ class GalleryState < State {
 
   build(context) {
     var alt = self.widget.alt
-    var header = Row([
-      Switch(alt, { on_changed: @(value) {
-        self.widget.changed.set(value)
-      } }),
-      Text('Second set of options'),
-      Spacer(),
-      Text(self.last, {
-        style: TextStyle({ color: Color.system('secondary_label') }),
-        max_lines: 1,
-        overflow: TextOverflow.ELLIPSIS,
-      }),
-    ], { spacing: 8 })
+    var header = Row(
+      [
+        Switch(alt, {
+          on_changed: @(value) {
+            self.widget.changed.set(value)
+          },
+        }),
+        Text('Second set of options'),
+        Spacer(),
+        Text(self.last, {
+          style: TextStyle({ color: Color.system('secondary_label') }),
+          max_lines: 1,
+          overflow: TextOverflow.ELLIPSIS,
+        }),
+      ],
+      { spacing: 8 },
+    )
 
-    return Column([
-      Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 8 }), header),
-      Separator(),
-      Expanded(ScrollView(Padding(EdgeInsets.all(12), Column([
-        self.text(alt), self.buttons(alt), self.dialogs(context, alt),
-        self.choices(alt),
-        self.values(alt), self.pickers(alt), self.indicators(alt),
-        self.media(alt), self.inputs(alt), self.containers(alt),
-        self.table(alt), self.drawing(alt), self.layout(alt),
-      ], { spacing: 12, align_items: AlignItems.STRETCH })))),
-    ], { align_items: AlignItems.STRETCH })
+    return Column(
+      [
+        Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 8 }), header),
+        Separator(),
+        Expanded(
+          ScrollView(
+            Padding(
+              EdgeInsets.all(12),
+              Column(
+                [
+                  self.text(alt),
+                  self.buttons(alt),
+                  self.dialogs(context, alt),
+                  self.choices(alt),
+                  self.values(alt),
+                  self.pickers(alt),
+                  self.indicators(alt),
+                  self.media(alt),
+                  self.inputs(alt),
+                  self.containers(alt),
+                  self.table(alt),
+                  self.drawing(alt),
+                  self.layout(alt),
+                ],
+                { spacing: 12, align_items: AlignItems.STRETCH },
+              ),
+            ),
+          ),
+        ),
+      ],
+      { align_items: AlignItems.STRETCH },
+    )
   }
 
   text(alt: bool) {
-    return Column([
-      Text(
-        alt
-          ? 'Text in its second set, long enough to be cut short at the end of the line'
-          : 'Text',
-        {
+    return Column(
+      [
+        Text(
+          alt
+              ? 'Text in its second set, long enough to be cut short at the end of the line'
+              : 'Text',
+          {
+            style: TextStyle({
+              size: alt ? 18 : 13,
+              weight: alt ? 700 : 400,
+              italic: alt,
+              underline: alt,
+              strikethrough: alt,
+              monospaced_digits: alt,
+              color: alt ? Color.system('accent') : nil,
+            }),
+            align: alt ? TextAlign.CENTER : TextAlign.START,
+            max_lines: alt ? 1 : nil,
+            overflow: alt ? TextOverflow.ELLIPSIS : TextOverflow.CLIP,
+            selectable: alt,
+            tooltip: alt ? 'The second tooltip' : 'A tooltip',
+            accessibility_label: alt ? 'second text' : 'text',
+            accessibility_identifier: 'gallery text',
+          },
+        ),
+        Text('Design ${alt ? "rounded" : "monospaced, in Helvetica"}', {
           style: TextStyle({
-            size: alt ? 18 : 13,
-            weight: alt ? 700 : 400,
-            italic: alt,
-            underline: alt,
-            strikethrough: alt,
-            monospaced_digits: alt,
-            color: alt ? Color.system('accent') : nil,
+            design: alt ? FontDesign.ROUNDED : FontDesign.MONOSPACED,
+            family: alt ? nil : 'Helvetica',
           }),
-          align: alt ? TextAlign.CENTER : TextAlign.START,
-          max_lines: alt ? 1 : nil,
-          overflow: alt ? TextOverflow.ELLIPSIS : TextOverflow.CLIP,
-          selectable: alt,
-          tooltip: alt ? 'The second tooltip' : 'A tooltip',
-          accessibility_label: alt ? 'second text' : 'text',
-          accessibility_identifier: 'gallery text',
-        },
-      ),
-      Text('Design ${alt ? "rounded" : "monospaced, in Helvetica"}', {
-        style: TextStyle({
-          design: alt ? FontDesign.ROUNDED : FontDesign.MONOSPACED,
-          family: alt ? nil : 'Helvetica',
         }),
-      }),
-    ], { spacing: 4, align_items: AlignItems.STRETCH })
+      ],
+      { spacing: 4, align_items: AlignItems.STRETCH },
+    )
   }
 
   buttons(alt: bool) {
     var buttons = []
 
     for variant in [
-      ButtonVariant.PUSH, ButtonVariant.FLEXIBLE, ButtonVariant.SQUARE,
-      ButtonVariant.TOOLBAR, ButtonVariant.INLINE, ButtonVariant.BORDERLESS,
+      ButtonVariant.PUSH,
+      ButtonVariant.FLEXIBLE,
+      ButtonVariant.SQUARE,
+      ButtonVariant.TOOLBAR,
+      ButtonVariant.INLINE,
+      ButtonVariant.BORDERLESS,
     ] {
-      buttons.append(Button(alt ? '${variant}!' : variant, {
-        variant,
-        on_pressed: self.note('pressed ${variant}'),
-        size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-      }))
+      buttons.append(
+        Button(alt ? '${variant}!' : variant, {
+          variant,
+          on_pressed: self.note('pressed ${variant}'),
+          size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+        }),
+      )
     }
 
-    buttons.append(Button('+', {
-      variant: ButtonVariant.CIRCULAR,
-      on_pressed: self.note('pressed +'),
-    }))
-    buttons.append(Button('', {
-      variant: ButtonVariant.HELP,
-      on_pressed: self.note('pressed help'),
-    }))
+    buttons.append(
+      Button('+', {
+        variant: ButtonVariant.CIRCULAR,
+        on_pressed: self.note('pressed +'),
+      }),
+    )
+    buttons.append(
+      Button('', {
+        variant: ButtonVariant.HELP,
+        on_pressed: self.note('pressed help'),
+      }),
+    )
 
     for role in [
-      ButtonRole.PRIMARY, ButtonRole.CANCEL, ButtonRole.DESTRUCTIVE,
+      ButtonRole.PRIMARY,
+      ButtonRole.CANCEL,
+      ButtonRole.DESTRUCTIVE,
     ] {
-      buttons.append(Button(
-        role, { role, on_pressed: self.note('pressed ${role}') },
-      ))
+      buttons.append(
+        Button(role, { role, on_pressed: self.note('pressed ${role}') }),
+      )
     }
 
-    buttons.append(Button(alt ? 'Shortcut ⇧⌘G' : 'Shortcut ⌘G', {
-      shortcut: alt ? 'cmd+shift+g' : 'cmd+g',
-      tint: alt ? Color.system('green') : nil,
-      on_pressed: self.note('pressed the shortcut button'),
-    }))
-    buttons.append(Button('Toggle', {
-      selected: self.v.toggle,
-      on_selected_changed: self.keep('toggle'),
-    }))
-    buttons.append(Button(alt ? 'Enabled' : 'Disabled', {
-      enabled: alt,
-      on_pressed: self.note('pressed the enabled button'),
-    }))
+    buttons.append(
+      Button(alt ? 'Shortcut ⇧⌘G' : 'Shortcut ⌘G', {
+        shortcut: alt ? 'cmd+shift+g' : 'cmd+g',
+        tint: alt ? Color.system('green') : nil,
+        on_pressed: self.note('pressed the shortcut button'),
+      }),
+    )
+    buttons.append(
+      Button('Toggle', {
+        selected: self.v.toggle,
+        on_selected_changed: self.keep('toggle'),
+      }),
+    )
+    buttons.append(
+      Button(alt ? 'Enabled' : 'Disabled', {
+        enabled: alt,
+        on_pressed: self.note('pressed the enabled button'),
+      }),
+    )
     return Wrap(buttons, { spacing: 6, run_spacing: 6 })
   }
 
@@ -304,277 +363,387 @@ class GalleryState < State {
   }
 
   dialogs(context, alt: bool) {
-    return Wrap([
-      Button('Alert…', { on_pressed: @{
-        show_alert(context, {
-          title: alt ? 'Delete the second set?' : 'Delete the first set?',
-          message: 'This only shows an alert.',
-          style: alt ? AlertStyle.CRITICAL : AlertStyle.WARNING,
-          buttons: ['Delete', 'Cancel'],
-          suppression: alt ? 'Do not ask again' : nil,
-        }).then(self.answered('alert'))
-      } }),
-      Button('Open…', { on_pressed: @{
-        pick_files(context, {
-          multiple: alt,
-          directories: alt,
-        }).then(self.answered('opened'))
-      } }),
-      Button('Save…', { on_pressed: @{
-        save_file(context, {
-          name: alt ? 'second.txt' : 'first.txt',
-        }).then(self.answered('saved'))
-      } }),
-      Button('Font…', { on_pressed: @{
-        pick_font(context, {
-          style: TextStyle({ size: alt ? 18 : 13 }),
-          on_changed: self.answered('font'),
-        }).then(self.answered('font chosen'))
-      } }),
-      Button('Colour…', { on_pressed: @{
-        pick_color(context, {
-          color: self.v.colour,
-          alpha: alt,
-          on_changed: self.answered('colour'),
-        }).then(self.answered('colour chosen'))
-      } }),
-      Button('Page Setup…', { on_pressed: @{
-        page_setup(context).then(self.answered('page setup'))
-      } }),
-      Button('Print…', { on_pressed: @{
-        print_pages(context, {
-          title: 'zug gallery',
-          pages: alt ? 3 : 2,
-          paint: @(painter, page) {
-            painter.text('Page ${page + 1}', Point(0, 0), TextStyle({
-              size: 18,
-              weight: FontWeight.BOLD,
-            }))
-            painter.save()
-            painter.translate(0, 36)
-            _paint(painter, Size(painter.size().width, 160), alt)
-            painter.restore()
+    return Wrap(
+      [
+        Button('Alert…', {
+          on_pressed: @{
+            show_alert(context, {
+              title: alt ? 'Delete the second set?' : 'Delete the first set?',
+              message: 'This only shows an alert.',
+              style: alt ? AlertStyle.CRITICAL : AlertStyle.WARNING,
+              buttons: ['Delete', 'Cancel'],
+              suppression: alt ? 'Do not ask again' : nil,
+            }).then(self.answered('alert'))
           },
-        }).then(self.answered('printed'))
-      } }),
-      Button('Sheet…', { on_pressed: @{
-        show_dialog(
-          context,
-          @(close) => Box({
-            width: 300,
-            padding: EdgeInsets.all(20),
-            child: Column([
-              Text(alt ? 'A sheet from the second set' : 'A sheet'),
-              Row([
-                Spacer(),
-                Button('Cancel', {
-                  role: ButtonRole.CANCEL,
-                  on_pressed: @{
-                    close('cancelled')
-                  },
-                }),
-                Button('OK', {
-                  role: ButtonRole.PRIMARY,
-                  on_pressed: @{
-                    close('confirmed')
-                  },
-                }),
-              ], { spacing: 8 }),
-            ], { spacing: 12, align_items: AlignItems.STRETCH }),
-          }),
-          { title: 'Sheet' },
-        ).then(self.answered('sheet'))
-      } }),
-    ], { spacing: 6, run_spacing: 6 })
+        }),
+        Button('Open…', {
+          on_pressed: @{
+            pick_files(
+              context,
+              { multiple: alt, directories: alt },
+            ).then(self.answered('opened'))
+          },
+        }),
+        Button('Save…', {
+          on_pressed: @{
+            save_file(
+              context,
+              { name: alt ? 'second.txt' : 'first.txt' },
+            ).then(self.answered('saved'))
+          },
+        }),
+        Button('Font…', {
+          on_pressed: @{
+            pick_font(context, {
+              style: TextStyle({ size: alt ? 18 : 13 }),
+              on_changed: self.answered('font'),
+            }).then(self.answered('font chosen'))
+          },
+        }),
+        Button('Colour…', {
+          on_pressed: @{
+            pick_color(context, {
+              color: self.v.colour,
+              alpha: alt,
+              on_changed: self.answered('colour'),
+            })
+                .then(self.answered('colour chosen'))
+          },
+        }),
+        Button('Page Setup…', {
+          on_pressed: @{
+            page_setup(context).then(self.answered('page setup'))
+          },
+        }),
+        Button('Print…', {
+          on_pressed: @{
+            print_pages(context, {
+              title: 'zug gallery',
+              pages: alt ? 3 : 2,
+              paint: @(painter, page) {
+                painter.text(
+                  'Page ${page + 1}',
+                  Point(0, 0),
+                  TextStyle({ size: 18, weight: FontWeight.BOLD }),
+                )
+                painter.save()
+                painter.translate(0, 36)
+                _paint(painter, Size(painter.size().width, 160), alt)
+                painter.restore()
+              },
+            }).then(self.answered('printed'))
+          },
+        }),
+        Button('Sheet…', {
+          on_pressed: @{
+            show_dialog(
+              context,
+              @(close) => Box({
+                width: 300,
+                padding: EdgeInsets.all(20),
+                child: Column(
+                  [
+                    Text(alt ? 'A sheet from the second set' : 'A sheet'),
+                    Row(
+                      [
+                        Spacer(),
+                        Button('Cancel', {
+                          role: ButtonRole.CANCEL,
+                          on_pressed: @{
+                            close('cancelled')
+                          },
+                        }),
+                        Button('OK', {
+                          role: ButtonRole.PRIMARY,
+                          on_pressed: @{
+                            close('confirmed')
+                          },
+                        }),
+                      ],
+                      { spacing: 8 },
+                    ),
+                  ],
+                  { spacing: 12, align_items: AlignItems.STRETCH },
+                ),
+              }),
+              { title: 'Sheet' },
+            ).then(self.answered('sheet'))
+          },
+        }),
+      ],
+      { spacing: 6, run_spacing: 6 },
+    )
   }
 
   choices(alt: bool) {
-    return Wrap([
-      Checkbox(
-        self.v.check, { label: 'Checkbox', on_changed: self.keep('check') },
-      ),
-      Checkbox(self.v.mixed, {
-        label: 'Mixed',
-        tristate: true,
-        on_changed: self.keep('mixed'),
-      }),
-      Checkbox(false, { label: 'Disabled' }),
-      RadioGroup(['One', 'Two'], self.v.radio, {
-        axis: alt ? Axis.HORIZONTAL : Axis.VERTICAL,
-        on_changed: self.keep('radio'),
-      }),
-      Switch(self.v.switch, {
-        on_changed: self.keep('switch'),
-        size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-      }),
-      SegmentedControl(
-        ['A', Segment('B', { tooltip: 'The second' }), 'C'], self.v.segment, {
-          on_changed: self.keep('segment'),
+    return Wrap(
+      [
+        Checkbox(self.v.check, {
+          label: 'Checkbox',
+          on_changed: self.keep('check'),
+        }),
+        Checkbox(self.v.mixed, {
+          label: 'Mixed',
+          tristate: true,
+          on_changed: self.keep('mixed'),
+        }),
+        Checkbox(false, { label: 'Disabled' }),
+        RadioGroup(
+          ['One', 'Two'],
+          self.v.radio,
+          {
+            axis: alt ? Axis.HORIZONTAL : Axis.VERTICAL,
+            on_changed: self.keep('radio'),
+          },
+        ),
+        Switch(self.v.switch, {
+          on_changed: self.keep('switch'),
           size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-        },
-      ),
-      SegmentedControl(['Back', 'Forward'], nil, {
-        mode: SegmentMode.MOMENTARY,
-        on_pressed: @(index) {
-          self.set_state(@{
-            self.last = index == 0 ? 'pressed Back' : 'pressed Forward'
-          })
-        },
-      }),
-    ], { spacing: 12, run_spacing: 8 })
+        }),
+        SegmentedControl(
+          [
+            'A',
+            Segment('B', { tooltip: 'The second' }),
+            'C',
+          ],
+          self.v.segment,
+          {
+            on_changed: self.keep('segment'),
+            size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+          },
+        ),
+        SegmentedControl(
+          ['Back', 'Forward'],
+          nil,
+          {
+            mode: SegmentMode.MOMENTARY,
+            on_pressed: @(index) {
+              self.set_state(@{
+                self.last = index == 0 ? 'pressed Back' : 'pressed Forward'
+              })
+            },
+          },
+        ),
+      ],
+      { spacing: 12, run_spacing: 8 },
+    )
   }
 
   values(alt: bool) {
-    return Row([
-      Expanded(Slider(self.v.slider, {
-        divisions: alt ? 4 : nil,
-        on_changed: self.keep('slider'),
-        on_change_end: @(value) {},
-      })),
-      Box({ height: 60, child: Slider(self.v.vslider, {
-        min: 0,
-        max: 100,
-        vertical: true,
-        on_changed: self.keep('vslider'),
-      }) }),
-      Stepper(self.v.stepper, {
-        min: 0,
-        max: 10,
-        step: alt ? 2 : 1,
-        wraps: alt,
-        on_changed: self.keep('stepper'),
-      }),
-      Text(
-        '${self.v.stepper}', { style: TextStyle({ monospaced_digits: true }) },
-      ),
-      LevelIndicator(self.v.level, {
-        style: alt ? LevelStyle.RATING : LevelStyle.CONTINUOUS,
-        warning: 3,
-        critical: 4,
-        on_changed: self.keep('level'),
-      }),
-    ], { spacing: 12 })
+    return Row(
+      [
+        Expanded(
+          Slider(self.v.slider, {
+            divisions: alt ? 4 : nil,
+            on_changed: self.keep('slider'),
+            on_change_end: @(value) {},
+          }),
+        ),
+        Box({
+          height: 60,
+          child: Slider(self.v.vslider, {
+            min: 0,
+            max: 100,
+            vertical: true,
+            on_changed: self.keep('vslider'),
+          }),
+        }),
+        Stepper(self.v.stepper, {
+          min: 0,
+          max: 10,
+          step: alt ? 2 : 1,
+          wraps: alt,
+          on_changed: self.keep('stepper'),
+        }),
+        Text('${self.v.stepper}', {
+          style: TextStyle({ monospaced_digits: true }),
+        }),
+        LevelIndicator(self.v.level, {
+          style: alt ? LevelStyle.RATING : LevelStyle.CONTINUOUS,
+          warning: 3,
+          critical: 4,
+          on_changed: self.keep('level'),
+        }),
+      ],
+      { spacing: 12 },
+    )
   }
 
   pickers(alt: bool) {
-    return Wrap([
-      Dropdown(
-        [
-          DropdownItem('red', 'Red'), DropdownItem.separator(),
-          DropdownItem('green', 'Green'),
-          DropdownItem('blue', 'Blue', { enabled: !alt }),
-        ],
-        self.v.colour_name, { on_changed: self.keep('colour_name') },
-      ),
-      DatePicker(self.v.moment, {
-        mode: alt ? DateMode.DATE_TIME : DateMode.DATE,
-        style: alt ? DateStyle.COMPACT : DateStyle.FIELD,
-        on_changed: self.keep('moment'),
-      }),
-      ColorWell(self.v.colour, { on_changed: self.keep('colour') }),
-    ], { spacing: 12, run_spacing: 8 })
+    return Wrap(
+      [
+        Dropdown(
+          [
+            DropdownItem('red', 'Red'),
+            DropdownItem.separator(),
+            DropdownItem('green', 'Green'),
+            DropdownItem('blue', 'Blue', { enabled: !alt }),
+          ],
+          self.v.colour_name,
+          { on_changed: self.keep('colour_name') },
+        ),
+        DatePicker(self.v.moment, {
+          mode: alt ? DateMode.DATE_TIME : DateMode.DATE,
+          style: alt ? DateStyle.COMPACT : DateStyle.FIELD,
+          on_changed: self.keep('moment'),
+        }),
+        ColorWell(self.v.colour, { on_changed: self.keep('colour') }),
+      ],
+      { spacing: 12, run_spacing: 8 },
+    )
   }
 
   indicators(alt: bool) {
-    return Column([
-      ProgressBar({ value: alt ? nil : self.v.slider }),
-      ProgressBar({ value: self.v.vslider, min: 0, max: 100 }),
-      Row([
-        Spinner({ animating: !alt, size: alt ? 'small' : 'regular' }),
-        Box({ height: 24, child: Separator({ axis: Axis.VERTICAL }) }),
-        Expanded(Separator()),
-      ], { spacing: 8 }),
-    ], { spacing: 8, align_items: AlignItems.STRETCH })
+    return Column(
+      [
+        ProgressBar({ value: alt ? nil : self.v.slider }),
+        ProgressBar({ value: self.v.vslider, min: 0, max: 100 }),
+        Row(
+          [
+            Spinner({ animating: !alt, size: alt ? 'small' : 'regular' }),
+            Box({
+              height: 24,
+              child: Separator({ axis: Axis.VERTICAL }),
+            }),
+            Expanded(Separator()),
+          ],
+          { spacing: 8 },
+        ),
+      ],
+      { spacing: 8, align_items: AlignItems.STRETCH },
+    )
   }
 
   media(alt: bool) {
-    return Row([
-      Image(ImageSource.symbol('star.fill', { size: alt ? 20 : 14 }), {
-        width: 28,
-        height: 28,
-        fit: alt ? ImageFit.FILL : ImageFit.CONTAIN,
-        tint: alt ? Color.system('orange') : nil,
-      }),
-      Icon(alt ? 'trash' : 'gearshape', {
-        size: alt ? 20 : 13,
-        weight: alt ? 700 : 400,
-        color: alt ? Color.system('red') : nil,
-      }),
-      GroupBox(Text(alt ? 'Inside, second set' : 'Inside'), {
-        title: alt ? 'Group, second set' : 'Group',
-      }),
-      VisualEffect(Padding(EdgeInsets.all(8), Text('Material')), {
-        material: alt ? Material.HUD : Material.SIDEBAR,
-        blending: alt ? 'within' : 'behind',
-      }),
-    ], { spacing: 12 })
+    return Row(
+      [
+        Image(ImageSource.symbol('star.fill', { size: alt ? 20 : 14 }), {
+          width: 28,
+          height: 28,
+          fit: alt ? ImageFit.FILL : ImageFit.CONTAIN,
+          tint: alt ? Color.system('orange') : nil,
+        }),
+        Icon(alt ? 'trash' : 'gearshape', {
+          size: alt ? 20 : 13,
+          weight: alt ? 700 : 400,
+          color: alt ? Color.system('red') : nil,
+        }),
+        GroupBox(Text(alt ? 'Inside, second set' : 'Inside'), {
+          title: alt ? 'Group, second set' : 'Group',
+        }),
+        VisualEffect(Padding(EdgeInsets.all(8), Text('Material')), {
+          material: alt ? Material.HUD : Material.SIDEBAR,
+          blending: alt ? 'within' : 'behind',
+        }),
+      ],
+      { spacing: 12 },
+    )
   }
 
   inputs(alt: bool) {
-    return Column([
-      TextField({
-        text: self.v.field,
-        placeholder: 'A field',
-        obscure: alt,
-        bezel: alt ? FieldBezel.SQUARE : FieldBezel.ROUNDED,
-        align: alt ? 'end' : 'start',
-        style: TextStyle({ size: alt ? 15 : 13 }),
-        on_changed: self.keep('field'),
-        on_submitted: @(text) {
-          self.set_state(@{
-            self.last = 'submitted ${text}'
-          })
-        },
-      }),
-      TextField({ text: 'Read only', read_only: true }),
-      Box({ height: 60, child: TextArea({
-        text: self.v.area,
-        wrap: !alt,
-        bordered: !alt,
-        on_changed: self.keep('area'),
-      }) }),
-      Row([
-        Expanded(SearchField({
-          text: self.v.search,
-          placeholder: 'Search',
-          size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
-          on_changed: self.keep('search'),
-        })),
-        Expanded(ComboBox(alt ? ['x', 'y'] : ['a', 'b', 'c'], {
-          text: self.v.combo,
-          completes: alt,
-          visible_items: alt ? 3 : 8,
-          on_changed: self.keep('combo'),
-          on_selected: @(index, text) {},
-        })),
-      ], { spacing: 8 }),
-    ], { spacing: 8, align_items: AlignItems.STRETCH })
+    return Column(
+      [
+        TextField({
+          text: self.v.field,
+          placeholder: 'A field',
+          obscure: alt,
+          bezel: alt ? FieldBezel.SQUARE : FieldBezel.ROUNDED,
+          align: alt ? 'end' : 'start',
+          style: TextStyle({ size: alt ? 15 : 13 }),
+          on_changed: self.keep('field'),
+          on_submitted: @(text) {
+            self.set_state(@{
+              self.last = 'submitted ${text}'
+            })
+          },
+        }),
+        TextField({ text: 'Read only', read_only: true }),
+        Box({
+          height: 60,
+          child: TextArea({
+            text: self.v.area,
+            wrap: !alt,
+            bordered: !alt,
+            on_changed: self.keep('area'),
+          }),
+        }),
+        Row(
+          [
+            Expanded(
+              SearchField({
+                text: self.v.search,
+                placeholder: 'Search',
+                size: alt ? ControlSize.SMALL : ControlSize.REGULAR,
+                on_changed: self.keep('search'),
+              }),
+            ),
+            Expanded(
+              ComboBox(alt ? ['x', 'y'] : ['a', 'b', 'c'], {
+                text: self.v.combo,
+                completes: alt,
+                visible_items: alt ? 3 : 8,
+                on_changed: self.keep('combo'),
+                on_selected: @(index, text) {},
+              }),
+            ),
+          ],
+          { spacing: 8 },
+        ),
+      ],
+      { spacing: 8, align_items: AlignItems.STRETCH },
+    )
   }
 
   containers(alt: bool) {
-    return Box({ height: 130, child: Row([
-      Expanded(ScrollView(Box({
-        width: 400,
-        height: 300,
-        color: Color.system('control_background'),
-        alignment: Alignment.TOP_LEFT,
-        padding: EdgeInsets.all(8),
-        child: Text('Scroll me'),
-      }), { axis: alt ? 'both' : 'vertical', bordered: alt })),
-      Expanded(ListView.builder(
-        alt ? 50 : 1000, @(context, index) => Text('Row ${index}'),
-        { item_extent: 20 },
-      )),
-      Expanded(TabView([
-        Tab('One', Center(Text('First'))), Tab('Two', Center(Text('Second'))),
-      ], self.v.tab, { on_changed: self.keep('tab') })),
-      Expanded(SplitView([Center(Text('Left')), Center(Text('Right'))], {
-        axis: alt ? Axis.VERTICAL : Axis.HORIZONTAL,
-        divider: alt ? SplitDivider.THICK : SplitDivider.THIN,
-        initial: [80],
-        on_resize: @(sizes) {},
-      })),
-    ], { spacing: 8 }) })
+    return Box({
+      height: 130,
+      child: Row(
+        [
+          Expanded(
+            ScrollView(
+              Box({
+                width: 400,
+                height: 300,
+                color: Color.system('control_background'),
+                alignment: Alignment.TOP_LEFT,
+                padding: EdgeInsets.all(8),
+                child: Text('Scroll me'),
+              }),
+              { axis: alt ? 'both' : 'vertical', bordered: alt },
+            ),
+          ),
+          Expanded(
+            ListView.builder(
+              alt ? 50 : 1000,
+              @(context, index) => Text('Row ${index}'),
+              { item_extent: 20 },
+            ),
+          ),
+          Expanded(
+            TabView(
+              [
+                Tab('One', Center(Text('First'))),
+                Tab('Two', Center(Text('Second'))),
+              ],
+              self.v.tab,
+              { on_changed: self.keep('tab') },
+            ),
+          ),
+          Expanded(
+            SplitView(
+              [Center(Text('Left')), Center(Text('Right'))],
+              {
+                axis: alt ? Axis.VERTICAL : Axis.HORIZONTAL,
+                divider: alt ? SplitDivider.THICK : SplitDivider.THIN,
+                initial: [80],
+                on_resize: @(sizes) {},
+              },
+            ),
+          ),
+        ],
+        { spacing: 8 },
+      ),
+    })
   }
 
   table(alt: bool) {
@@ -582,120 +751,157 @@ class GalleryState < State {
     var ascending = self.v.ascending
     rows.sort(@(a, b) => ascending ? a[0].compare(b[0]) : b[0].compare(a[0]))
 
-    return Box({ height: 120, child: DataTable(
-      [
-        DataColumn('name', 'Name', { width: 140, sortable: true }),
-        DataColumn('age', 'Age', { width: 50, align: TextAlign.END }),
-        DataColumn('role', 'Role', { min_width: 60 }),
-      ],
-      rows.length(), @(row, column) {
-        var person = rows[row]
-        return column == 'name'
-          ? person[0]
-          : column == 'age' ? person[1] : person[2]
-      }, {
-        selection: alt ? Selection.MULTIPLE : Selection.SINGLE,
-        selected: self.v.rows,
-        sort: ['name', ascending],
-        alternating: !alt,
-        grid: alt,
-        header: !alt,
-        on_selection_changed: self.keep('rows'),
-        on_activate: @(row) {
-          self.set_state(@{
-            self.last = 'opened ${rows[row][0]}'
-          })
+    return Box({
+      height: 120,
+      child: DataTable(
+        [
+          DataColumn('name', 'Name', { width: 140, sortable: true }),
+          DataColumn('age', 'Age', { width: 50, align: TextAlign.END }),
+          DataColumn('role', 'Role', { min_width: 60 }),
+        ],
+        rows.length(),
+        @(row, column) {
+          var person = rows[row]
+          return column == 'name'
+              ? person[0]
+              : column == 'age'
+              ? person[1]
+              : person[2]
         },
-        on_sort: @(column, up) {
-          self.set_state(@{
-            self.v['ascending'] = up
-            self.last = up ? 'sorted A to Z' : 'sorted Z to A'
-          })
+        {
+          selection: alt ? Selection.MULTIPLE : Selection.SINGLE,
+          selected: self.v.rows,
+          sort: ['name', ascending],
+          alternating: !alt,
+          grid: alt,
+          header: !alt,
+          on_selection_changed: self.keep('rows'),
+          on_activate: @(row) {
+            self.set_state(@{
+              self.last = 'opened ${rows[row][0]}'
+            })
+          },
+          on_sort: @(column, up) {
+            self.set_state(@{
+              self.v['ascending'] = up
+              self.last = up ? 'sorted A to Z' : 'sorted Z to A'
+            })
+          },
         },
-      },
-    ) })
+      ),
+    })
   }
 
   drawing(alt: bool) {
     var taps = self.v.taps
 
-    return Row([
-      Expanded(PointerArea(Canvas(@(painter, size) {
-        _paint(painter, size, alt)
+    return Row(
+      [
+        Expanded(
+          PointerArea(
+            Canvas(
+              @(painter, size) {
+                _paint(painter, size, alt)
 
-        for point in taps {
-          painter.fill_oval(
-            Rect(point.x - 4, point.y - 4, 8, 8), Color.system('accent'),
-          )
-        }
-      }, { repaint: [alt, taps.length()], height: 110 }), {
-        cursor: alt ? Cursor.CROSSHAIR : Cursor.POINTING_HAND,
-        on_tap: @(event) {
-          self.set_state(@{
-            self.v.taps.append(event.position)
-            self.last = 'tapped the canvas'
-          })
-        },
-        on_double_tap: @(event) {
-          self.set_state(@{
-            self.v['taps'] = []
-            self.last = 'cleared the canvas'
-          })
-        },
-        on_hover: @(event) {},
-        on_scroll: @(event) {},
-        on_drag: @(event) {},
-        menu: [MenuItem('Clear', { on_selected: @{
-          self.set_state(@{
-            self.v['taps'] = []
-            self.last = 'cleared the canvas'
-          })
-        } })],
-      })),
-      ContextMenu(Box({
-        width: 80,
-        height: 40,
-        color: alt ? Color.system('green') : Color.system('blue'),
-        border: Border.all(alt ? 2 : 1, Color.BLACK),
-        radius: alt ? 10 : 2,
-        shadow: alt ? Shadow({ blur: 6, y: 3 }) : nil,
-        opacity: alt ? 0.6 : 1,
-        clip: alt,
-        alignment: Alignment.CENTER,
-        child: Text('Box'),
-      }), [MenuItem(alt ? 'Second item' : 'Item', {
-        on_selected: self.note('chose the box menu item'),
-      })]),
-    ], { spacing: 8 })
+                for point in taps {
+                  painter.fill_oval(
+                    Rect(point.x - 4, point.y - 4, 8, 8),
+                    Color.system('accent'),
+                  )
+                }
+              },
+              {
+                repaint: [alt, taps.length()],
+                height: 110,
+              },
+            ),
+            {
+              cursor: alt ? Cursor.CROSSHAIR : Cursor.POINTING_HAND,
+              on_tap: @(event) {
+                self.set_state(@{
+                  self.v.taps.append(event.position)
+                  self.last = 'tapped the canvas'
+                })
+              },
+              on_double_tap: @(event) {
+                self.set_state(@{
+                  self.v['taps'] = []
+                  self.last = 'cleared the canvas'
+                })
+              },
+              on_hover: @(event) {},
+              on_scroll: @(event) {},
+              on_drag: @(event) {},
+              menu: [
+                MenuItem('Clear', {
+                  on_selected: @{
+                    self.set_state(@{
+                      self.v['taps'] = []
+                      self.last = 'cleared the canvas'
+                    })
+                  },
+                }),
+              ],
+            },
+          ),
+        ),
+        ContextMenu(
+          Box({
+            width: 80,
+            height: 40,
+            color: alt ? Color.system('green') : Color.system('blue'),
+            border: Border.all(alt ? 2 : 1, Color.BLACK),
+            radius: alt ? 10 : 2,
+            shadow: alt ? Shadow({ blur: 6, y: 3 }) : nil,
+            opacity: alt ? 0.6 : 1,
+            clip: alt,
+            alignment: Alignment.CENTER,
+            child: Text('Box'),
+          }),
+          [
+            MenuItem(alt ? 'Second item' : 'Item', {
+              on_selected: self.note('chose the box menu item'),
+            }),
+          ],
+        ),
+      ],
+      { spacing: 8 },
+    )
   }
 
   layout(alt: bool) {
-    return Table([
+    return Table(
       [
-        Text('Name'),
-        TextField({ text: self.v.name, on_changed: self.keep('name') }),
+        [
+          Text('Name'),
+          TextField({ text: self.v.name, on_changed: self.keep('name') }),
+        ],
+        [
+          Text('Visible'),
+          Visibility(Text('Now you see it'), {
+            visible: !alt,
+            keep_state: true,
+          }),
+        ],
       ],
-      [Text('Visible'), Visibility(Text('Now you see it'), {
-        visible: !alt,
-        keep_state: true,
-      })],
-    ], {
-      columns: [ColumnWidth.fit(), ColumnWidth.flex()],
-      align_items: AlignItems.BASELINE,
-      column_spacing: 8,
-      row_spacing: 6,
-    })
+      {
+        columns: [ColumnWidth.fit(), ColumnWidth.flex()],
+        align_items: AlignItems.BASELINE,
+        column_spacing: 8,
+        row_spacing: 6,
+      },
+    )
   }
 }
 
 # A value as the status line shows it.
 def _shown(value) {
-  if value == nil
-    or is_string(value)
-    or is_number(value)
-    or is_bool(value)
-    or is_list(value)
-    or is_dict(value) {
+  if value == nil or
+      is_string(value) or
+      is_number(value) or
+      is_bool(value) or
+      is_list(value) or
+      is_dict(value) {
     return '${value}'
   }
 
@@ -720,7 +926,11 @@ def _paint(painter, size, alt: bool) {
     cap: LineCap.ROUND,
     join: LineJoin.ROUND,
   })
-  var dashed = Paint({ color: Color.system('blue'), width: 1, dash: [4, 2] })
+  var dashed = Paint({
+    color: Color.system('blue'),
+    width: 1,
+    dash: [4, 2],
+  })
   painter.fill_rect(Rect(0, 0, size.width, size.height), Color.WHITE)
   painter.save()
   painter.translate(4, 4)
@@ -748,7 +958,9 @@ def _paint(painter, size, alt: bool) {
   var style = TextStyle({ size: alt ? 14 : 11 })
   var measured = painter.measure_text('zug', style)
   painter.text(
-    'zug ${measured.width.round()}, tap to draw', Point(0, 72), style,
+    'zug ${measured.width.round()}, tap to draw',
+    Point(0, 72),
+    style,
   )
   painter.image(ImageSource.symbol('star.fill'), Rect(150, 70, 16, 16))
   painter.restore()

@@ -367,7 +367,9 @@ class RenderObject {
    */
   insert_child(child: RenderObject, after: ?RenderObject) {
     if child.render_parent != nil {
-      raise LayoutError('${typeof(child)} already has a parent, ${typeof(child.render_parent)}')
+      raise LayoutError(
+        '${typeof(child)} already has a parent, ${typeof(child.render_parent)}',
+      )
     }
 
     self.setup_parent_data(child)
@@ -541,16 +543,18 @@ class RenderObject {
    */
   layout(constraints: Constraints, parent_uses_size: bool) {
     if !constraints.is_normalized() {
-      raise LayoutError('${typeof(self)} was laid out with ${constraints}, whose minimums are infinite; such constraints can only be enforced on others')
+      raise LayoutError(
+        '${typeof(self)} was laid out with ${constraints}, whose minimums are infinite; such constraints can only be enforced on others',
+      )
     }
 
-    var boundary = !parent_uses_size
-      or constraints.is_tight()
-      or self.render_parent == nil
+    var boundary = !parent_uses_size or
+        constraints.is_tight() or
+        self.render_parent == nil
 
-    if !self.needs_layout
-      and self.constraints != nil
-      and constraints == self.constraints {
+    if !self.needs_layout and
+        self.constraints != nil and
+        constraints == self.constraints {
       self.is_boundary = boundary
       return
     }
@@ -585,7 +589,9 @@ class RenderObject {
     }
 
     if self.size.width == INFINITY or self.size.height == INFINITY {
-      raise LayoutError('${typeof(self)} was given ${self.constraints} and chose the infinite size ${self.size}; a box cannot fill an unbounded axis')
+      raise LayoutError(
+        '${typeof(self)} was given ${self.constraints} and chose the infinite size ${self.size}; a box cannot fill an unbounded axis',
+      )
     }
 
     if old != self.size {
@@ -642,7 +648,9 @@ class RenderObject {
    */
   min_intrinsic_width(height: number) {
     return self._intrinsic(
-      'min_w', height, @(h) => self.compute_min_intrinsic_width(h),
+      'min_w',
+      height,
+      @(h) => self.compute_min_intrinsic_width(h),
     )
   }
 
@@ -655,7 +663,9 @@ class RenderObject {
    */
   max_intrinsic_width(height: number) {
     return self._intrinsic(
-      'max_w', height, @(h) => self.compute_max_intrinsic_width(h),
+      'max_w',
+      height,
+      @(h) => self.compute_max_intrinsic_width(h),
     )
   }
 
@@ -667,7 +677,9 @@ class RenderObject {
    */
   min_intrinsic_height(width: number) {
     return self._intrinsic(
-      'min_h', width, @(w) => self.compute_min_intrinsic_height(w),
+      'min_h',
+      width,
+      @(w) => self.compute_min_intrinsic_height(w),
     )
   }
 
@@ -679,7 +691,9 @@ class RenderObject {
    */
   max_intrinsic_height(width: number) {
     return self._intrinsic(
-      'max_h', width, @(w) => self.compute_max_intrinsic_height(w),
+      'max_h',
+      width,
+      @(w) => self.compute_max_intrinsic_height(w),
     )
   }
 
@@ -848,8 +862,8 @@ class RenderObject {
     }
 
     var position = self.parent_data == nil
-      ? origin
-      : origin + self.parent_data.offset
+        ? origin
+        : origin + self.parent_data.offset
     var force_children = forced or self.needs_commit
     self.needs_commit = false
     self.child_needs_commit = false
@@ -910,7 +924,9 @@ class RenderObject {
    */
   describe_into(lines: list, indent: string) {
     var offset = self.parent_data == nil ? Point.ZERO : self.parent_data.offset
-    lines.append('${indent}${self.describe()} at (${offset.x}, ${offset.y}) size ${self.size.width} x ${self.size.height}')
+    lines.append(
+      '${indent}${self.describe()} at (${offset.x}, ${offset.y}) size ${self.size.width} x ${self.size.height}',
+    )
 
     for child in self.children {
       child.describe_into(lines, indent + '  ')

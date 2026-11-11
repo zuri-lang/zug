@@ -78,76 +78,86 @@ class ServicesState < State {
   build(context) {
     var sheet = Style.of(context)
 
-    var body = Column([
-      Text(
-        'Type digits anywhere in the window; Escape clears them.',
-        { style: sheet.caption },
-      ),
-      Text(
-        self.typed == '' ? 'Nothing typed' : self.typed,
-        { style: sheet.headline },
-      ),
-      Text('Open for ${self.seconds} seconds'),
-      Row([
-        Button('Ask', {
-          on_pressed: @{
-            self._ask(context)
-          },
+    var body = Column(
+      [
+        Text('Type digits anywhere in the window; Escape clears them.', {
+          style: sheet.caption,
         }),
-        Text(self.answer),
-      ], { spacing: 8 }),
-      Row([
-        Button('Copy', {
-          on_pressed: @{
-            Clipboard.write_text(self.typed)
-          },
+        Text(self.typed == '' ? 'Nothing typed' : self.typed, {
+          style: sheet.headline,
         }),
-        Button('Paste', {
-          on_pressed: @{
-            var text = Clipboard.read_text()
+        Text('Open for ${self.seconds} seconds'),
+        Row(
+          [
+            Button('Ask', {
+              on_pressed: @{
+                self._ask(context)
+              },
+            }),
+            Text(self.answer),
+          ],
+          { spacing: 8 },
+        ),
+        Row(
+          [
+            Button('Copy', {
+              on_pressed: @{
+                Clipboard.write_text(self.typed)
+              },
+            }),
+            Button('Paste', {
+              on_pressed: @{
+                var text = Clipboard.read_text()
 
-            if text != nil {
-              self.set_state(@{
-                self.typed = text.replace('/[^0-9]/', '')
-              })
-            }
-          },
-        }),
-      ], { spacing: 8 }),
-      Row([
-        Button('Count primes below 200,000', {
-          on_pressed: @{
-            var work = run_in_background(count_primes, 200000)
-            self.set_state(@{
-              self.primes = work
-            })
-          },
-        }),
-        self.primes == nil
-          ? Gap(0)
-          : PromiseBuilder(self.primes, @(context, snapshot) {
-            if snapshot.is_pending() {
-              return Spinner({ size: 'small' })
-            }
+                if text != nil {
+                  self.set_state(@{
+                    self.typed = text.replace('/[^0-9]/', '')
+                  })
+                }
+              },
+            }),
+          ],
+          { spacing: 8 },
+        ),
+        Row(
+          [
+            Button('Count primes below 200,000', {
+              on_pressed: @{
+                var work = run_in_background(count_primes, 200000)
+                self.set_state(@{
+                  self.primes = work
+                })
+              },
+            }),
+            self.primes == nil
+                ? Gap(0)
+                : PromiseBuilder(self.primes, @(context, snapshot) {
+                    if snapshot.is_pending() {
+                      return Spinner({ size: 'small' })
+                    }
 
-            return Text(
-              snapshot.is_resolved()
-                ? '${snapshot.value} primes'
-                : snapshot.error.message,
-            )
-          }),
-      ], { spacing: 8 }),
-    ], { spacing: 12, align_items: AlignItems.START })
+                    return Text(
+                      snapshot.is_resolved()
+                          ? '${snapshot.value} primes'
+                          : snapshot.error.message,
+                    )
+                  }),
+          ],
+          { spacing: 8 },
+        ),
+      ],
+      { spacing: 12, align_items: AlignItems.START },
+    )
 
-    return Shortcuts({
-      'escape': @{
-        self.set_state(@{
-          self.typed = ''
-        })
-      },
-    }, KeyListener(
-      Padding(sheet.padding, body),
+    return Shortcuts(
       {
+        'escape': @{
+          self.set_state(@{
+            self.typed = ''
+          })
+        },
+      },
+      KeyListener(Padding(sheet.padding, body), {
         on_key: @(event) {
           if event.characters.length() == 1 and event.characters.is_number() {
             self.set_state(@{
@@ -158,13 +168,18 @@ class ServicesState < State {
 
           return false
         },
-      }))
+      }),
+    )
   }
 }
 
 if __root__ == __file__ {
-  run_app(App({
-    title: 'Services',
-    windows: [Window('Services', Services(), { size: Size(460, 300) })],
-  }))
+  run_app(
+    App({
+      title: 'Services',
+      windows: [
+        Window('Services', Services(), { size: Size(460, 300) }),
+      ],
+    }),
+  )
 }

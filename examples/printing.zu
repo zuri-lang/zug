@@ -13,8 +13,14 @@
 import ..app { * }
 
 var _CUSTOMERS = [
-  'Ada Lovelace', 'Charles Babbage', 'Grace Hopper', 'Alan Turing',
-  'Katherine Johnson', 'Edsger Dijkstra', 'Barbara Liskov', 'Donald Knuth',
+  'Ada Lovelace',
+  'Charles Babbage',
+  'Grace Hopper',
+  'Alan Turing',
+  'Katherine Johnson',
+  'Edsger Dijkstra',
+  'Barbara Liskov',
+  'Donald Knuth',
 ]
 
 # Ninety orders through October, as [date, customer, amount in cents].
@@ -24,7 +30,8 @@ def _orders() {
   iter var i = 0; i < 90; i++ {
     var day = '${(i / 3).floor() + 1}'.lpad(2, '0')
     orders.append([
-      '2026-10-${day}', _CUSTOMERS[i % _CUSTOMERS.length()],
+      '2026-10-${day}',
+      _CUSTOMERS[i % _CUSTOMERS.length()],
       (i * 7919) % 48000 + 1500,
     ])
   }
@@ -115,17 +122,19 @@ def paint_page(painter, index: number) {
   var y = 0
 
   if page.first {
-    _text(painter, 'Sales in October 2026', 0, 0, TextStyle({
-      size: 20,
-      weight: FontWeight.BOLD,
-      color: _INK,
-    }))
     _text(
-      painter, '${_ORDERS.length()} orders from every region', 0, 28,
-      TextStyle({
-        size: 11,
-        color: _QUIET,
-      }),
+      painter,
+      'Sales in October 2026',
+      0,
+      0,
+      TextStyle({ size: 20, weight: FontWeight.BOLD, color: _INK }),
+    )
+    _text(
+      painter,
+      '${_ORDERS.length()} orders from every region',
+      0,
+      28,
+      TextStyle({ size: 11, color: _QUIET }),
     )
     y = _TITLE
   }
@@ -133,9 +142,11 @@ def paint_page(painter, index: number) {
   _text(painter, 'Date', 4, y + 4, bold)
   _text(painter, 'Customer', 90, y + 4, bold)
   _right(painter, 'Amount', width - 4, y + 4, bold)
-  painter.line(Point(0, y + _HEADER - 2), Point(width, y + _HEADER - 2), Paint({
-    color: _INK,
-  }))
+  painter.line(
+    Point(0, y + _HEADER - 2),
+    Point(width, y + _HEADER - 2),
+    Paint({ color: _INK }),
+  )
   y += _HEADER
 
   iter var i = page.from; i < page.to; i++ {
@@ -215,9 +226,10 @@ class ReportState < State {
       setup: self.setup,
       pages: page_count,
       paint: paint_page,
-    }).then(@(printed) {
-      self.say(printed ? 'Printed the report.' : 'Not printed.')
     })
+        .then(@(printed) {
+          self.say(printed ? 'Printed the report.' : 'Not printed.')
+        })
   }
 
   export(context) {
@@ -276,70 +288,84 @@ class ReportState < State {
 
   build(context) {
     var pages = self.pages()
-    var tools = Row([
-      Button('Page Setup…', {
-        shortcut: 'cmd+shift+p',
-        on_pressed: @{
-          self.choose_paper(context)
-        },
-      }),
-      Button('Print…', {
-        role: ButtonRole.PRIMARY,
-        shortcut: 'cmd+p',
-        on_pressed: @{
-          self.print(context)
-        },
-      }),
-      Button('Export PDF…', {
-        on_pressed: @{
-          self.export(context)
-        },
-      }),
-      Spacer(),
-      Button('‹', {
-        on_pressed: self.page == 0 ? nil : @{
-          self.set_state(@{
-            self.page--
-          })
-        },
-        accessibility_label: 'Previous page',
-      }),
-      Text('Page ${self.page + 1} of ${pages}', {
-        style: TextStyle({ monospaced_digits: true }),
-        accessibility_identifier: 'page',
-      }),
-      Button('›', {
-        on_pressed: self.page >= pages - 1 ? nil : @{
-          self.set_state(@{
-            self.page++
-          })
-        },
-        accessibility_label: 'Next page',
-      }),
-    ], { spacing: 8 })
-
-    return Column([
-      Padding(EdgeInsets.all(12), tools),
-      Expanded(Box({
-        color: Color.system('under_page_background'),
-        child: Canvas(@(painter, size) => self.preview(painter, size), {
-          repaint: [
-            self.page, self.setup.orientation, self.setup.paper_size.width,
-            self.setup.margins.left,
-          ],
+    var tools = Row(
+      [
+        Button('Page Setup…', {
+          shortcut: 'cmd+shift+p',
+          on_pressed: @{
+            self.choose_paper(context)
+          },
         }),
-      })),
-      Padding(EdgeInsets.symmetric({ horizontal: 12, vertical: 6 }), Text(
-        self.status,
-        {
-          style: TextStyle({
-            size: 11,
-            color: Color.system('secondary_label'),
+        Button('Print…', {
+          role: ButtonRole.PRIMARY,
+          shortcut: 'cmd+p',
+          on_pressed: @{
+            self.print(context)
+          },
+        }),
+        Button('Export PDF…', {
+          on_pressed: @{
+            self.export(context)
+          },
+        }),
+        Spacer(),
+        Button('‹', {
+          on_pressed: self.page == 0
+              ? nil
+              : @{
+                  self.set_state(@{
+                    self.page--
+                  })
+                },
+          accessibility_label: 'Previous page',
+        }),
+        Text('Page ${self.page + 1} of ${pages}', {
+          style: TextStyle({ monospaced_digits: true }),
+          accessibility_identifier: 'page',
+        }),
+        Button('›', {
+          on_pressed: self.page >= pages - 1
+              ? nil
+              : @{
+                  self.set_state(@{
+                    self.page++
+                  })
+                },
+          accessibility_label: 'Next page',
+        }),
+      ],
+      { spacing: 8 },
+    )
+
+    return Column(
+      [
+        Padding(EdgeInsets.all(12), tools),
+        Expanded(
+          Box({
+            color: Color.system('under_page_background'),
+            child: Canvas(@(painter, size) => self.preview(painter, size), {
+              repaint: [
+                self.page,
+                self.setup.orientation,
+                self.setup.paper_size.width,
+                self.setup.margins.left,
+              ],
+            }),
           }),
-          accessibility_identifier: 'status',
-        },
-      )),
-    ], { align_items: AlignItems.STRETCH })
+        ),
+        Padding(
+          EdgeInsets.symmetric({ horizontal: 12, vertical: 6 }),
+          Text(self.status, {
+            style: TextStyle({
+              size: 11,
+              color: Color.system('secondary_label'),
+            }),
+            accessibility_identifier: 'status',
+          }),
+        ),
+      ],
+      { align_items: AlignItems.STRETCH },
+    )
   }
 }
 
@@ -433,11 +459,15 @@ class _Scaled < Painter {
 }
 
 if __root__ == __file__ {
-  run_app(App({
-    title: 'Report',
-    windows: [Window('October Sales', Report(), {
-      size: Size(620, 720),
-      min_size: Size(420, 420),
-    })],
-  }))
+  run_app(
+    App({
+      title: 'Report',
+      windows: [
+        Window('October Sales', Report(), {
+          size: Size(620, 720),
+          min_size: Size(420, 420),
+        }),
+      ],
+    }),
+  )
 }

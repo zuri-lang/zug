@@ -139,12 +139,12 @@ class KeyEvent {
     var key = parsed[0]
     var modifiers = parsed[1]
 
-    if modifiers.is_empty()
-      and key.length() == 1
-      and !self.has_modifier('cmd')
-      and !self.has_modifier('ctrl') {
-      return self.characters == key
-        or (self.key == key and self.characters == '')
+    if modifiers.is_empty() and
+        key.length() == 1 and
+        !self.has_modifier('cmd') and
+        !self.has_modifier('ctrl') {
+      return self.characters == key or
+          (self.key == key and self.characters == '')
     }
 
     if self.key != key {
@@ -219,7 +219,9 @@ def parse_binding(binding: string) {
     }
 
     if !_MODIFIERS.contains(name) {
-      raise ValueError("'${part}' in '${binding}' is not a modifier; use cmd, shift, alt or ctrl")
+      raise ValueError(
+        "'${part}' in '${binding}' is not a modifier; use cmd, shift, alt or ctrl",
+      )
     }
 
     modifiers.append(name)
@@ -299,7 +301,9 @@ class Shortcuts < KeyHandlerWidget {
       parse_binding(binding)
 
       if !is_callable(action) {
-        raise TypeError("the shortcut '${binding}' must map to a function, got ${typeof(action)}")
+        raise TypeError(
+          "the shortcut '${binding}' must map to a function, got ${typeof(action)}",
+        )
       }
     }
 
@@ -333,9 +337,10 @@ class KeyListener < KeyHandlerWidget {
    * @constructor
    */
   @new(child, options: dict) {
-    var o = check_options(
-      options, 'KeyListener', { key: Key, on_key: 'function' },
-    )
+    var o = check_options(options, 'KeyListener', {
+      key: Key,
+      on_key: 'function',
+    })
 
     if o.get('on_key') == nil {
       raise ValueError('a KeyListener needs on_key')

@@ -22,8 +22,17 @@
  */
 
 import ..foundation {
-  Point, Size, Rect, EdgeInsets, Constraints, INFINITY, ObservableValue,
-  UnsupportedError, ZugError, set_error_handler, check_options,
+  Point,
+  Size,
+  Rect,
+  EdgeInsets,
+  Constraints,
+  INFINITY,
+  ObservableValue,
+  UnsupportedError,
+  ZugError,
+  set_error_handler,
+  check_options,
 }
 import os
 import ..backend { CAPABILITIES, kind_names, kind_spec }
@@ -155,10 +164,11 @@ class ConformanceReport {
  * @returns ConformanceReport
  */
 def check_backend(backend, options: ?dict) {
-  var o = check_options(
-    options, 'check_backend',
-    { gallery: 'bool', advance: 'function', on_result: 'function' },
-  )
+  var o = check_options(options, 'check_backend', {
+    gallery: 'bool',
+    advance: 'function',
+    on_result: 'function',
+  })
   return _Checker(backend, o).run()
 }
 
@@ -177,11 +187,11 @@ def _require(condition: bool, message: string) {
 }
 
 def _is_size(value) {
-  return instance_of(value, Size)
-    and value.width.is_finite()
-    and value.height.is_finite()
-    and value.width >= 0
-    and value.height >= 0
+  return instance_of(value, Size) and
+      value.width.is_finite() and
+      value.height.is_finite() and
+      value.width >= 0 and
+      value.height >= 0
 }
 
 def _is_insets(value) {
@@ -217,8 +227,8 @@ def _describe_errors(errors: list) {
   var shown = order.length() > 5 ? order[0, 5] : order
   var lines = shown.map(@(error) => '${counts[error]} × ${error}')
   var more = order.length() > 5
-    ? '; and ${_count(order.length() - 5, "other")}'
-    : ''
+      ? '; and ${_count(order.length() - 5, "other")}'
+      : ''
   return '${_count(errors.length(), "error")}, ${_count(order.length(), "kind")}: ${"; ".join(lines)}${more}'
 }
 
@@ -277,7 +287,8 @@ class _Checker {
 
     if !self.finished {
       self.fail(
-        'finishes the checks', 'the event loop ended before the last step',
+        'finishes the checks',
+        'the event loop ended before the last step',
       )
     }
 
@@ -290,10 +301,12 @@ class _Checker {
     var with_gallery = self.options.get('gallery', true)
 
     if with_gallery {
-      self.runtime.attach(gallery_app(self.changed, {
-        menus: self.backend.has_capability('menu_bar'),
-        second_window: self.backend.has_capability('multiple_windows'),
-      }))
+      self.runtime.attach(
+        gallery_app(self.changed, {
+          menus: self.backend.has_capability('menu_bar'),
+          second_window: self.backend.has_capability('multiple_windows'),
+        }),
+      )
     }
 
     self.steps = [
@@ -374,8 +387,8 @@ class _Checker {
       self._record(ConformanceResult(name, 'passed', nil))
     } as error {
       var detail = instance_of(error, _Unmet)
-        ? error.message
-        : 'raised ${typeof(error)}: ${error.message}'
+          ? error.message
+          : 'raised ${typeof(error)}: ${error.message}'
       self._record(ConformanceResult(name, 'failed', detail))
     }
   }
@@ -414,8 +427,8 @@ class _Checker {
 
       for capability in CAPABILITIES {
         _require(
-          self.backend.has_capability(capability)
-            == listed.contains(capability),
+          self.backend.has_capability(capability) ==
+              listed.contains(capability),
           "has_capability('${capability}') disagrees with capabilities()",
         )
       }
@@ -456,7 +469,9 @@ class _Checker {
         self.check("refuses to make a '${kind}' view it does not support", @{
           catch {
             self.backend.create_view(
-              kind, kind_spec(kind).initial_props(), @(event, payload) => nil,
+              kind,
+              kind_spec(kind).initial_props(),
+              @(event, payload) => nil,
             )
           } as error {
             _require(
@@ -509,9 +524,9 @@ class _Checker {
     self.check('wraps text to a width', @{
       var text = 'zug draws native views from widgets, and lays them out itself'
       var line = self.backend.measure_text(text, { size: 13 }, nil)
-      var wrapped = self.backend.measure_text(
-        text, { size: 13 }, line.width / 3,
-      )
+      var wrapped = self.backend.measure_text(text, {
+        size: 13,
+      }, line.width / 3)
       _require(
         wrapped.width <= line.width / 3 + 1,
         'wrapped to ${wrapped.width} wide, more than ${line.width / 3}',
@@ -548,12 +563,14 @@ class _Checker {
     self.check('describes its screens', @{
       var screens = self.backend.screens()
       _require(
-        is_list(screens) and !screens.is_empty(), 'screens() gave no screens',
+        is_list(screens) and !screens.is_empty(),
+        'screens() gave no screens',
       )
 
       for screen in screens {
         _require(
-          instance_of(screen.get('frame'), Rect), 'a screen has no frame Rect',
+          instance_of(screen.get('frame'), Rect),
+          'a screen has no frame Rect',
         )
         _require(
           instance_of(screen.get('visible_frame'), Rect),
@@ -587,15 +604,19 @@ class _Checker {
           'default_page_setup() gave ${typeof(setup)}, not a PageSetup',
         )
         var path = os.join_paths(
-          os.create_temp_dir('zug-conformance-'), 'pages.pdf',
+          os.create_temp_dir('zug-conformance-'),
+          'pages.pdf',
         )
         var asked = nil
         var painted = []
         self.backend.save_pdf(
-          path, { title: 'zug conformance', setup }, @(painter) {
+          path,
+          { title: 'zug conformance', setup },
+          @(painter) {
             asked = painter.size()
             return 2
-          }, @(painter, page) {
+          },
+          @(painter, page) {
             painted.append(page)
             painter.text('Page ${page + 1}', Point(0, 0), nil, 200)
           },
@@ -650,7 +671,9 @@ class _Checker {
     })
     self.check('puts views in a window', @{
       var box = self.backend.create_view(
-        'box', kind_spec('box').initial_props(), @(event, payload) => nil,
+        'box',
+        kind_spec('box').initial_props(),
+        @(event, payload) => nil,
       )
       box.set_frame(Rect(10, 10, 50, 50))
       window.insert_child(box, 0, nil)
@@ -717,10 +740,14 @@ class _Checker {
     if spec.container and !_SLOTTED.contains(kind) {
       self.check("holds children in a '${kind}' view", @{
         var first = self.backend.create_view(
-          'box', kind_spec('box').initial_props(), dispatch,
+          'box',
+          kind_spec('box').initial_props(),
+          dispatch,
         )
         var second = self.backend.create_view(
-          'box', kind_spec('box').initial_props(), dispatch,
+          'box',
+          kind_spec('box').initial_props(),
+          dispatch,
         )
         view.insert_child(first, 0, nil)
         view.insert_child(second, 0, nil)
@@ -767,13 +794,15 @@ class _Checker {
     self.check('fires a timer once, after its delay', @{
       _require(t.once.length() == 1, 'it fired ${t.once.length()} times')
       _require(
-        t.once[0] >= 0.045, 'it fired after ${t.once[0]} seconds, before 0.05',
+        t.once[0] >= 0.045,
+        'it fired after ${t.once[0]} seconds, before 0.05',
       )
       _require(!t.once_timer.is_active(), 'is_active() is true after it fired')
     })
     self.check('fires a repeating timer until cancelled', @{
       _require(
-        t.repeats >= 2, 'it fired ${t.repeats} times in ${_STEP} seconds',
+        t.repeats >= 2,
+        'it fired ${t.repeats} times in ${_STEP} seconds',
       )
       t.repeating.cancel()
       t['repeats_at_cancel'] = t.repeats
@@ -803,9 +832,9 @@ class _Checker {
 
     if self.backend.has_capability('multiple_windows') {
       self.check('opens a second window', @{
-        var open = self.runtime
-          .windows()
-          .filter(@(window) => window.view != nil)
+        var open = self.runtime.windows().filter(
+          @(window) => window.view != nil,
+        )
         _require(open.length() == 2, '${open.length()} windows are open')
       })
     }

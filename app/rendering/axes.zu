@@ -102,7 +102,12 @@ class StackFit {
 }
 
 var _JUSTIFY = [
-  'start', 'end', 'center', 'space_between', 'space_around', 'space_evenly',
+  'start',
+  'end',
+  'center',
+  'space_between',
+  'space_around',
+  'space_evenly',
 ]
 var _ALIGN_ITEMS = ['start', 'end', 'center', 'stretch', 'baseline']
 var _AXES = ['horizontal', 'vertical']
@@ -117,7 +122,9 @@ var _STACK_FITS = ['loose', 'expand', 'passthrough']
  */
 def check_justify(value: string, owner: string) {
   if !_JUSTIFY.contains(value) {
-    raise ValueError("justify of ${owner} must be one of Justify's values (${', '.join(_JUSTIFY)}), got '${value}'")
+    raise ValueError(
+      "justify of ${owner} must be one of Justify's values (${', '.join(_JUSTIFY)}), got '${value}'",
+    )
   }
 }
 
@@ -130,7 +137,9 @@ def check_justify(value: string, owner: string) {
  */
 def check_align_items(value: string, owner: string) {
   if !_ALIGN_ITEMS.contains(value) {
-    raise ValueError("align_items of ${owner} must be one of AlignItems's values (${', '.join(_ALIGN_ITEMS)}), got '${value}'")
+    raise ValueError(
+      "align_items of ${owner} must be one of AlignItems's values (${', '.join(_ALIGN_ITEMS)}), got '${value}'",
+    )
   }
 }
 
@@ -143,7 +152,9 @@ def check_align_items(value: string, owner: string) {
  */
 def check_axis(value: string, owner: string) {
   if !_AXES.contains(value) {
-    raise ValueError("the axis of ${owner} must be Axis.HORIZONTAL or Axis.VERTICAL, got '${value}'")
+    raise ValueError(
+      "the axis of ${owner} must be Axis.HORIZONTAL or Axis.VERTICAL, got '${value}'",
+    )
   }
 }
 
@@ -156,6 +167,8 @@ def check_axis(value: string, owner: string) {
  */
 def check_stack_fit(value: string, owner: string) {
   if !_STACK_FITS.contains(value) {
-    raise ValueError("fit of ${owner} must be one of StackFit's values (${', '.join(_STACK_FITS)}), got '${value}'")
+    raise ValueError(
+      "fit of ${owner} must be one of StackFit's values (${', '.join(_STACK_FITS)}), got '${value}'",
+    )
   }
 }

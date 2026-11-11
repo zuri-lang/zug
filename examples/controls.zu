@@ -30,156 +30,187 @@ class DemoState < State {
   var notes = TextController('Multi-line text area.\nSecond line.')
 
   build(context) {
-    return Padding(EdgeInsets.all(16), Column([
-      Row([
-        Checkbox(self.check, {
-          label: 'Thousands separators',
-          on_changed: @(v) {
-            self.set_state(@{
-              self.check = v
-            })
-          },
-        }),
-        Checkbox(
-          self.mixed, {
-            label: 'Mixed',
-            tristate: true,
-            on_changed: @(v) {
-              self.set_state(@{
-                self.mixed = v
-              })
-            },
-          },
-        ),
-        Switch(self.on, {
-          on_changed: @(v) {
-            self.set_state(@{
-              self.on = v
-            })
-          },
-        }),
-      ], { spacing: 16 }),
-      RadioGroup(
-        { deg: 'Degrees', rad: 'Radians' }, self.unit,
-        {
-          axis: Axis.HORIZONTAL,
-          on_changed: @(v) {
-            self.set_state(@{
-              self.unit = v
-            })
-          },
-        },
-      ),
-      SegmentedControl(
-        ['Basic', 'Scientific', 'Programmer'], self.mode, {
-          on_changed: @(v) {
-            self.set_state(@{
-              self.mode = v
-            })
-          },
-        },
-      ),
-      Row(
+    return Padding(
+      EdgeInsets.all(16),
+      Column(
         [
-          Text('Level'),
-          Expanded(Slider(self.level, {
-            divisions: 10,
-            on_changed: @(v) {
-              self.set_state(@{
-                self.level = v
-              })
+          Row(
+            [
+              Checkbox(self.check, {
+                label: 'Thousands separators',
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.check = v
+                  })
+                },
+              }),
+              Checkbox(self.mixed, {
+                label: 'Mixed',
+                tristate: true,
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.mixed = v
+                  })
+                },
+              }),
+              Switch(self.on, {
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.on = v
+                  })
+                },
+              }),
+            ],
+            { spacing: 16 },
+          ),
+          RadioGroup(
+            { deg: 'Degrees', rad: 'Radians' },
+            self.unit,
+            {
+              axis: Axis.HORIZONTAL,
+              on_changed: @(v) {
+                self.set_state(@{
+                  self.unit = v
+                })
+              },
             },
-          })), Text('${(self.level * 100).round()}%'),
-        ],
-        { spacing: 8 },
-      ),
-      Row([
-        Text('Places'),
-        Stepper(self.count, {
-          min: 0,
-          max: 10,
-          on_changed: @(v) {
-            self.set_state(@{
-              self.count = v
-            })
-          },
-        }), Text('${self.count}'),
-        Dropdown(
-          [
-            DropdownItem(0, 'Auto'), DropdownItem.separator(),
-            DropdownItem(2, 'Two places'), DropdownItem(4, 'Four places'),
-          ],
-          self.places, {
-            on_changed: @(v) {
-              self.set_state(@{
-                self.places = v
-              })
+          ),
+          SegmentedControl(
+            ['Basic', 'Scientific', 'Programmer'],
+            self.mode,
+            {
+              on_changed: @(v) {
+                self.set_state(@{
+                  self.mode = v
+                })
+              },
             },
-          },
-        ),
-        ColorWell(self.color, {
-          on_changed: @(v) {
-            self.set_state(@{
-              self.color = v
-            })
-          },
-        }),
-      ], { spacing: 8 }),
-      Row(
-        [
-          Text('Name', { accessibility_identifier: 'label' }),
-          Expanded(TextField({
-            controller: self.name,
-            placeholder: 'Your name',
-          })),
+          ),
+          Row(
+            [
+              Text('Level'),
+              Expanded(
+                Slider(self.level, {
+                  divisions: 10,
+                  on_changed: @(v) {
+                    self.set_state(@{
+                      self.level = v
+                    })
+                  },
+                }),
+              ),
+              Text('${(self.level * 100).round()}%'),
+            ],
+            { spacing: 8 },
+          ),
+          Row(
+            [
+              Text('Places'),
+              Stepper(self.count, {
+                min: 0,
+                max: 10,
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.count = v
+                  })
+                },
+              }),
+              Text('${self.count}'),
+              Dropdown(
+                [
+                  DropdownItem(0, 'Auto'),
+                  DropdownItem.separator(),
+                  DropdownItem(2, 'Two places'),
+                  DropdownItem(4, 'Four places'),
+                ],
+                self.places,
+                {
+                  on_changed: @(v) {
+                    self.set_state(@{
+                      self.places = v
+                    })
+                  },
+                },
+              ),
+              ColorWell(self.color, {
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.color = v
+                  })
+                },
+              }),
+            ],
+            { spacing: 8 },
+          ),
+          Row(
+            [
+              Text('Name', { accessibility_identifier: 'label' }),
+              Expanded(
+                TextField({ controller: self.name, placeholder: 'Your name' }),
+              ),
+            ],
+            { spacing: 8, align_items: AlignItems.BASELINE },
+          ),
+          Row(
+            [
+              Expanded(SearchField({ placeholder: 'Search' })),
+              Expanded(
+                ComboBox(
+                  ['1+1', '2*(3+4)', 'sqrt(2)'],
+                  { placeholder: 'Expression' },
+                ),
+              ),
+            ],
+            { spacing: 8 },
+          ),
+          Row(
+            [
+              DatePicker(self.moment, {
+                on_changed: @(v) {
+                  self.set_state(@{
+                    self.moment = v
+                  })
+                },
+              }),
+              LevelIndicator(3, {
+                style: LevelStyle.RATING,
+                on_changed: @(v) {},
+              }),
+              Spinner({ size: 'small' }),
+              Icon('gearshape.fill', {
+                size: 18,
+                color: Color.system('accent'),
+              }),
+            ],
+            { spacing: 12 },
+          ),
+          ProgressBar({ value: self.level }),
+          Separator(),
+          GroupBox(
+            Column(
+              [
+                Text('Inside a group box'),
+                Button('Action', { on_pressed: @{} }),
+              ],
+              { spacing: 6, align_items: AlignItems.START },
+            ),
+            { title: 'Group' },
+          ),
+          Expanded(TextArea({ controller: self.notes })),
         ],
-        { spacing: 8, align_items: AlignItems.BASELINE },
+        { spacing: 10, align_items: AlignItems.STRETCH },
       ),
-      Row(
-        [
-          Expanded(SearchField({ placeholder: 'Search' })),
-          Expanded(ComboBox(
-            ['1+1', '2*(3+4)', 'sqrt(2)'], { placeholder: 'Expression' },
-          )),
-        ],
-        { spacing: 8 },
-      ),
-      Row([DatePicker(self.moment, {
-        on_changed: @(v) {
-          self.set_state(@{
-            self.moment = v
-          })
-        },
-      }), LevelIndicator(
-        3, {
-          style: LevelStyle.RATING,
-          on_changed: @(v) {},
-        },
-      ),
-        Spinner({ size: 'small' }),
-        Icon(
-          'gearshape.fill', { size: 18, color: Color.system('accent') },
-        )], { spacing: 12 }),
-      ProgressBar({ value: self.level }),
-      Separator(),
-      GroupBox(
-        Column(
-          [Text('Inside a group box'), Button('Action', { on_pressed: @{} })],
-          { spacing: 6, align_items: AlignItems.START },
-        ),
-        { title: 'Group' },
-      ),
-      Expanded(TextArea({ controller: self.notes })),
-    ], {
-      spacing: 10,
-      align_items: AlignItems.STRETCH,
-    }))
+    )
   }
 }
 
 if __root__ == __file__ {
-  run_app(App({
-    title: 'Controls',
-    windows: [Window('Controls', Demo(), { size: Size(560, 640) })],
-  }))
+  run_app(
+    App({
+      title: 'Controls',
+      windows: [
+        Window('Controls', Demo(), { size: Size(560, 640) }),
+      ],
+    }),
+  )
 }

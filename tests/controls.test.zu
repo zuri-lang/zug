@@ -10,9 +10,12 @@ import ..app.testing { WidgetTester }
 # what a control reported and see the control follow.
 def bound(initial, make) {
   var value = ObservableValue(initial)
-  var widget = Observer(value, @(context) => make(value.value(), @(next) {
-    value.set(next)
-  }))
+  var widget = Observer(
+    value,
+    @(context) => make(value.value(), @(next) {
+      value.set(next)
+    }),
+  )
   return [value, widget]
 }
 
@@ -53,27 +56,27 @@ describe('RadioGroup', @{
     var pair = bound(
       'rad',
       @(value, set) => RadioGroup(
-        { deg: 'Degrees', rad: 'Radians' }, value, { on_changed: set },
+        { deg: 'Degrees', rad: 'Radians' },
+        value,
+        { on_changed: set },
       ),
     )
     var t = WidgetTester().pump_widget(pair[1])
     var radios = t.find_kind('radio')
-    expect(radios.map(
-      @(view) => view.props.title,
-    )).to_equal(['Degrees', 'Radians'])
+    expect(radios.map(@(view) => view.props.title))
+        .to_equal(['Degrees', 'Radians'])
     expect(radios.map(@(view) => view.props.selected)).to_equal([false, true])
     radios[0].fire('changed', { selected: true })
     expect(pair[0].value()).to_be('deg')
-    expect(t
-      .find_kind('radio')
-      .map(@(view) => view.props.selected)).to_equal([true, false])
+    expect(t.find_kind('radio').map(@(view) => view.props.selected))
+        .to_equal([true, false])
     t.dispose()
   })
 
   it('puts a refused choice back', @{
-    var t = WidgetTester().pump_widget(RadioGroup(
-      ['a', 'b'], 'a', { on_changed: @(value) {} },
-    ))
+    var t = WidgetTester().pump_widget(
+      RadioGroup(['a', 'b'], 'a', { on_changed: @(value) {} }),
+    )
     var radios = t.find_kind('radio')
     radios[1].fire('changed', { selected: true })
     expect(radios.map(@(view) => view.props.selected)).to_equal([true, false])
@@ -91,9 +94,12 @@ describe('Switch, Slider and Stepper', @{
 
     var level = bound(
       0.5,
-      @(value, set) => Slider(
-        value, { min: 0, max: 10, divisions: 10, on_changed: set },
-      ),
+      @(value, set) => Slider(value, {
+        min: 0,
+        max: 10,
+        divisions: 10,
+        on_changed: set,
+      }),
     )
     t = WidgetTester().pump_widget(level[1])
     var slider = one_of(t, 'slider')
@@ -103,7 +109,8 @@ describe('Switch, Slider and Stepper', @{
     t.dispose()
 
     var count = bound(
-      3, @(value, set) => Stepper(value, { min: 0, max: 5, on_changed: set }),
+      3,
+      @(value, set) => Stepper(value, { min: 0, max: 5, on_changed: set }),
     )
     t = WidgetTester().pump_widget(count[1])
     one_of(t, 'stepper').fire('changed', { value: 4 })
@@ -112,9 +119,9 @@ describe('Switch, Slider and Stepper', @{
   })
 
   it('clamp a value outside their range', @{
-    var t = WidgetTester().pump_widget(Slider(
-      50, { max: 10, on_changed: @(value) {} },
-    ))
+    var t = WidgetTester().pump_widget(
+      Slider(50, { max: 10, on_changed: @(value) {} }),
+    )
     expect(one_of(t, 'slider').props.value).to_be(10)
     t.dispose()
   })
@@ -130,7 +137,10 @@ describe('Switch, Slider and Stepper', @{
 
   it('fill a row with a slider', @{
     var t = WidgetTester().pump_widget(
-      Row([Text('Volume'), Expanded(Slider(0.2, { on_changed: @(value) {} }))]),
+      Row([
+        Text('Volume'),
+        Expanded(Slider(0.2, { on_changed: @(value) {} })),
+      ]),
       { size: Size(300, 100) },
     )
     expect(one_of(t, 'slider').frame.width > 200).to_be_true()
@@ -141,11 +151,14 @@ describe('Switch, Slider and Stepper', @{
 describe('Dropdown', @{
   it('shows the index of its value and reports values, not indices', @{
     var items = [
-      DropdownItem(0, 'None'), DropdownItem.separator(), DropdownItem(2, 'Two'),
+      DropdownItem(0, 'None'),
+      DropdownItem.separator(),
+      DropdownItem(2, 'Two'),
       DropdownItem(4, 'Four'),
     ]
     var pair = bound(
-      2, @(value, set) => Dropdown(items, value, { on_changed: set }),
+      2,
+      @(value, set) => Dropdown(items, value, { on_changed: set }),
     )
     var t = WidgetTester().pump_widget(pair[1])
     var popup = one_of(t, 'popup')
@@ -158,9 +171,9 @@ describe('Dropdown', @{
   })
 
   it('takes plain strings as items', @{
-    var t = WidgetTester().pump_widget(Dropdown(
-      ['Small', 'Large'], 'Large', { on_changed: @(value) {} },
-    ))
+    var t = WidgetTester().pump_widget(
+      Dropdown(['Small', 'Large'], 'Large', { on_changed: @(value) {} }),
+    )
     expect(one_of(t, 'popup').props.selected).to_be(1)
     t.dispose()
   })
@@ -171,37 +184,50 @@ describe('SegmentedControl', @{
     var pair = bound(
       0,
       @(value, set) => SegmentedControl(
-        ['Basic', 'Scientific'], value, { on_changed: set },
+        ['Basic', 'Scientific'],
+        value,
+        { on_changed: set },
       ),
     )
     var t = WidgetTester().pump_widget(pair[1])
     var control = one_of(t, 'segmented')
     expect(control.props.selected).to_equal([0])
-    control.fire('changed', { selected: [1] })
+    control.fire('changed', {
+      selected: [1],
+    })
     expect(pair[0].value()).to_be(1)
     t.dispose()
   })
 
   it('chooses any number of segments', @{
-    var pair = bound(
-      [0],
-      @(value, set) => SegmentedControl(
-        ['B', 'I', 'U'], value, { mode: SegmentMode.ANY, on_changed: set },
-      ),
-    )
+    var pair = bound([
+      0,
+    ], @(value, set) => SegmentedControl(['B', 'I', 'U'], value, { mode: SegmentMode.ANY, on_changed: set }))
     var t = WidgetTester().pump_widget(pair[1])
-    one_of(t, 'segmented').fire('changed', { selected: [0, 2] })
+    one_of(
+      t,
+      'segmented',
+    ).fire('changed', {
+      selected: [0, 2],
+    })
     expect(pair[0].value()).to_equal([0, 2])
     t.dispose()
   })
 
   it('reports clicks in momentary mode', @{
     var pressed = []
-    var t = WidgetTester().pump_widget(SegmentedControl(
-      ['<', '>'], nil, { mode: SegmentMode.MOMENTARY, on_pressed: @(index) {
-        pressed.append(index)
-      } },
-    ))
+    var t = WidgetTester().pump_widget(
+      SegmentedControl(
+        ['<', '>'],
+        nil,
+        {
+          mode: SegmentMode.MOMENTARY,
+          on_pressed: @(index) {
+            pressed.append(index)
+          },
+        },
+      ),
+    )
     one_of(t, 'segmented').fire('pressed', { index: 1 })
     expect(pressed).to_equal([1])
     t.dispose()
@@ -212,7 +238,8 @@ describe('DatePicker and ColorWell', @{
   it('pass dates and colours through', @{
     var start = date.from_time(1700000000)
     var pair = bound(
-      start, @(value, set) => DatePicker(value, { on_changed: set }),
+      start,
+      @(value, set) => DatePicker(value, { on_changed: set }),
     )
     var t = WidgetTester().pump_widget(pair[1])
     var picker = one_of(t, 'date_picker')
@@ -225,7 +252,8 @@ describe('DatePicker and ColorWell', @{
     t.dispose()
 
     var shade = bound(
-      Color.RED, @(value, set) => ColorWell(value, { on_changed: set }),
+      Color.RED,
+      @(value, set) => ColorWell(value, { on_changed: set }),
     )
     t = WidgetTester().pump_widget(shade[1])
     one_of(t, 'color_well').fire('changed', { value: Color.BLUE })
@@ -240,7 +268,10 @@ describe('TextField', @{
     var t = WidgetTester().pump_widget(TextField({ controller }))
     var field = one_of(t, 'text_field')
     expect(field.props.text).to_be('hello')
-    field.fire('changed', { text: 'hello world', selection: [11, 11] })
+    field.fire('changed', {
+      text: 'hello world',
+      selection: [11, 11],
+    })
     expect(controller.text()).to_be('hello world')
     expect(controller.selection()).to_equal([11, 11])
     expect(field.updates).to_be_empty()
@@ -253,11 +284,16 @@ describe('TextField', @{
   it('reports changes and submissions', @{
     var changes = []
     var submitted = []
-    var t = WidgetTester().pump_widget(TextField({ on_changed: @(text) {
-      changes.append(text)
-    }, on_submitted: @(text) {
-      submitted.append(text)
-    } }))
+    var t = WidgetTester().pump_widget(
+      TextField({
+        on_changed: @(text) {
+          changes.append(text)
+        },
+        on_submitted: @(text) {
+          submitted.append(text)
+        },
+      }),
+    )
     var field = one_of(t, 'text_field')
     field.fire('changed', { text: 'a' })
     field.fire('changed', { text: 'ab' })
@@ -270,11 +306,9 @@ describe('TextField', @{
   it('caps the length and filters input', @{
     var controller = TextController()
     var digits = @(text, previous) => text.match('/^[0-9]*$/') ? true : false
-    var t = WidgetTester().pump_widget(TextField({
-      controller,
-      max_length: 3,
-      input_filter: digits,
-    }))
+    var t = WidgetTester().pump_widget(
+      TextField({ controller, max_length: 3, input_filter: digits }),
+    )
     var field = one_of(t, 'text_field')
     field.fire('changed', { text: '12' })
     field.fire('changed', { text: '12x' })
@@ -287,10 +321,9 @@ describe('TextField', @{
   })
 
   it('shows exactly its text when driven by it', @{
-    var t = WidgetTester().pump_widget(TextField({
-      text: 'fixed',
-      on_changed: @(text) {},
-    }))
+    var t = WidgetTester().pump_widget(
+      TextField({ text: 'fixed', on_changed: @(text) {} }),
+    )
     var field = one_of(t, 'text_field')
     field.fire('changed', { text: 'fixed!' })
     expect(field.props.text).to_be('fixed')
@@ -298,17 +331,19 @@ describe('TextField', @{
   })
 
   it('is read-only when driven by text with nothing to call', @{
-    var t = WidgetTester().pump_widget(Column([
-      TextField({ text: 'fixed', placeholder: 'fixed' }),
-      TextField({
-        text: 'driven',
-        placeholder: 'driven',
-        on_changed: @(text) {},
-      }),
-      TextArea({ text: 'fixed area' }),
-      TextArea({ controller: TextController('own area') }),
-      SearchField({ text: 'fixed search' }),
-    ]))
+    var t = WidgetTester().pump_widget(
+      Column([
+        TextField({ text: 'fixed', placeholder: 'fixed' }),
+        TextField({
+          text: 'driven',
+          placeholder: 'driven',
+          on_changed: @(text) {},
+        }),
+        TextArea({ text: 'fixed area' }),
+        TextArea({ controller: TextController('own area') }),
+        SearchField({ text: 'fixed search' }),
+      ]),
+    )
     var fields = t.find_kind('text_field')
     expect(fields.map(@(field) => field.props.editable)).to_equal([false, true])
     var areas = t.find_kind('text_area')
@@ -319,10 +354,12 @@ describe('TextField', @{
 
   it('takes focus when asked', @{
     var controller = TextController()
-    var t = WidgetTester().pump_widget(Column([
-      TextField({ placeholder: 'first' }),
-      TextField({ controller, placeholder: 'second' }),
-    ]))
+    var t = WidgetTester().pump_widget(
+      Column([
+        TextField({ placeholder: 'first' }),
+        TextField({ controller, placeholder: 'second' }),
+      ]),
+    )
     controller.request_focus()
     t.pump()
     expect(t.backend.focused.props.placeholder).to_be('second')
@@ -330,10 +367,9 @@ describe('TextField', @{
   })
 
   it('takes focus on its own with autofocus', @{
-    var t = WidgetTester().pump_widget(TextField({
-      autofocus: true,
-      placeholder: 'auto',
-    }))
+    var t = WidgetTester().pump_widget(
+      TextField({ autofocus: true, placeholder: 'auto' }),
+    )
     expect(t.backend.focused.props.placeholder).to_be('auto')
     t.dispose()
   })
@@ -341,9 +377,12 @@ describe('TextField', @{
   it('becomes a different view when obscured', @{
     var hidden = ObservableValue(false)
     var controller = TextController('secret')
-    var t = WidgetTester().pump_widget(Observer(
-      hidden, @(context) => TextField({ controller, obscure: hidden.value() }),
-    ))
+    var t = WidgetTester().pump_widget(
+      Observer(
+        hidden,
+        @(context) => TextField({ controller, obscure: hidden.value() }),
+      ),
+    )
     var before = one_of(t, 'text_field')
     hidden.set(true)
     t.pump()
@@ -365,16 +404,25 @@ describe('ComboBox', @{
   it('sets its text from a chosen item', @{
     var controller = TextController()
     var chosen = []
-    var t = WidgetTester().pump_widget(ComboBox(
-      ['1+1', '2*3'], { controller, on_selected: @(index, text) {
-        chosen.append([index, text])
-      } },
-    ))
+    var t = WidgetTester().pump_widget(
+      ComboBox(
+        ['1+1', '2*3'],
+        {
+          controller,
+          on_selected: @(index, text) {
+            chosen.append([index, text])
+          },
+        },
+      ),
+    )
     var combo = one_of(t, 'combo_box')
     expect(combo.props.items).to_equal(['1+1', '2*3'])
     combo.fire('selected', { index: 1, text: '2*3' })
     expect(controller.text()).to_be('2*3')
-    expect(chosen).to_equal([[1, '2*3']])
+    expect(chosen)
+        .to_equal([
+          [1, '2*3'],
+        ])
     t.dispose()
   })
 })
@@ -405,15 +453,19 @@ describe('Separator', @{
 
 describe('GroupBox', @{
   it('puts its child inside its insets', @{
-    var t = WidgetTester().pump_widget(Center(GroupBox(
-      Box({
-        width: 50,
-        height: 20,
-        color: Color.RED,
-        accessibility_identifier: 'inner',
-      }),
-      { title: 'Group' },
-    )))
+    var t = WidgetTester().pump_widget(
+      Center(
+        GroupBox(
+          Box({
+            width: 50,
+            height: 20,
+            color: Color.RED,
+            accessibility_identifier: 'inner',
+          }),
+          { title: 'Group' },
+        ),
+      ),
+    )
     var group = one_of(t, 'group_box')
     var inner = t.one('inner')
     expect(group.frame.size()).to_equal(Size(66, 50))
@@ -433,9 +485,9 @@ describe('Image and Icon', @{
   })
 
   it('take an explicit size', @{
-    var t = WidgetTester().pump_widget(Center(Image(
-      ImageSource.file('/tmp/x.png'), { width: 48, height: 24 },
-    )))
+    var t = WidgetTester().pump_widget(
+      Center(Image(ImageSource.file('/tmp/x.png'), { width: 48, height: 24 })),
+    )
     expect(one_of(t, 'image').frame.size()).to_equal(Size(48, 24))
     t.dispose()
   })
@@ -444,11 +496,14 @@ describe('Image and Icon', @{
     var path = os.join_paths(os.create_temp_dir('zug-image-'), 'wide.png')
     imagine.create(40, 20, 'red').save(path)
     var turn = ObservableValue(0)
-    var t = WidgetTester().pump_widget(Observer(
-      turn, @(context) => Center(Image(ImageSource.file(path), {
-        rotation: turn.value(),
-      })),
-    ))
+    var t = WidgetTester().pump_widget(
+      Observer(
+        turn,
+        @(context) => Center(
+          Image(ImageSource.file(path), { rotation: turn.value() }),
+        ),
+      ),
+    )
     expect(one_of(t, 'image').frame.size()).to_equal(Size(40, 20))
     turn.set(90)
     t.pump()
@@ -460,26 +515,26 @@ describe('Image and Icon', @{
   })
 
   it('turn by quarters, either way, and flip', @{
-    var t = WidgetTester().pump_widget(Column([
-      Image(ImageSource.file('/tmp/a.png'), {
-        rotation: -90,
-        flip_horizontal: true,
-        accessibility_identifier: 'a',
-      }),
-      Image(ImageSource.file('/tmp/b.png'), {
-        rotation: 450,
-        flip_vertical: true,
-        accessibility_identifier: 'b',
-      }),
-    ]))
+    var t = WidgetTester().pump_widget(
+      Column([
+        Image(ImageSource.file('/tmp/a.png'), {
+          rotation: -90,
+          flip_horizontal: true,
+          accessibility_identifier: 'a',
+        }),
+        Image(ImageSource.file('/tmp/b.png'), {
+          rotation: 450,
+          flip_vertical: true,
+          accessibility_identifier: 'b',
+        }),
+      ]),
+    )
     var a = t.one('a').props
     var b = t.one('b').props
-    expect([a.rotation, a.flip_horizontal, a.flip_vertical]).to_equal([
-      270, true, false,
-    ])
-    expect([b.rotation, b.flip_horizontal, b.flip_vertical]).to_equal([
-      90, false, true,
-    ])
+    expect([a.rotation, a.flip_horizontal, a.flip_vertical])
+        .to_equal([270, true, false])
+    expect([b.rotation, b.flip_horizontal, b.flip_vertical])
+        .to_equal([90, false, true])
     expect(@{
       Image(ImageSource.file('/tmp/c.png'), { rotation: 45 })
     }).to_raise_instance_of(ValueError)
@@ -493,102 +548,145 @@ describe('Escape', @{
     var escape = @(name) => @{
       pressed.append(name)
     }
-    var t = WidgetTester().pump_widget(Shortcuts({ 'escape': @{
-      pressed.append('window')
-    } }, Column([
-      Text('label', {
-        selectable: true,
-        on_escape: escape('text'),
-        accessibility_identifier: 'text',
-      }),
-      Button('Go', {
-        on_pressed: @{},
-        on_escape: escape('button'),
-        accessibility_identifier: 'button',
-      }),
-      Checkbox(false, {
-        on_changed: @(value) {},
-        on_escape: escape('checkbox'),
-        accessibility_identifier: 'checkbox',
-      }),
-      Radio(1, 1, {
-        label: 'One',
-        on_changed: @(value) {},
-        on_escape: escape('radio'),
-        accessibility_identifier: 'radio',
-      }),
-      Switch(false, {
-        on_changed: @(value) {},
-        on_escape: escape('switch'),
-        accessibility_identifier: 'switch',
-      }),
-      Slider(0.5, {
-        on_changed: @(value) {},
-        on_escape: escape('slider'),
-        accessibility_identifier: 'slider',
-      }),
-      Stepper(1, {
-        on_changed: @(value) {},
-        on_escape: escape('stepper'),
-        accessibility_identifier: 'stepper',
-      }),
-      SegmentedControl(['A', 'B'], 0, {
-        on_changed: @(index) {},
-        on_escape: escape('segmented'),
-        accessibility_identifier: 'segmented',
-      }),
-      Dropdown([DropdownItem('a', 'A')], 'a', {
-        on_changed: @(value) {},
-        on_escape: escape('dropdown'),
-        accessibility_identifier: 'dropdown',
-      }),
-      DatePicker(date.from_time(1700000000), {
-        on_changed: @(value) {},
-        on_escape: escape('date'),
-        accessibility_identifier: 'date',
-      }),
-      ColorWell(Color.RED, {
-        on_changed: @(value) {},
-        on_escape: escape('colour'),
-        accessibility_identifier: 'colour',
-      }),
-      LevelIndicator(1, {
-        on_changed: @(value) {},
-        on_escape: escape('level'),
-        accessibility_identifier: 'level',
-      }),
-      Box({ height: 60, child: TabView([Tab('One', Text('1'))], 0, {
-        on_changed: @(index) {},
-        on_escape: escape('tabs'),
-        accessibility_identifier: 'tabs',
-      }) }),
-      Box({ height: 60, child: DataTable(
-        [DataColumn('a', 'A')], 1, @(row, column) => 'x', {
-          on_escape: escape('table'),
-          accessibility_identifier: 'table',
+    var t = WidgetTester().pump_widget(
+      Shortcuts(
+        {
+          'escape': @{
+            pressed.append('window')
+          },
         },
-      ) }),
-      TextField({
-        on_escape: escape('field'),
-        accessibility_identifier: 'field',
-      }),
-      Box({ height: 40, child: TextArea({
-        on_escape: escape('area'),
-        accessibility_identifier: 'area',
-      }) }),
-      SearchField({
-        on_escape: escape('search'),
-        accessibility_identifier: 'search',
-      }),
-      ComboBox(['a'], {
-        on_escape: escape('combo'),
-        accessibility_identifier: 'combo',
-      }),
-    ])))
+        Column([
+          Text('label', {
+            selectable: true,
+            on_escape: escape('text'),
+            accessibility_identifier: 'text',
+          }),
+          Button('Go', {
+            on_pressed: @{},
+            on_escape: escape('button'),
+            accessibility_identifier: 'button',
+          }),
+          Checkbox(false, {
+            on_changed: @(value) {},
+            on_escape: escape('checkbox'),
+            accessibility_identifier: 'checkbox',
+          }),
+          Radio(1, 1, {
+            label: 'One',
+            on_changed: @(value) {},
+            on_escape: escape('radio'),
+            accessibility_identifier: 'radio',
+          }),
+          Switch(false, {
+            on_changed: @(value) {},
+            on_escape: escape('switch'),
+            accessibility_identifier: 'switch',
+          }),
+          Slider(0.5, {
+            on_changed: @(value) {},
+            on_escape: escape('slider'),
+            accessibility_identifier: 'slider',
+          }),
+          Stepper(1, {
+            on_changed: @(value) {},
+            on_escape: escape('stepper'),
+            accessibility_identifier: 'stepper',
+          }),
+          SegmentedControl(
+            ['A', 'B'],
+            0,
+            {
+              on_changed: @(index) {},
+              on_escape: escape('segmented'),
+              accessibility_identifier: 'segmented',
+            },
+          ),
+          Dropdown(
+            [DropdownItem('a', 'A')],
+            'a',
+            {
+              on_changed: @(value) {},
+              on_escape: escape('dropdown'),
+              accessibility_identifier: 'dropdown',
+            },
+          ),
+          DatePicker(date.from_time(1700000000), {
+            on_changed: @(value) {},
+            on_escape: escape('date'),
+            accessibility_identifier: 'date',
+          }),
+          ColorWell(Color.RED, {
+            on_changed: @(value) {},
+            on_escape: escape('colour'),
+            accessibility_identifier: 'colour',
+          }),
+          LevelIndicator(1, {
+            on_changed: @(value) {},
+            on_escape: escape('level'),
+            accessibility_identifier: 'level',
+          }),
+          Box({
+            height: 60,
+            child: TabView(
+              [Tab('One', Text('1'))],
+              0,
+              {
+                on_changed: @(index) {},
+                on_escape: escape('tabs'),
+                accessibility_identifier: 'tabs',
+              },
+            ),
+          }),
+          Box({
+            height: 60,
+            child: DataTable(
+              [DataColumn('a', 'A')],
+              1,
+              @(row, column) => 'x',
+              { on_escape: escape('table'), accessibility_identifier: 'table' },
+            ),
+          }),
+          TextField({
+            on_escape: escape('field'),
+            accessibility_identifier: 'field',
+          }),
+          Box({
+            height: 40,
+            child: TextArea({
+              on_escape: escape('area'),
+              accessibility_identifier: 'area',
+            }),
+          }),
+          SearchField({
+            on_escape: escape('search'),
+            accessibility_identifier: 'search',
+          }),
+          ComboBox(
+            ['a'],
+            { on_escape: escape('combo'), accessibility_identifier: 'combo' },
+          ),
+        ]),
+      ),
+    )
     var names = [
-      'text', 'button', 'checkbox', 'radio', 'switch', 'slider', 'stepper',
-      'segmented', 'dropdown', 'date', 'colour', 'level', 'tabs', 'table',
-      'field', 'area', 'search', 'combo',
+      'text',
+      'button',
+      'checkbox',
+      'radio',
+      'switch',
+      'slider',
+      'stepper',
+      'segmented',
+      'dropdown',
+      'date',
+      'colour',
+      'level',
+      'tabs',
+      'table',
+      'field',
+      'area',
+      'search',
+      'combo',
     ]
 
     for name in names {
@@ -605,9 +703,13 @@ describe('Escape', @{
 
   it('passes on from a focused widget with no on_escape', @{
     var pressed = []
-    var t = WidgetTester().pump_widget(Shortcuts({ 'escape': @{
-      pressed.append('window')
-    } }, Button('Go', { on_pressed: @{}, accessibility_identifier: 'go' })))
+    var t = WidgetTester().pump_widget(
+      Shortcuts({
+        'escape': @{
+          pressed.append('window')
+        },
+      }, Button('Go', { on_pressed: @{}, accessibility_identifier: 'go' })),
+    )
     t.one('go').focus()
     expect(t.window().press_key('escape')).to_be_true()
     expect(pressed).to_equal(['window'])
@@ -616,12 +718,18 @@ describe('Escape', @{
 
   it('reaches every radio button of a RadioGroup', @{
     var pressed = 0
-    var t = WidgetTester().pump_widget(RadioGroup(['a', 'b'], 'a', {
-      on_changed: @(value) {},
-      on_escape: @{
-        pressed++
-      },
-    }))
+    var t = WidgetTester().pump_widget(
+      RadioGroup(
+        ['a', 'b'],
+        'a',
+        {
+          on_changed: @(value) {},
+          on_escape: @{
+            pressed++
+          },
+        },
+      ),
+    )
     t.find_kind('radio')[1].focus()
     t.window().press_key('escape')
     expect(pressed).to_be(1)

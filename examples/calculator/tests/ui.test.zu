@@ -113,7 +113,9 @@ describe('the calculator window', @{
 
   it('switches to the scientific keys', @{
     expect(t.find_identifier('key sin')).to_be_empty()
-    t.one('mode').fire('changed', { selected: [1] })
+    t.one('mode').fire('changed', {
+      selected: [1],
+    })
     expect(t.find_identifier('key sin')).to_have_length(1)
     tap_keys(t, ['9', '0', 'sin'])
     expect(display(t)).to_be('1')
@@ -146,9 +148,8 @@ describe('the calculator window', @{
 
   it('opens Settings from the menu, and applies what changes there', @{
     t.choose_menu('Calculator', 'Settings…')
-    expect(t.backend.windows
-      .filter(@(window) => !window.closed)
-      .length()).to_be(2)
+    expect(t.backend.windows.filter(@(window) => !window.closed).length())
+        .to_be(2)
     tap_keys(t, ['1', '2', '3', '4', '='])
     expect(display(t)).to_be('1,234')
     t.one('grouping').fire('changed', { value: false })
@@ -160,7 +161,9 @@ describe('the calculator window', @{
   it('shows itself light or dark as Settings says, and keeps the choice', @{
     t.choose_menu('Calculator', 'Settings…')
     expect(t.backend.appearance()).to_be('light')
-    t.one('appearance').fire('changed', { selected: [2] })
+    t.one('appearance').fire('changed', {
+      selected: [2],
+    })
     t.pump()
     expect(t.backend.appearance()).to_be('dark')
     t.dispose()

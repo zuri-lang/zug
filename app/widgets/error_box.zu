@@ -25,17 +25,17 @@ class ErrorBox < StatelessWidget {
    */
   @new(error) {
     self.message = instance_of(error, Error)
-      ? '${error.type}: ${error.message}'
-      : '${error}'
+        ? '${error.type}: ${error.message}'
+        : '${error}'
   }
 
   build(context) {
     return Box({
       color: Color(176, 0, 32, 1),
       padding: EdgeInsets.all(8),
-      child: Text(
-        self.message, { style: TextStyle({ color: Color.WHITE, size: 12 }) },
-      ),
+      child: Text(self.message, {
+        style: TextStyle({ color: Color.WHITE, size: 12 }),
+      }),
     })
   }
 }

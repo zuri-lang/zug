@@ -12,7 +12,8 @@ import .. ..foundation { report_error }
 import .. ..backend { TimerHandle }
 import ._runtime { core_foundation, quartz, push_pool, pop_pool }
 
-var _cf = core_foundation.declare('
+var _cf = core_foundation.declare(
+  '
   #include <stdbool.h>
   typedef double CFAbsoluteTime;
   void *CFRunLoopGetMain(void);
@@ -25,13 +26,14 @@ var _cf = core_foundation.declare('
   void CFRunLoopWakeUp(void *loop);
   void CFRelease(void *object);
   CFAbsoluteTime CFAbsoluteTimeGetCurrent(void);
-')
+',
+)
 
 var _ca = quartz.declare('double CACurrentMediaTime(void);')
 
 var _common_modes = core_foundation
-  .symbol('kCFRunLoopCommonModes')
-  .read(ffi.ptr)
+    .symbol('kCFRunLoopCommonModes')
+    .read(ffi.ptr)
 var _main = _cf.CFRunLoopGetMain()
 
 # kCFRunLoopBeforeWaiting.
@@ -70,7 +72,12 @@ def on_before_waiting(task: function) {
   }, ffi.function_type(ffi.void, [ffi.ptr, ffi.ulong, ffi.ptr]))
 
   var observer = _cf.CFRunLoopObserverCreate(
-    nil, _BEFORE_WAITING, true, 0, _observer_callback, nil,
+    nil,
+    _BEFORE_WAITING,
+    true,
+    0,
+    _observer_callback,
+    nil,
   )
   _cf.CFRunLoopAddObserver(_main, observer, _common_modes)
 }
@@ -165,8 +172,13 @@ class MacTimer < TimerHandle {
 
     var interval = repeats ? seconds.max(0.001) : 0
     self._timer = _cf.CFRunLoopTimerCreate(
-      nil, _cf.CFAbsoluteTimeGetCurrent() + seconds, interval, 0, 0,
-      _timer_callback, nil,
+      nil,
+      _cf.CFAbsoluteTimeGetCurrent() + seconds,
+      interval,
+      0,
+      0,
+      _timer_callback,
+      nil,
     )
     _timers[self._timer.address()] = self
     _cf.CFRunLoopAddTimer(_main, self._timer, _common_modes)

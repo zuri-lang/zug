@@ -85,16 +85,19 @@ class Promise {
 
     iter var i = 0; i < promises.length(); i++ {
       var index = i
-      promises[i].then(@(value) {
-        values[index] = value
-        remaining--
+      promises[i].then(
+        @(value) {
+          values[index] = value
+          remaining--
 
-        if remaining == 0 {
-          deferred.resolve(values)
-        }
-      }, @(error) {
-        deferred.reject(error)
-      })
+          if remaining == 0 {
+            deferred.resolve(values)
+          }
+        },
+        @(error) {
+          deferred.reject(error)
+        },
+      )
     }
 
     return deferred.promise
@@ -145,13 +148,16 @@ class Promise {
    * @returns Promise
    */
   always(callback: function) {
-    return self.then(@(value) {
-      callback()
-      return value
-    }, @(error) {
-      callback()
-      raise error
-    })
+    return self.then(
+      @(value) {
+        callback()
+        return value
+      },
+      @(error) {
+        callback()
+        raise error
+      },
+    )
   }
 
   /**
@@ -273,11 +279,14 @@ def _run(on_value, on_error, next, resolved: bool, value, error) {
   }
 
   if instance_of(result, Promise) {
-    result.then(@(inner) {
-      next.resolve(inner)
-    }, @(inner) {
-      next.reject(inner)
-    })
+    result.then(
+      @(inner) {
+        next.resolve(inner)
+      },
+      @(inner) {
+        next.reject(inner)
+      },
+    )
   } else {
     next.resolve(result)
   }

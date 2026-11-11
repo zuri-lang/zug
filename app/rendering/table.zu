@@ -68,7 +68,9 @@ class ColumnWidth {
     var share = factor == nil ? 1 : factor
 
     if !(share > 0) {
-      raise ValueError('a flexible column needs a factor above zero, got ${share}')
+      raise ValueError(
+        'a flexible column needs a factor above zero, got ${share}',
+      )
     }
 
     return ColumnWidth('flex', share)
@@ -102,15 +104,15 @@ class ColumnWidth {
   }
 
   @eq(other) {
-    return instance_of(other, ColumnWidth)
-      and self.kind == other.kind
-      and self.value == other.value
+    return instance_of(other, ColumnWidth) and
+        self.kind == other.kind and
+        self.value == other.value
   }
 
   @to_string() {
     return self.kind == 'fit'
-      ? 'ColumnWidth.fit()'
-      : 'ColumnWidth.${self.kind}(${self.value})'
+        ? 'ColumnWidth.fit()'
+        : 'ColumnWidth.${self.kind}(${self.value})'
   }
 }
 
@@ -183,14 +185,17 @@ class RenderTable < RenderObject {
    * @param number row_spacing
    */
   configure(
-    row_lengths: list, columns: list, align_items: string,
-    column_spacing: number, row_spacing: number,
+    row_lengths: list,
+    columns: list,
+    align_items: string,
+    column_spacing: number,
+    row_spacing: number,
   ) {
-    if _same(row_lengths, self.row_lengths)
-      and _same(columns, self.columns)
-      and align_items == self.align_items
-      and column_spacing == self.column_spacing
-      and row_spacing == self.row_spacing {
+    if _same(row_lengths, self.row_lengths) and
+        _same(columns, self.columns) and
+        align_items == self.align_items and
+        column_spacing == self.column_spacing and
+        row_spacing == self.row_spacing {
       return
     }
 
@@ -226,8 +231,8 @@ class RenderTable < RenderObject {
 
   _width_of(column: number) {
     return column < self.columns.length()
-      ? self.columns[column]
-      : _DEFAULT_WIDTH
+        ? self.columns[column]
+        : _DEFAULT_WIDTH
   }
 
   # The children row by row, with each child's cell recorded.
@@ -292,9 +297,7 @@ class RenderTable < RenderObject {
           widths.append(rule.value)
         }
         when 'fraction' {
-          widths.append(
-            bounded ? rule.value * width : _widest(cells[c], true),
-          )
+          widths.append(bounded ? rule.value * width : _widest(cells[c], true))
         }
         when 'fit' {
           widths.append(_widest(cells[c], true))
@@ -363,7 +366,8 @@ class RenderTable < RenderObject {
     var c = self.constraints
     var rows = self._rows()
     var widths = self._column_widths(
-      rows, c.has_bounded_width() ? c.max_width : INFINITY,
+      rows,
+      c.has_bounded_width() ? c.max_width : INFINITY,
     )
     var lefts = []
     var x = 0
@@ -384,11 +388,13 @@ class RenderTable < RenderObject {
       }
     }
 
-    if c.has_bounded_width()
-      and content_width > c.max_width + 0.5
-      and !self._overflow_reported {
+    if c.has_bounded_width() and
+        content_width > c.max_width + 0.5 and
+        !self._overflow_reported {
       self._overflow_reported = true
-      io.stderr.write('zug: a Table overflowed by ${(content_width - c.max_width).round()} points; its columns do not fit in ${c}\n')
+      io.stderr.write(
+        'zug: a Table overflowed by ${(content_width - c.max_width).round()} points; its columns do not fit in ${c}\n',
+      )
     }
 
     self.size = c.constrain(Size(content_width, top))
@@ -505,8 +511,8 @@ class RenderTable < RenderObject {
         var cell = widths[child.parent_data.column]
         height = height.max(
           largest
-            ? child.max_intrinsic_height(cell)
-            : child.min_intrinsic_height(cell),
+              ? child.max_intrinsic_height(cell)
+              : child.min_intrinsic_height(cell),
         )
       }
 
@@ -548,8 +554,8 @@ def _widest(cells: list, largest: bool) {
   for child in cells {
     widest = widest.max(
       largest
-        ? child.max_intrinsic_width(INFINITY)
-        : child.min_intrinsic_width(INFINITY),
+          ? child.max_intrinsic_width(INFINITY)
+          : child.min_intrinsic_width(INFINITY),
     )
   }
 

@@ -309,24 +309,30 @@ class PromiseBuilderState < State {
     var promise = self.widget.promise
     self.snapshot = PromiseSnapshot(
       promise.is_pending()
-        ? 'pending'
-        : promise.is_resolved() ? 'resolved' : 'rejected',
-      promise.value(), promise.error(),
+          ? 'pending'
+          : promise.is_resolved()
+          ? 'resolved'
+          : 'rejected',
+      promise.value(),
+      promise.error(),
     )
 
-    promise.then(@(value) {
-      if self.mounted() and self.widget.promise == promise {
-        self.set_state(@{
-          self.snapshot = PromiseSnapshot('resolved', value, nil)
-        })
-      }
-    }, @(error) {
-      if self.mounted() and self.widget.promise == promise {
-        self.set_state(@{
-          self.snapshot = PromiseSnapshot('rejected', nil, error)
-        })
-      }
-    })
+    promise.then(
+      @(value) {
+        if self.mounted() and self.widget.promise == promise {
+          self.set_state(@{
+            self.snapshot = PromiseSnapshot('resolved', value, nil)
+          })
+        }
+      },
+      @(error) {
+        if self.mounted() and self.widget.promise == promise {
+          self.set_state(@{
+            self.snapshot = PromiseSnapshot('rejected', nil, error)
+          })
+        }
+      },
+    )
   }
 
   build(context) {

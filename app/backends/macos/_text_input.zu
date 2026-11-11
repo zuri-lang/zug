@@ -10,9 +10,26 @@
 import ffi
 import .. ..foundation { Size, Constraints }
 import ._runtime {
-  cls, sel, send, send_void, send_void_id, send_void_bool, send_void_int,
-  send_void_uint, send_size, send_int, typed, ns_string, zuri_string,
-  retain, rect, create_with_frame, define_class, ns_array, NSRange, CGSize,
+  cls,
+  sel,
+  send,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_void_uint,
+  send_size,
+  send_int,
+  typed,
+  ns_string,
+  zuri_string,
+  retain,
+  rect,
+  create_with_frame,
+  define_class,
+  ns_array,
+  NSRange,
+  CGSize,
   CGPoint,
 }
 import ._classes { register, unregister, host_for, shared_target, B }
@@ -22,8 +39,16 @@ import ._views { MacView, control_size }
 var _cancel = sel('cancelOperation:')
 
 var _key_event = typed(ffi.ptr, [
-  ffi.ulong, CGPoint, ffi.ulong, ffi.double, ffi.long, ffi.ptr, ffi.ptr,
-  ffi.ptr, ffi.bool, ffi.ushort,
+  ffi.ulong,
+  CGPoint,
+  ffi.ulong,
+  ffi.double,
+  ffi.long,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.bool,
+  ffi.ushort,
 ])
 
 # Offers Escape to the key equivalents in the window of `view`, which is
@@ -38,13 +63,21 @@ def _press_cancel(view) {
   var escape = ns_string('\u001b')
   var event = _key_event(
     cls('NSEvent'),
-    sel('keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:'),
-    10, { x: 0, y: 0 }, 0, 0, send_int(window, 'windowNumber'), nil, escape,
-    escape, false, 53,
+    sel(
+      'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
+    ),
+    10,
+    { x: 0, y: 0 },
+    0,
+    0,
+    send_int(window, 'windowNumber'),
+    nil,
+    escape,
+    escape,
+    false,
+    53,
   )
-  return typed(ffi.bool, [ffi.ptr])(
-    window, sel('performKeyEquivalent:'), event,
-  )
+  return typed(ffi.bool, [ffi.ptr])(window, sel('performKeyEquivalent:'), event)
 }
 
 /**
@@ -53,29 +86,46 @@ def _press_cancel(view) {
  * @type Pointer
  */
 var ZugTextDelegate = define_class('ZugTextDelegate', 'NSObject', {
-  'controlTextDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'controlTextDidChange:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.text_changed()
-    }
-  }],
-  'controlTextDidBeginEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.text_changed()
+      }
+    },
+  ],
+  'controlTextDidBeginEditing:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.fire('focus_changed', { focused: true })
-    }
-  }],
-  'controlTextDidEndEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.fire('focus_changed', { focused: true })
+      }
+    },
+  ],
+  'controlTextDidEndEditing:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.fire('focus_changed', { focused: false })
-    }
-  }],
+      if host != nil {
+        host.fire('focus_changed', { focused: false })
+      }
+    },
+  ],
   'control:textView:doCommandBySelector:': [
-    '${B}@:@@:', ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr],
+    '${B}@:@@:',
+    ffi.bool,
+    [ffi.ptr, ffi.ptr, ffi.ptr],
     @(this, control, view, command) {
       var host = host_for(control)
 
@@ -84,10 +134,14 @@ var ZugTextDelegate = define_class('ZugTextDelegate', 'NSObject', {
       }
 
       return false
-    }, false,
+    },
+    false,
   ],
   'textView:doCommandBySelector:': [
-    '${B}@:@:', ffi.bool, [ffi.ptr, ffi.ptr], @(this, view, command) {
+    '${B}@:@:',
+    ffi.bool,
+    [ffi.ptr, ffi.ptr],
+    @(this, view, command) {
       var host = host_for(view)
 
       if host != nil and command.address() == _cancel.address() {
@@ -95,36 +149,57 @@ var ZugTextDelegate = define_class('ZugTextDelegate', 'NSObject', {
       }
 
       return false
-    }, false,
+    },
+    false,
   ],
-  'textDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'textDidChange:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.text_changed()
-    }
-  }],
-  'textDidBeginEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.text_changed()
+      }
+    },
+  ],
+  'textDidBeginEditing:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.fire('focus_changed', { focused: true })
-    }
-  }],
-  'textDidEndEditing:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.fire('focus_changed', { focused: true })
+      }
+    },
+  ],
+  'textDidEndEditing:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.fire('focus_changed', { focused: false })
-    }
-  }],
-  'comboBoxSelectionDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+      if host != nil {
+        host.fire('focus_changed', { focused: false })
+      }
+    },
+  ],
+  'comboBoxSelectionDidChange:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.combo_selected()
-    }
-  }],
+      if host != nil {
+        host.combo_selected()
+      }
+    },
+  ],
 })
 
 var _delegate = nil
@@ -184,14 +259,16 @@ class MacTextField < MacView {
 
         if current != value {
           send_void_id(
-            self.native, 'setStringValue:',
+            self.native,
+            'setStringValue:',
             ns_string(value == nil ? '' : value),
           )
         }
       }
       when 'placeholder' {
         send_void_id(
-          self.native, 'setPlaceholderString:',
+          self.native,
+          'setPlaceholderString:',
           value == nil ? nil : ns_string(value),
         )
       }
@@ -209,7 +286,9 @@ class MacTextField < MacView {
         # NSTextFieldSquareBezel 0, RoundedBezel 1.
         if value != 'none' {
           send_void_uint(
-            self.native, 'setBezelStyle:', value == 'square' ? 0 : 1,
+            self.native,
+            'setBezelStyle:',
+            value == 'square' ? 0 : 1,
           )
         }
       }
@@ -221,10 +300,11 @@ class MacTextField < MacView {
         send_void_id(self.native, 'setFont:', ns_font(style, nil))
         var color = style.get('color')
         send_void_id(
-          self.native, 'setTextColor:',
+          self.native,
+          'setTextColor:',
           color == nil
-            ? send(cls('NSColor'), 'controlTextColor')
-            : ns_color(color),
+              ? send(cls('NSColor'), 'controlTextColor')
+              : ns_color(color),
         )
       }
       when 'selection' {
@@ -233,7 +313,8 @@ class MacTextField < MacView {
       when 'items' {
         send_void(self.native, 'removeAllItems')
         send_void_id(
-          self.native, 'addItemsWithObjectValues:',
+          self.native,
+          'addItemsWithObjectValues:',
           ns_array(value.map(@(item) => ns_string(item))),
         )
       }
@@ -263,10 +344,10 @@ class MacTextField < MacView {
     }
 
     if editor != nil {
-      _set_selected_range(
-        editor, sel('setSelectedRange:'),
-        { location: request[0], length: request[1] - request[0] },
-      )
+      _set_selected_range(editor, sel('setSelectedRange:'), {
+        location: request[0],
+        length: request[1] - request[0],
+      })
     }
   }
 
@@ -379,7 +460,9 @@ class MacTextArea < MacView {
 
         if current != value {
           send_void_id(
-            self.text_view, 'setString:', ns_string(value == nil ? '' : value),
+            self.text_view,
+            'setString:',
+            ns_string(value == nil ? '' : value),
           )
         }
       }
@@ -391,7 +474,8 @@ class MacTextArea < MacView {
         send_void_id(self.text_view, 'setFont:', ns_font(style, nil))
         var color = style.get('color')
         send_void_id(
-          self.text_view, 'setTextColor:',
+          self.text_view,
+          'setTextColor:',
           color == nil ? send(cls('NSColor'), 'textColor') : ns_color(color),
         )
       }
@@ -399,15 +483,17 @@ class MacTextArea < MacView {
         var container = send(self.text_view, 'textContainer')
         send_void_bool(container, 'setWidthTracksTextView:', value == true)
         send_void_bool(
-          self.text_view, 'setHorizontallyResizable:', value != true,
+          self.text_view,
+          'setHorizontallyResizable:',
+          value != true,
         )
         send_void_bool(self.native, 'setHasHorizontalScroller:', value != true)
 
         if value != true {
-          typed(ffi.void, [CGSize])(
-            container, sel('setContainerSize:'),
-            { width: 10000000, height: 10000000 },
-          )
+          typed(ffi.void, [CGSize])(container, sel('setContainerSize:'), {
+            width: 10000000,
+            height: 10000000,
+          })
         }
       }
       when 'bordered' {
@@ -416,10 +502,10 @@ class MacTextArea < MacView {
       }
       when 'selection' {
         if value != nil {
-          _set_selected_range(
-            self.text_view, sel('setSelectedRange:'),
-            { location: value[0], length: value[1] - value[0] },
-          )
+          _set_selected_range(self.text_view, sel('setSelectedRange:'), {
+            location: value[0],
+            length: value[1] - value[0],
+          })
         }
       }
     }
@@ -456,13 +542,10 @@ class MacTextArea < MacView {
   text_changed() {
     var text = zuri_string(send(self.text_view, 'string'))
     var range = _selected_range(self.text_view, sel('selectedRange'))
-    self.fire(
-      'changed',
-      {
-        text: text == nil ? '' : text,
-        selection: [range.location, range.location + range.length],
-      },
-    )
+    self.fire('changed', {
+      text: text == nil ? '' : text,
+      selection: [range.location, range.location + range.length],
+    })
   }
 
   before_destroy() {

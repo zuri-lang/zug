@@ -16,7 +16,8 @@
 import ..foundation { Key }
 import ..rendering { RenderHost, RenderHostProxy }
 import .framework {
-  LeafRenderObjectWidget, SingleChildRenderObjectWidget,
+  LeafRenderObjectWidget,
+  SingleChildRenderObjectWidget,
   MultiChildRenderObjectWidget,
 }
 
@@ -228,7 +229,9 @@ class SingleChildHostWidget < SingleChildRenderObjectWidget {
 
   create_render_object(context) {
     return self.make_render_host(
-      self.kind(), self._all_props(context), _handlers_of(self),
+      self.kind(),
+      self._all_props(context),
+      _handlers_of(self),
     )
   }
 
@@ -301,7 +304,9 @@ class MultiChildHostWidget < MultiChildRenderObjectWidget {
 
   create_render_object(context) {
     return self.make_render_host(
-      self.kind(), self._all_props(context), _handlers_of(self),
+      self.kind(),
+      self._all_props(context),
+      _handlers_of(self),
     )
   }
 

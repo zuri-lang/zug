@@ -15,9 +15,8 @@ describe('format_number', @{
   it('groups thousands, or not', @{
     expect(format_number(1234567.891, plain)).to_be('1,234,567.891')
     expect(format_number(-1234, plain)).to_be('-1,234')
-    expect(format_number(
-      1234567, NumberFormat({ grouping: false }),
-    )).to_be('1234567')
+    expect(format_number(1234567, NumberFormat({ grouping: false })))
+        .to_be('1234567')
   })
 
   it('switches to scientific notation for very large and small values', @{
@@ -38,9 +37,8 @@ describe('format_number', @{
   })
 
   it('honours fewer significant digits', @{
-    expect(format_number(
-      1 / 3, NumberFormat({ significant: 6 }),
-    )).to_be('0.333333')
+    expect(format_number(1 / 3, NumberFormat({ significant: 6 })))
+        .to_be('0.333333')
   })
 })
 

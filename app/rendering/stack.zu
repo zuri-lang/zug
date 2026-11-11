@@ -3,7 +3,12 @@
  */
 
 import ..foundation {
-  Point, Size, Constraints, Alignment, INFINITY, LayoutError,
+  Point,
+  Size,
+  Constraints,
+  Alignment,
+  INFINITY,
+  LayoutError,
 }
 import .object { RenderObject, ParentData }
 
@@ -26,12 +31,12 @@ class StackParentData < ParentData {
    * @returns bool
    */
   is_positioned() {
-    return self.left != nil
-      or self.top != nil
-      or self.right != nil
-      or self.bottom != nil
-      or self.width != nil
-      or self.height != nil
+    return self.left != nil or
+        self.top != nil or
+        self.right != nil or
+        self.bottom != nil or
+        self.width != nil or
+        self.height != nil
   }
 }
 
@@ -120,7 +125,8 @@ class RenderStack < RenderObject {
 
       if !data.is_positioned() {
         self.place_child(
-          child, self.alignment.offset_for(child.size, self.size),
+          child,
+          self.alignment.offset_for(child.size, self.size),
         )
         continue
       }

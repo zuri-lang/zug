@@ -22,7 +22,12 @@
  */
 
 import ..foundation {
-  Color, Size, ValueKey, Deferred, LifecycleError, check_options,
+  Color,
+  Size,
+  ValueKey,
+  Deferred,
+  LifecycleError,
+  check_options,
 }
 import ..painting { TextStyle }
 import ..rendering { RenderWindow }
@@ -105,16 +110,13 @@ def _window_host(context) {
  * @returns Promise
  */
 def show_alert(context, options: dict) {
-  var o = check_options(
-    options, 'show_alert',
-    {
-      title: 'string',
-      message: 'string',
-      style: 'string',
-      buttons: 'list',
-      suppression: 'string',
-    },
-  )
+  var o = check_options(options, 'show_alert', {
+    title: 'string',
+    message: 'string',
+    style: 'string',
+    buttons: 'list',
+    suppression: 'string',
+  })
 
   if o.get('title') == nil {
     raise ValueError('show_alert needs a title')
@@ -146,17 +148,14 @@ def show_alert(context, options: dict) {
  * @returns Promise
  */
 def pick_files(context, options: ?dict) {
-  var o = check_options(
-    options, 'pick_files',
-    {
-      title: 'string',
-      types: 'list',
-      multiple: 'bool',
-      directories: 'bool',
-      files: 'bool',
-      directory: 'string',
-    },
-  )
+  var o = check_options(options, 'pick_files', {
+    title: 'string',
+    types: 'list',
+    multiple: 'bool',
+    directories: 'bool',
+    files: 'bool',
+    directory: 'string',
+  })
   var deferred = Deferred()
   var spec = {
     title: o.get('title'),
@@ -183,10 +182,12 @@ def pick_files(context, options: ?dict) {
  * @returns Promise
  */
 def save_file(context, options: ?dict) {
-  var o = check_options(
-    options, 'save_file',
-    { title: 'string', name: 'string', types: 'list', directory: 'string' },
-  )
+  var o = check_options(options, 'save_file', {
+    title: 'string',
+    name: 'string',
+    types: 'list',
+    directory: 'string',
+  })
   var deferred = Deferred()
   var spec = {
     title: o.get('title'),
@@ -256,7 +257,9 @@ class _Dialog {
     }
 
     var window = Window(
-      self.title, Builder(@(context) => dialog.builder(close)), options,
+      self.title,
+      Builder(@(context) => dialog.builder(close)),
+      options,
     )
     window.sheet_parent = self.under
     return window
@@ -327,9 +330,9 @@ def show_dialog(context, builder: function, options: ?dict) {
   }
 
   var deferred = Deferred()
-  app.open_dialog(_Dialog(
-    o.get('title', ''), builder, o.get('size'), under, app, deferred,
-  ))
+  app.open_dialog(
+    _Dialog(o.get('title', ''), builder, o.get('size'), under, app, deferred),
+  )
   return deferred.promise
 }
 
@@ -381,9 +384,10 @@ def _with_font(base, font: dict) {
  * @returns Promise
  */
 def pick_font(context, options: ?dict) {
-  var o = check_options(
-    options, 'pick_font', { style: TextStyle, on_changed: 'function' },
-  )
+  var o = check_options(options, 'pick_font', {
+    style: TextStyle,
+    on_changed: 'function',
+  })
   var base = o.get('style', TextStyle())
   var on_changed = o.get('on_changed')
   var deferred = Deferred()
@@ -399,13 +403,18 @@ def pick_font(context, options: ?dict) {
 
   var spec = { font }
 
-  _runtime().backend.pick_font(_window_host(context), spec, @(font) {
-    if on_changed != nil {
-      on_changed(_with_font(base, font))
-    }
-  }, @(font) {
-    deferred.resolve(font == nil ? nil : _with_font(base, font))
-  })
+  _runtime().backend.pick_font(
+    _window_host(context),
+    spec,
+    @(font) {
+      if on_changed != nil {
+        on_changed(_with_font(base, font))
+      }
+    },
+    @(font) {
+      deferred.resolve(font == nil ? nil : _with_font(base, font))
+    },
+  )
   return deferred.promise
 }
 
@@ -422,21 +431,27 @@ def pick_font(context, options: ?dict) {
  * @returns Promise
  */
 def pick_color(context, options: ?dict) {
-  var o = check_options(
-    options, 'pick_color',
-    { color: Color, alpha: 'bool', on_changed: 'function' },
-  )
+  var o = check_options(options, 'pick_color', {
+    color: Color,
+    alpha: 'bool',
+    on_changed: 'function',
+  })
   var on_changed = o.get('on_changed')
   var deferred = Deferred()
   var spec = { color: o.get('color'), alpha: o.get('alpha', false) }
 
-  _runtime().backend.pick_color(_window_host(context), spec, @(color) {
-    if on_changed != nil {
-      on_changed(color)
-    }
-  }, @(color) {
-    deferred.resolve(color)
-  })
+  _runtime().backend.pick_color(
+    _window_host(context),
+    spec,
+    @(color) {
+      if on_changed != nil {
+        on_changed(color)
+      }
+    },
+    @(color) {
+      deferred.resolve(color)
+    },
+  )
   return deferred.promise
 }
 

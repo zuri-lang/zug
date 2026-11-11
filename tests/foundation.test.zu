@@ -39,9 +39,8 @@ describe('Size', @{
 describe('Rect', @{
   it('reports its edges', @{
     var rect = Rect(10, 20, 30, 40)
-    expect([
-      rect.left(), rect.top(), rect.right(), rect.bottom(),
-    ]).to_equal([10, 20, 40, 60])
+    expect([rect.left(), rect.top(), rect.right(), rect.bottom()])
+        .to_equal([10, 20, 40, 60])
   })
 
   it('intersects and unions', @{
@@ -54,19 +53,16 @@ describe('Rect', @{
   })
 
   it('deflates by insets', @{
-    expect(Rect(
-      0, 0, 100, 50,
-    ).deflate(EdgeInsets.all(10))).to_equal(Rect(10, 10, 80, 30))
+    expect(Rect(0, 0, 100, 50).deflate(EdgeInsets.all(10)))
+        .to_equal(Rect(10, 10, 80, 30))
   })
 })
 
 describe('EdgeInsets', @{
   it('builds from factories', @{
     expect(EdgeInsets.all(4)).to_equal(EdgeInsets(4, 4, 4, 4))
-    expect(EdgeInsets.symmetric({
-      horizontal: 8,
-      vertical: 2,
-    })).to_equal(EdgeInsets(8, 2, 8, 2))
+    expect(EdgeInsets.symmetric({ horizontal: 8, vertical: 2 }))
+        .to_equal(EdgeInsets(8, 2, 8, 2))
     expect(EdgeInsets.only({ top: 3 })).to_equal(EdgeInsets(0, 3, 0, 0))
   })
 
@@ -95,9 +91,8 @@ describe('Alignment', @{
     var box = Size(100, 50)
     expect(Alignment.TOP_LEFT.offset_for(child, box)).to_equal(Point(0, 0))
     expect(Alignment.CENTER.offset_for(child, box)).to_equal(Point(45, 20))
-    expect(Alignment.BOTTOM_RIGHT.offset_for(
-      child, box,
-    )).to_equal(Point(90, 40))
+    expect(Alignment.BOTTOM_RIGHT.offset_for(child, box))
+        .to_equal(Point(90, 40))
   })
 })
 
@@ -105,18 +100,16 @@ describe('Constraints', @{
   it('constrains sizes into range', @{
     var loose = Constraints.loose(Size(300, 200))
     expect(loose.constrain(Size(500, 50))).to_equal(Size(300, 50))
-    expect(Constraints
-      .tight(Size(10, 20))
-      .constrain(Size(0, 0))).to_equal(Size(10, 20))
+    expect(Constraints.tight(Size(10, 20)).constrain(Size(0, 0)))
+        .to_equal(Size(10, 20))
   })
 
   it('knows tight and bounded axes', @{
     expect(Constraints.tight(Size(1, 1)).is_tight()).to_be_true()
     expect(Constraints.UNBOUNDED.has_bounded_width()).to_be_false()
     expect(Constraints.tight_for({ width: 50 }).has_tight_width()).to_be_true()
-    expect(Constraints
-      .tight_for({ width: 50 })
-      .has_bounded_height()).to_be_false()
+    expect(Constraints.tight_for({ width: 50 }).has_bounded_height())
+        .to_be_false()
   })
 
   it('deflates by insets without going negative', @{
@@ -126,21 +119,21 @@ describe('Constraints', @{
 
   it('enforces another range', @{
     var inner = Constraints(0, 1000, 0, 1000)
-    expect(inner.enforce(Constraints(
-      50, 100, 10, 20,
-    ))).to_equal(Constraints(50, 100, 10, 20))
+    expect(inner.enforce(Constraints(50, 100, 10, 20)))
+        .to_equal(Constraints(50, 100, 10, 20))
   })
 
   it('tightens within its bounds', @{
-    expect(Constraints(
-      0, 100, 0, 100,
-    ).tighten({ width: 500 })).to_equal(Constraints(100, 100, 0, 100))
+    expect(Constraints(0, 100, 0, 100).tighten({ width: 500 }))
+        .to_equal(Constraints(100, 100, 0, 100))
   })
 
   it('keeps aspect ratio where it can', @{
-    expect(Constraints
-      .loose(Size(100, 100))
-      .constrain_keeping_aspect(Size(200, 100))).to_equal(Size(100, 50))
+    expect(
+      Constraints.loose(Size(100, 100))
+          .constrain_keeping_aspect(Size(200, 100)),
+    )
+        .to_equal(Size(100, 50))
   })
 
   it('refuses a minimum above its maximum', @{
@@ -185,9 +178,8 @@ describe('Color', @{
   })
 
   it('mixes fixed colours', @{
-    expect(Color.lerp(
-      Color.BLACK, Color.WHITE, 0.5,
-    )).to_equal(Color(127.5, 127.5, 127.5, 1))
+    expect(Color.lerp(Color.BLACK, Color.WHITE, 0.5))
+        .to_equal(Color(127.5, 127.5, 127.5, 1))
   })
 
   it('refuses out of range components', @{

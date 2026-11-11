@@ -85,14 +85,17 @@ class RenderFlex < RenderObject {
    * @param number spacing
    */
   configure(
-    axis: string, justify: string, align_items: string, shrink_wrap: bool,
+    axis: string,
+    justify: string,
+    align_items: string,
+    shrink_wrap: bool,
     spacing: number,
   ) {
-    if axis != self.axis
-      or justify != self.justify
-      or align_items != self.align_items
-      or shrink_wrap != self.shrink_wrap
-      or spacing != self.spacing {
+    if axis != self.axis or
+        justify != self.justify or
+        align_items != self.align_items or
+        shrink_wrap != self.shrink_wrap or
+        spacing != self.spacing {
       self.axis = axis
       self.justify = justify
       self.align_items = align_items
@@ -121,7 +124,10 @@ class RenderFlex < RenderObject {
   }
 
   _constraints(
-    min_main: number, max_main: number, min_cross: number, max_cross: number,
+    min_main: number,
+    max_main: number,
+    min_cross: number,
+    max_cross: number,
   ) {
     if self.axis == 'horizontal' {
       return Constraints(min_main, max_main, min_cross, max_cross)
@@ -141,7 +147,9 @@ class RenderFlex < RenderObject {
     var gaps = count > 1 ? self.spacing * (count - 1) : 0
 
     if stretch and max_cross == INFINITY {
-      raise LayoutError('a ${horizontal ? "Row" : "Column"} with align_items STRETCH needs a bounded ${horizontal ? "height" : "width"}, but was given ${c}')
+      raise LayoutError(
+        'a ${horizontal ? "Row" : "Column"} with align_items STRETCH needs a bounded ${horizontal ? "height" : "width"}, but was given ${c}',
+      )
     }
 
     var min_cross = stretch ? max_cross : 0
@@ -169,8 +177,8 @@ class RenderFlex < RenderObject {
     if total_flex > 0 {
       if !can_flex {
         raise LayoutError(
-          'a ${horizontal ? "Row" : "Column"} with Expanded or Flexible children was given an unbounded ${horizontal ? "width" : "height"}; '
-            + 'there is no spare space to share. Give it a bounded size, or use shrink_wrap without flexible children',
+          'a ${horizontal ? "Row" : "Column"} with Expanded or Flexible children was given an unbounded ${horizontal ? "width" : "height"}; ' +
+              'there is no spare space to share. Give it a bounded size, or use shrink_wrap without flexible children',
         )
       }
 
@@ -188,7 +196,8 @@ class RenderFlex < RenderObject {
         shared += extent
         var min_main = child.parent_data.fit == 'tight' ? extent : 0
         child.layout(
-          self._constraints(min_main, extent, min_cross, max_cross), true,
+          self._constraints(min_main, extent, min_cross, max_cross),
+          true,
         )
         flex_allocated += self._main(child.size)
         cross_size = cross_size.max(self._cross(child.size))
@@ -225,7 +234,9 @@ class RenderFlex < RenderObject {
 
     if remaining < -0.5 and !self._overflow_reported {
       self._overflow_reported = true
-      io.stderr.write('zug: a ${horizontal ? "Row" : "Column"} overflowed by ${(-remaining).round()} points; its children do not fit in ${c}\n')
+      io.stderr.write(
+        'zug: a ${horizontal ? "Row" : "Column"} overflowed by ${(-remaining).round()} points; its children do not fit in ${c}\n',
+      )
     }
 
     remaining = remaining.max(0)
@@ -301,12 +312,12 @@ class RenderFlex < RenderObject {
 
       if self.axis == 'horizontal' {
         size = use_max
-          ? child.max_intrinsic_width(extent)
-          : child.min_intrinsic_width(extent)
+            ? child.max_intrinsic_width(extent)
+            : child.min_intrinsic_width(extent)
       } else {
         size = use_max
-          ? child.max_intrinsic_height(extent)
-          : child.min_intrinsic_height(extent)
+            ? child.max_intrinsic_height(extent)
+            : child.min_intrinsic_height(extent)
       }
 
       if flex > 0 {
@@ -340,19 +351,19 @@ class RenderFlex < RenderObject {
       }
 
       var main = horizontal
-        ? child.max_intrinsic_width(INFINITY)
-        : child.max_intrinsic_height(INFINITY)
+          ? child.max_intrinsic_width(INFINITY)
+          : child.max_intrinsic_height(INFINITY)
       inflexible += main
       var child_cross = 0
 
       if horizontal {
         child_cross = use_max
-          ? child.max_intrinsic_height(main)
-          : child.min_intrinsic_height(main)
+            ? child.max_intrinsic_height(main)
+            : child.min_intrinsic_height(main)
       } else {
         child_cross = use_max
-          ? child.max_intrinsic_width(main)
-          : child.min_intrinsic_width(main)
+            ? child.max_intrinsic_width(main)
+            : child.min_intrinsic_width(main)
       }
 
       cross = cross.max(child_cross)
@@ -361,8 +372,8 @@ class RenderFlex < RenderObject {
     var count = self.children.length()
     var gaps = count > 1 ? self.spacing * (count - 1) : 0
     var free = extent == INFINITY
-      ? INFINITY
-      : (extent - inflexible - gaps).max(0)
+        ? INFINITY
+        : (extent - inflexible - gaps).max(0)
     var per_flex = total_flex > 0 ? free / total_flex : 0
 
     for child in self.children {
@@ -377,12 +388,12 @@ class RenderFlex < RenderObject {
 
       if horizontal {
         child_cross = use_max
-          ? child.max_intrinsic_height(main)
-          : child.min_intrinsic_height(main)
+            ? child.max_intrinsic_height(main)
+            : child.min_intrinsic_height(main)
       } else {
         child_cross = use_max
-          ? child.max_intrinsic_width(main)
-          : child.min_intrinsic_width(main)
+            ? child.max_intrinsic_width(main)
+            : child.min_intrinsic_width(main)
       }
 
       cross = cross.max(child_cross)
@@ -393,26 +404,26 @@ class RenderFlex < RenderObject {
 
   compute_min_intrinsic_width(height: number) {
     return self.axis == 'horizontal'
-      ? self._main_intrinsic(height, false)
-      : self._cross_intrinsic(height, false)
+        ? self._main_intrinsic(height, false)
+        : self._cross_intrinsic(height, false)
   }
 
   compute_max_intrinsic_width(height: number) {
     return self.axis == 'horizontal'
-      ? self._main_intrinsic(height, true)
-      : self._cross_intrinsic(height, true)
+        ? self._main_intrinsic(height, true)
+        : self._cross_intrinsic(height, true)
   }
 
   compute_min_intrinsic_height(width: number) {
     return self.axis == 'vertical'
-      ? self._main_intrinsic(width, false)
-      : self._cross_intrinsic(width, false)
+        ? self._main_intrinsic(width, false)
+        : self._cross_intrinsic(width, false)
   }
 
   compute_max_intrinsic_height(width: number) {
     return self.axis == 'vertical'
-      ? self._main_intrinsic(width, true)
-      : self._cross_intrinsic(width, true)
+        ? self._main_intrinsic(width, true)
+        : self._cross_intrinsic(width, true)
   }
 
   compute_baseline() {

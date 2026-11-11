@@ -163,7 +163,10 @@ def storage_dir() {
   }
 
   return os.join_paths(
-    os.get_env('HOME'), 'Library', 'Application Support', 'zug Calculator',
+    os.get_env('HOME'),
+    'Library',
+    'Application Support',
+    'zug Calculator',
   )
 }
 
@@ -197,9 +200,9 @@ def load_state(dir: string) {
   var history = []
 
   for entry in data.get('history', []) {
-    if is_dict(entry)
-      and is_string(entry.get('expression'))
-      and is_number(entry.get('result')) {
+    if is_dict(entry) and
+        is_string(entry.get('expression')) and
+        is_number(entry.get('result')) {
       history.append({ expression: entry.expression, result: entry.result })
     }
   }

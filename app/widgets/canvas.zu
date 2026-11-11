@@ -75,7 +75,8 @@ class Canvas < StatelessWidget {
    */
   @new(paint: function, options: ?dict) {
     var o = check_options(
-      options, 'Canvas',
+      options,
+      'Canvas',
       host_options({ repaint: 'any', width: 'number', height: 'number' }),
     )
     self.key = o.get('key')
@@ -250,9 +251,10 @@ class PointerArea < SingleChildHostWidget {
     var menu = o.get('menu')
     return {
       cursor: o.get('cursor'),
-      hover: o.get('on_enter') != nil
-        or o.get('on_exit') != nil
-        or o.get('on_hover') != nil,
+      hover:
+          o.get('on_enter') != nil or
+          o.get('on_exit') != nil or
+          o.get('on_hover') != nil,
       scrolls: o.get('on_scroll') != nil,
       menu: menu == nil ? nil : menu_spec(menu, {}, 'm'),
     }

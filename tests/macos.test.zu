@@ -17,86 +17,142 @@ var suite = enabled ? describe : describe_skip
 var _objc = ffi.open('/usr/lib/libobjc.A.dylib')
 var _sel = _objc.function('sel_registerName', ffi.ptr, [ffi.string])
 var _send = _objc.function('objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr])
-var _send_void_id = _objc.function(
-  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr],
-)
+var _send_void_id = _objc.function('objc_msgSend', ffi.void, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+])
 var _send_long = _objc.function('objc_msgSend', ffi.long, [ffi.ptr, ffi.ptr])
 var _utf8 = _objc.function('objc_msgSend', ffi.string, [ffi.ptr, ffi.ptr])
 var _class = _objc.function('objc_getClass', ffi.ptr, [ffi.string])
-var _send_long_arg = _objc.function(
-  'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long],
-)
-var _send_string_arg = _objc.function(
-  'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.string],
-)
-var _select_rows = _objc.function(
-  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.bool],
-)
+var _send_long_arg = _objc.function('objc_msgSend', ffi.ptr, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.long,
+])
+var _send_string_arg = _objc.function('objc_msgSend', ffi.ptr, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.string,
+])
+var _select_rows = _objc.function('objc_msgSend', ffi.void, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.bool,
+])
 
 # Selects one row of a native table as a click does.
 def select_row(table, row) {
   var indexes = _send_long_arg(
-    _class('NSIndexSet'), _sel('indexSetWithIndex:'), row,
+    _class('NSIndexSet'),
+    _sel('indexSetWithIndex:'),
+    row,
   )
   _select_rows(
-    table, _sel('selectRowIndexes:byExtendingSelection:'), indexes, false,
+    table,
+    _sel('selectRowIndexes:byExtendingSelection:'),
+    indexes,
+    false,
   )
 }
 
 # Types `text` into a native text view at its cursor.
 def type_into(text_view, text) {
   var string = _send_string_arg(
-    _class('NSString'), _sel('stringWithUTF8String:'), text,
+    _class('NSString'),
+    _sel('stringWithUTF8String:'),
+    text,
   )
   _send_void_id(text_view, _sel('insertText:'), string)
 }
 
-var _Point = ffi.struct('KeyPoint').add_field('x', ffi.double).add_field(
-  'y', ffi.double,
-)
+var _Point = ffi
+    .struct('KeyPoint')
+    .add_field('x', ffi.double)
+    .add_field('y', ffi.double)
 var _key_event = _objc.function('objc_msgSend', ffi.ptr, [
-  ffi.ptr, ffi.ptr, ffi.ulong, _Point, ffi.ulong, ffi.double, ffi.long, ffi.ptr,
-  ffi.ptr, ffi.ptr, ffi.bool, ffi.ushort,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ulong,
+  _Point,
+  ffi.ulong,
+  ffi.double,
+  ffi.long,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.bool,
+  ffi.ushort,
 ])
-var _send_bool_id = _objc.function(
-  'objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr, ffi.ptr],
-)
+var _send_bool_id = _objc.function('objc_msgSend', ffi.bool, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+])
 var _Bounds = ffi
-  .struct('KeyBounds')
-  .add_field('x', ffi.double)
-  .add_field('y', ffi.double)
-  .add_field('w', ffi.double)
-  .add_field('h', ffi.double)
+    .struct('KeyBounds')
+    .add_field('x', ffi.double)
+    .add_field('y', ffi.double)
+    .add_field('w', ffi.double)
+    .add_field('h', ffi.double)
 var _bounds = _objc.function('objc_msgSend', _Bounds, [ffi.ptr, ffi.ptr])
-var _convert = _objc.function(
-  'objc_msgSend', _Point, [ffi.ptr, ffi.ptr, _Point, ffi.ptr],
-)
-var _mouse_event = _objc.function('objc_msgSend', ffi.ptr, [
-  ffi.ptr, ffi.ptr, ffi.ulong, _Point, ffi.ulong, ffi.double, ffi.long, ffi.ptr,
-  ffi.long, ffi.long, ffi.float,
+var _convert = _objc.function('objc_msgSend', _Point, [
+  ffi.ptr,
+  ffi.ptr,
+  _Point,
+  ffi.ptr,
 ])
-var _post_event = _objc.function(
-  'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.bool],
-)
+var _mouse_event = _objc.function('objc_msgSend', ffi.ptr, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ulong,
+  _Point,
+  ffi.ulong,
+  ffi.double,
+  ffi.long,
+  ffi.ptr,
+  ffi.long,
+  ffi.long,
+  ffi.float,
+])
+var _post_event = _objc.function('objc_msgSend', ffi.void, [
+  ffi.ptr,
+  ffi.ptr,
+  ffi.ptr,
+  ffi.bool,
+])
 
 # Clicks the middle of a native view with the mouse. The button goes up
 # from the event queue, where the view's tracking looks for it.
 def mouse_click(view) {
   var window = _send(view, _sel('window'))
   var b = _bounds(view, _sel('bounds'))
-  var at = _convert(
-    view, _sel('convertPoint:toView:'),
-    { x: b.x + b.w / 2, y: b.y + b.h / 2 }, nil,
-  )
+  var at = _convert(view, _sel('convertPoint:toView:'), {
+    x: b.x + b.w / 2,
+    y: b.y + b.h / 2,
+  }, nil)
   var number = _send_long(window, _sel('windowNumber'))
   var make = @(type, pressure) => _mouse_event(
     _class('NSEvent'),
-    _sel('mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:'),
-    type, at, 0, 0, number, nil, 0, 1, pressure,
+    _sel(
+      'mouseEventWithType:location:modifierFlags:timestamp:windowNumber:context:eventNumber:clickCount:pressure:',
+    ),
+    type,
+    at,
+    0,
+    0,
+    number,
+    nil,
+    0,
+    1,
+    pressure,
   )
   _post_event(
     _send(_class('NSApplication'), _sel('sharedApplication')),
-    _sel('postEvent:atStart:'), make(2, 0.0), false,
+    _sel('postEvent:atStart:'),
+    make(2, 0.0),
+    false,
   )
   _send_void_id(window, _sel('sendEvent:'), make(1, 1.0))
 }
@@ -106,13 +162,25 @@ def mouse_click(view) {
 # keys while another application is active.
 def _key_down(window, characters, code) {
   var string = _send_string_arg(
-    _class('NSString'), _sel('stringWithUTF8String:'), characters,
+    _class('NSString'),
+    _sel('stringWithUTF8String:'),
+    characters,
   )
   return _key_event(
     _class('NSEvent'),
-    _sel('keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:'),
-    10, { x: 0, y: 0 }, 0, 0, _send_long(window, _sel('windowNumber')), nil,
-    string, string, false, code,
+    _sel(
+      'keyEventWithType:location:modifierFlags:timestamp:windowNumber:context:characters:charactersIgnoringModifiers:isARepeat:keyCode:',
+    ),
+    10,
+    { x: 0, y: 0 },
+    0,
+    0,
+    _send_long(window, _sel('windowNumber')),
+    nil,
+    string,
+    string,
+    false,
+    code,
   )
 }
 
@@ -123,8 +191,8 @@ def send_key(window, characters, code) {
 # The button in a native view, or the views inside it, whose key
 # equivalent is `characters`, or nil.
 def button_for_key(view, characters) {
-  if _send_bool_id(view, _sel('isKindOfClass:'), _class('NSButton'))
-    and native_string(view, 'keyEquivalent') == characters {
+  if _send_bool_id(view, _sel('isKindOfClass:'), _class('NSButton')) and
+      native_string(view, 'keyEquivalent') == characters {
     return view
   }
 
@@ -132,7 +200,8 @@ def button_for_key(view, characters) {
 
   iter var i = 0; i < _send_long(subviews, _sel('count')); i++ {
     var found = button_for_key(
-      _send_long_arg(subviews, _sel('objectAtIndex:'), i), characters,
+      _send_long_arg(subviews, _sel('objectAtIndex:'), i),
+      characters,
     )
 
     if found != nil {
@@ -148,7 +217,9 @@ def button_for_key(view, characters) {
 # test application need not be active while someone uses the machine.
 def press_key_equivalent(window, characters, code) {
   return _send_bool_id(
-    window, _sel('performKeyEquivalent:'), _key_down(window, characters, code),
+    window,
+    _sel('performKeyEquivalent:'),
+    _key_down(window, characters, code),
   )
 }
 
@@ -220,16 +291,24 @@ class ProbeState < State {
   var count = 0
 
   build(context) {
-    return Padding(EdgeInsets.all(10), Column([
-      Text('count ${self.count}'),
-      Button('Press', { on_pressed: @{
-        self.set_state(@{
-          self.count++
-        })
-      } }),
-      Checkbox(false, { label: 'Never', on_changed: @(value) {} }),
-      Box({ width: 50, height: 20, color: Color.RED }),
-    ], { spacing: 8, align_items: AlignItems.START }))
+    return Padding(
+      EdgeInsets.all(10),
+      Column(
+        [
+          Text('count ${self.count}'),
+          Button('Press', {
+            on_pressed: @{
+              self.set_state(@{
+                self.count++
+              })
+            },
+          }),
+          Checkbox(false, { label: 'Never', on_changed: @(value) {} }),
+          Box({ width: 50, height: 20, color: Color.RED }),
+        ],
+        { spacing: 8, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
@@ -248,17 +327,22 @@ class EditorState < State {
 
   build(context) {
     return Column([
-      Expanded(DataTable(
-        [DataColumn('name', 'Name')], 4, @(row, column) => 'row ${row}', {
-          selected: self.selected,
-          on_selection_changed: @(rows) {
-            editor_selections.append(rows)
-            self.set_state(@{
-              self.selected = rows
-            })
+      Expanded(
+        DataTable(
+          [DataColumn('name', 'Name')],
+          4,
+          @(row, column) => 'row ${row}',
+          {
+            selected: self.selected,
+            on_selection_changed: @(rows) {
+              editor_selections.append(rows)
+              self.set_state(@{
+                self.selected = rows
+              })
+            },
           },
-        },
-      )),
+        ),
+      ),
       Expanded(TextArea({ controller: editor_notes })),
     ])
   }
@@ -266,20 +350,24 @@ class EditorState < State {
 
 suite('the macOS backend', @{
   it(
-    'creates native views, routes their actions, and undoes refused changes', @{
+    'creates native views, routes their actions, and undoes refused changes',
+    @{
       var seen = {}
 
       var backend = run_steps(
         App({
           title: 'Probe',
-          windows: [Window('Probe', Probe(), { size: Size(300, 200) })],
+          windows: [
+            Window('Probe', Probe(), { size: Size(300, 200) }),
+          ],
         }),
         [
           @(runtime) {
             var window = runtime.windows()[0]
-            seen['visible'] = _objc.function(
-              'objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr],
-            )(window.view.native, _sel('isVisible'))
+            seen['visible'] = _objc.function('objc_msgSend', ffi.bool, [
+              ffi.ptr,
+              ffi.ptr,
+            ])(window.view.native, _sel('isVisible'))
             seen['content'] = window.view.content_size()
             var button = hosts(runtime, 'button')[0]
             seen['title'] = native_string(button.view.native, 'title')
@@ -288,13 +376,15 @@ suite('the macOS backend', @{
           },
           @(runtime) {
             seen['text'] = native_string(
-              hosts(runtime, 'text')[0].view.native, 'stringValue',
+              hosts(runtime, 'text')[0].view.native,
+              'stringValue',
             )
             click(hosts(runtime, 'checkbox')[0].view.native)
           },
           @(runtime) {
             seen['checkbox_state'] = _send_long(
-              hosts(runtime, 'checkbox')[0].view.native, _sel('state'),
+              hosts(runtime, 'checkbox')[0].view.native,
+              _sel('state'),
             )
             seen['live'] = runtime.backend.live_objects()
           },
@@ -315,29 +405,44 @@ suite('the macOS backend', @{
   it('lays native views out where zug placed them', @{
     var frames = []
     var _frame_type = ffi
-      .struct('R')
-      .add_field('x', ffi.double)
-      .add_field('y', ffi.double)
-      .add_field('w', ffi.double)
-      .add_field('h', ffi.double)
-    var native_frame = _objc.function(
-      'objc_msgSend', _frame_type, [ffi.ptr, ffi.ptr],
-    )
-
-    run_steps(App({ windows: [Window('Layout', Padding(EdgeInsets.all(20), Row([
-      Box({ width: 40, height: 30, color: Color.RED }),
-      Expanded(Box({ height: 30, color: Color.BLUE })),
-    ], {
-      spacing: 10,
-      align_items: AlignItems.START,
-    })), { size: Size(200, 100) })] }), [
-      @(runtime) {
-        for host in hosts(runtime, 'box') {
-          var frame = native_frame(host.view.native, _sel('frame'))
-          frames.append(Rect(frame.x, frame.y, frame.w, frame.h))
-        }
-      },
+        .struct('R')
+        .add_field('x', ffi.double)
+        .add_field('y', ffi.double)
+        .add_field('w', ffi.double)
+        .add_field('h', ffi.double)
+    var native_frame = _objc.function('objc_msgSend', _frame_type, [
+      ffi.ptr,
+      ffi.ptr,
     ])
+
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Layout',
+            Padding(
+              EdgeInsets.all(20),
+              Row(
+                [
+                  Box({ width: 40, height: 30, color: Color.RED }),
+                  Expanded(Box({ height: 30, color: Color.BLUE })),
+                ],
+                { spacing: 10, align_items: AlignItems.START },
+              ),
+            ),
+            { size: Size(200, 100) },
+          ),
+        ],
+      }),
+      [
+        @(runtime) {
+          for host in hosts(runtime, 'box') {
+            var frame = native_frame(host.view.native, _sel('frame'))
+            frames.append(Rect(frame.x, frame.y, frame.w, frame.h))
+          }
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(frames).to_equal([Rect(20, 20, 40, 30), Rect(70, 20, 110, 30)])
@@ -347,7 +452,11 @@ suite('the macOS backend', @{
     var seen = {}
 
     run_steps(
-      App({ windows: [Window('Editor', Editor(), { size: Size(300, 300) })] }),
+      App({
+        windows: [
+          Window('Editor', Editor(), { size: Size(300, 300) }),
+        ],
+      }),
       [
         @(runtime) {
           select_row(hosts(runtime, 'table')[0].view.table, 2)
@@ -357,14 +466,18 @@ suite('the macOS backend', @{
           var table = hosts(runtime, 'table')[0].view.table
           seen['row'] = _send_long(table, _sel('selectedRow'))
           seen['text'] = native_string(
-            hosts(runtime, 'text_area')[0].view.text_view, 'string',
+            hosts(runtime, 'text_area')[0].view.text_view,
+            'string',
           )
         },
       ],
     )
 
     expect(reported).to_be_empty()
-    expect(editor_selections).to_equal([[2]])
+    expect(editor_selections)
+        .to_equal([
+          [2],
+        ])
     expect(seen.row).to_be(2)
     expect(editor_notes.text()).to_be('one two')
     expect(seen.text).to_be('one two')
@@ -374,26 +487,43 @@ suite('the macOS backend', @{
     var keys = []
     var seen = {}
 
-    run_steps(App({ windows: [Window('Keys', KeyListener(Column([
-      Text('42', { selectable: true }),
-    ]), { on_key: @(event) {
-      keys.append(event.key)
-      return true
-    } }), { size: Size(200, 100) })] }), [
-      @(runtime) {
-        mouse_click(hosts(runtime, 'text')[0].view.native)
-      },
-      @(runtime) {
-        var window = runtime.windows()[0].view.native
-        seen['text_focused'] = _send_bool_id(
-          _send(window, _sel('firstResponder')), _sel('isKindOfClass:'),
-          _class('NSTextView'),
-        )
-        send_key(window, '7', 26)
-        send_key(window, '', 123)
-        send_key(window, '\r', 36)
-      },
-    ])
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Keys',
+            KeyListener(
+              Column([
+                Text('42', { selectable: true }),
+              ]),
+              {
+                on_key: @(event) {
+                  keys.append(event.key)
+                  return true
+                },
+              },
+            ),
+            { size: Size(200, 100) },
+          ),
+        ],
+      }),
+      [
+        @(runtime) {
+          mouse_click(hosts(runtime, 'text')[0].view.native)
+        },
+        @(runtime) {
+          var window = runtime.windows()[0].view.native
+          seen['text_focused'] = _send_bool_id(
+            _send(window, _sel('firstResponder')),
+            _sel('isKindOfClass:'),
+            _class('NSTextView'),
+          )
+          send_key(window, '7', 26)
+          send_key(window, '', 123)
+          send_key(window, '\r', 36)
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(seen.text_focused).to_be_true()
@@ -404,28 +534,44 @@ suite('the macOS backend', @{
     var submitted = []
     var seen = {}
 
-    run_steps(App({ windows: [Window('Submit', Builder(@(context) => Column([
-      TextField({ on_submitted: @(text) {
-        submitted.append(text)
-        clear_focus(context)
-      } }),
-    ])), { size: Size(200, 100) })] }), [
-      @(runtime) {
-        mouse_click(hosts(runtime, 'text_field')[0].view.native)
-      },
-      @(runtime) {
-        var window = runtime.windows()[0].view.native
-        send_key(window, '4', 21)
-        send_key(window, '\r', 36)
-      },
-      @(runtime) {
-        var window = runtime.windows()[0].view.native
-        seen['focused'] = _send_bool_id(
-          _send(window, _sel('firstResponder')), _sel('isKindOfClass:'),
-          _class('NSTextView'),
-        )
-      },
-    ])
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Submit',
+            Builder(
+              @(context) => Column([
+                TextField({
+                  on_submitted: @(text) {
+                    submitted.append(text)
+                    clear_focus(context)
+                  },
+                }),
+              ]),
+            ),
+            { size: Size(200, 100) },
+          ),
+        ],
+      }),
+      [
+        @(runtime) {
+          mouse_click(hosts(runtime, 'text_field')[0].view.native)
+        },
+        @(runtime) {
+          var window = runtime.windows()[0].view.native
+          send_key(window, '4', 21)
+          send_key(window, '\r', 36)
+        },
+        @(runtime) {
+          var window = runtime.windows()[0].view.native
+          seen['focused'] = _send_bool_id(
+            _send(window, _sel('firstResponder')),
+            _sel('isKindOfClass:'),
+            _class('NSTextView'),
+          )
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(submitted).to_equal(['4'])
@@ -438,31 +584,46 @@ suite('the macOS backend', @{
       pressed.append(name)
     }
 
-    run_steps(App({ windows: [Window('Escape', Column([
-      TextField({ on_escape: escape('field') }),
-      Expanded(DataTable(
-        [DataColumn('name', 'Name')], 3, @(row, column) => 'row ${row}',
-        { on_escape: escape('table') },
-      )),
-      Button('Cancel', {
-        role: ButtonRole.CANCEL,
-        on_pressed: escape('cancel'),
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Escape',
+            Column([
+              TextField({ on_escape: escape('field') }),
+              Expanded(
+                DataTable(
+                  [DataColumn('name', 'Name')],
+                  3,
+                  @(row, column) => 'row ${row}',
+                  { on_escape: escape('table') },
+                ),
+              ),
+              Button('Cancel', {
+                role: ButtonRole.CANCEL,
+                on_pressed: escape('cancel'),
+              }),
+            ]),
+            { size: Size(240, 200) },
+          ),
+        ],
       }),
-    ]), { size: Size(240, 200) })] }), [
-      @(runtime) {
-        mouse_click(hosts(runtime, 'text_field')[0].view.native)
-      },
-      @(runtime) {
-        send_key(runtime.windows()[0].view.native, '\u001b', 53)
-        mouse_click(hosts(runtime, 'table')[0].view.table)
-      },
-      @(runtime) {
-        var window = runtime.windows()[0].view.native
-        send_key(window, '\u001b', 53)
-        runtime.windows()[0].view.clear_focus()
-        press_key_equivalent(window, '\u001b', 53)
-      },
-    ])
+      [
+        @(runtime) {
+          mouse_click(hosts(runtime, 'text_field')[0].view.native)
+        },
+        @(runtime) {
+          send_key(runtime.windows()[0].view.native, '\u001b', 53)
+          mouse_click(hosts(runtime, 'table')[0].view.table)
+        },
+        @(runtime) {
+          var window = runtime.windows()[0].view.native
+          send_key(window, '\u001b', 53)
+          runtime.windows()[0].view.clear_focus()
+          press_key_equivalent(window, '\u001b', 53)
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(pressed).to_equal(['field', 'table', 'cancel'])
@@ -473,54 +634,65 @@ suite('the macOS backend', @{
     var target = nil
     var manager = _send(_class('NSFontManager'), _sel('sharedFontManager'))
     var font_panel = @{
-      return _objc.function(
-        'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.bool],
-      )(manager, _sel('fontPanel:'), false)
+      return _objc.function('objc_msgSend', ffi.ptr, [
+        ffi.ptr,
+        ffi.ptr,
+        ffi.bool,
+      ])(manager, _sel('fontPanel:'), false)
     }
     var color_panel = _send(_class('NSColorPanel'), _sel('sharedColorPanel'))
     var visible = _objc.function('objc_msgSend', ffi.bool, [ffi.ptr, ffi.ptr])
 
-    run_steps(App({ windows: [Window('Pick', Text('x'))] }), [
-      @(runtime) {
-        pick_font(nil, {
-          style: TextStyle({ family: 'Helvetica', size: 13 }),
-          on_changed: @(style) {
-            seen['font_changes']++
-          },
-        }).then(@(style) {
-          seen['font'] = style
-        })
-      },
-      @(runtime) {
-        seen['font_shown'] = visible(font_panel(), _sel('isVisible'))
-        target = _send(manager, _sel('target'))
+    run_steps(
+      App({
+        windows: [Window('Pick', Text('x'))],
+      }),
+      [
+        @(runtime) {
+          pick_font(nil, {
+            style: TextStyle({ family: 'Helvetica', size: 13 }),
+            on_changed: @(style) {
+              seen['font_changes']++
+            },
+          }).then(@(style) {
+            seen['font'] = style
+          })
+        },
+        @(runtime) {
+          seen['font_shown'] = visible(font_panel(), _sel('isVisible'))
+          target = _send(manager, _sel('target'))
 
-        # Adds bold as the Font menu's Bold item does, which the panel's
-        # target converts the font with.
-        var bold = _send(
-          _send(_class('NSMenuItem'), _sel('alloc')), _sel('init'),
-        )
-        _objc.function(
-          'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.long],
-        )(bold, _sel('setTag:'), 2)
-        _send_void_id(manager, _sel('addFontTrait:'), bold)
-        _send_void_id(font_panel(), _sel('close'), nil)
-      },
-      @(runtime) {
-        pick_color(nil, { color: Color.RED }).then(@(color) {
-          seen['color'] = color
-        })
-      },
-      @(runtime) {
-        seen['color_shown'] = visible(color_panel, _sel('isVisible'))
-        _send_void_id(
-          color_panel, _sel('setColor:'),
-          _send(_class('NSColor'), _sel('blueColor')),
-        )
-        _send_void_id(target, _sel('zugColorChanged:'), color_panel)
-        _send_void_id(color_panel, _sel('close'), nil)
-      },
-    ])
+          # Adds bold as the Font menu's Bold item does, which the panel's
+          # target converts the font with.
+          var bold = _send(
+            _send(_class('NSMenuItem'), _sel('alloc')),
+            _sel('init'),
+          )
+          _objc.function('objc_msgSend', ffi.void, [
+            ffi.ptr,
+            ffi.ptr,
+            ffi.long,
+          ])(bold, _sel('setTag:'), 2)
+          _send_void_id(manager, _sel('addFontTrait:'), bold)
+          _send_void_id(font_panel(), _sel('close'), nil)
+        },
+        @(runtime) {
+          pick_color(nil, { color: Color.RED }).then(@(color) {
+            seen['color'] = color
+          })
+        },
+        @(runtime) {
+          seen['color_shown'] = visible(color_panel, _sel('isVisible'))
+          _send_void_id(
+            color_panel,
+            _sel('setColor:'),
+            _send(_class('NSColor'), _sel('blueColor')),
+          )
+          _send_void_id(target, _sel('zugColorChanged:'), color_panel)
+          _send_void_id(color_panel, _sel('close'), nil)
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(seen.font_shown).to_be_true()
@@ -541,74 +713,103 @@ suite('the macOS backend', @{
     var ask = @(context) {
       asked++
       var field = asked == 2
-        ? TextField({ autofocus: true })
-        : Text('Rename the file?')
-      show_dialog(context, @(close) => Padding(EdgeInsets.all(20), Column([
-        field,
-        Row([
-          Button('Cancel', {
-            role: ButtonRole.CANCEL,
-            on_pressed: @{
-              close('cancelled')
-            },
-          }),
-          Button('Rename', {
-            role: ButtonRole.PRIMARY,
-            on_pressed: @{
-              close('renamed')
-            },
-          }),
-        ], { spacing: 8 }),
-      ], { spacing: 12 }))).then(@(result) {
+          ? TextField({ autofocus: true })
+          : Text('Rename the file?')
+      show_dialog(
+        context,
+        @(close) => Padding(
+          EdgeInsets.all(20),
+          Column(
+            [
+              field,
+              Row(
+                [
+                  Button('Cancel', {
+                    role: ButtonRole.CANCEL,
+                    on_pressed: @{
+                      close('cancelled')
+                    },
+                  }),
+                  Button('Rename', {
+                    role: ButtonRole.PRIMARY,
+                    on_pressed: @{
+                      close('renamed')
+                    },
+                  }),
+                ],
+                { spacing: 8 },
+              ),
+            ],
+            { spacing: 12 },
+          ),
+        ),
+      ).then(@(result) {
         results.append(result)
       })
     }
 
-    run_steps(App({ windows: [Window('Main', Builder(@(context) => Button(
-      'Ask', { on_pressed: @{
-        ask(context)
-      } },
-    )), { size: Size(320, 200) })] }), [
-      @(runtime) {
-        click(hosts(runtime, 'button')[0].view.native)
-      },
-      # A sheet slides in over a few frames.
-      @(runtime) {},
-      @(runtime) {
-        var main = runtime.windows()[0].view.native
-        var sheet = _send(main, _sel('attachedSheet'))
-        seen['sheet'] = sheet != nil
-          and sheet == runtime.windows()[1].view.native
-        # AppKit presses the button whose key equivalent is Return only
-        # while the application is active, which the test application need
-        # not be while someone uses the machine. So this clicks the button
-        # Return would press.
-        var primary = button_for_key(_send(sheet, _sel('contentView')), '\r')
-        seen['return_button'] = primary != nil
-        click(primary)
-      },
-      @(runtime) {},
-      @(runtime) {
-        var main = runtime.windows()[0].view.native
-        seen['after_return'] = _send(main, _sel('attachedSheet')) == nil
-        click(hosts(runtime, 'button')[0].view.native)
-      },
-      @(runtime) {
-        var sheet = _send(
-          runtime.windows()[0].view.native, _sel('attachedSheet'),
-        )
-        seen['field_focused'] = _send_bool_id(
-          _send(sheet, _sel('firstResponder')), _sel('isKindOfClass:'),
-          _class('NSTextView'),
-        )
-        send_key(sheet, '\u001b', 53)
-      },
-      @(runtime) {
-        seen['after_escape'] = _send(
-          runtime.windows()[0].view.native, _sel('attachedSheet'),
-        ) == nil
-      },
-    ])
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Main',
+            Builder(
+              @(context) => Button('Ask', {
+                on_pressed: @{
+                  ask(context)
+                },
+              }),
+            ),
+            { size: Size(320, 200) },
+          ),
+        ],
+      }),
+      [
+        @(runtime) {
+          click(hosts(runtime, 'button')[0].view.native)
+        },
+        # A sheet slides in over a few frames.
+        @(runtime) {},
+        @(runtime) {
+          var main = runtime.windows()[0].view.native
+          var sheet = _send(main, _sel('attachedSheet'))
+          seen['sheet'] = sheet != nil and
+              sheet == runtime.windows()[1].view.native
+          # AppKit presses the button whose key equivalent is Return only
+          # while the application is active, which the test application need
+          # not be while someone uses the machine. So this clicks the button
+          # Return would press.
+          var primary = button_for_key(_send(sheet, _sel('contentView')), '\r')
+          seen['return_button'] = primary != nil
+          click(primary)
+        },
+        @(runtime) {},
+        @(runtime) {
+          var main = runtime.windows()[0].view.native
+          seen['after_return'] = _send(main, _sel('attachedSheet')) == nil
+          click(hosts(runtime, 'button')[0].view.native)
+        },
+        @(runtime) {
+          var sheet = _send(
+            runtime.windows()[0].view.native,
+            _sel('attachedSheet'),
+          )
+          seen['field_focused'] = _send_bool_id(
+            _send(sheet, _sel('firstResponder')),
+            _sel('isKindOfClass:'),
+            _class('NSTextView'),
+          )
+          send_key(sheet, '\u001b', 53)
+        },
+        @(runtime) {
+          seen['after_escape'] = _send(
+                runtime.windows()[0].view.native,
+                _sel('attachedSheet'),
+              ) ==
+              nil
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(seen.sheet).to_be_true()
@@ -627,8 +828,8 @@ suite('the macOS backend', @{
 
     iter var i = 0; i < 40; i++ {
       lines.append(
-        'Line ${i} of a text that wraps across the printable width of the '
-          + 'page, and goes on long enough to need a second line there.',
+        'Line ${i} of a text that wraps across the printable width of the ' +
+            'page, and goes on long enough to need a second line there.',
       )
     }
 
@@ -653,37 +854,50 @@ suite('the macOS backend', @{
       return pages
     }
 
-    run_steps(App({ windows: [Window('Print', Text('x'))] }), [
-      @(runtime) {
-        seen['printable'] = default_page_setup().printable_size()
-        save_pdf(path, {
-          title: 'Lines',
-          pages: @(painter) {
-            seen['measured'] = painter.size()
-            seen['pages'] = lay_out(painter).length()
-            return seen.pages
-          },
-          paint: @(painter, page) {
-            for item in lay_out(painter)[page] {
-              painter.text(
-                item[0], Point(0, item[1]), style, painter.size().width,
-              )
-            }
-          },
-        })
-      },
-    ])
+    run_steps(
+      App({
+        windows: [Window('Print', Text('x'))],
+      }),
+      [
+        @(runtime) {
+          seen['printable'] = default_page_setup().printable_size()
+          save_pdf(path, {
+            title: 'Lines',
+            pages: @(painter) {
+              seen['measured'] = painter.size()
+              seen['pages'] = lay_out(painter).length()
+              return seen.pages
+            },
+            paint: @(painter, page) {
+              for item in lay_out(painter)[page] {
+                painter.text(
+                  item[0],
+                  Point(0, item[1]),
+                  style,
+                  painter.size().width,
+                )
+              }
+            },
+          })
+        },
+      ],
+    )
 
     ffi.open('/System/Library/Frameworks/PDFKit.framework/PDFKit')
-    var send_id = _objc.function(
-      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.ptr],
-    )
+    var send_id = _objc.function('objc_msgSend', ffi.ptr, [
+      ffi.ptr,
+      ffi.ptr,
+      ffi.ptr,
+    ])
     var url = send_id(
-      _class('NSURL'), _sel('fileURLWithPath:'),
+      _class('NSURL'),
+      _sel('fileURLWithPath:'),
       _send_string_arg(_class('NSString'), _sel('stringWithUTF8String:'), path),
     )
     var pdf = send_id(
-      _send(_class('PDFDocument'), _sel('alloc')), _sel('initWithURL:'), url,
+      _send(_class('PDFDocument'), _sel('alloc')),
+      _sel('initWithURL:'),
+      url,
     )
     var text = native_string(pdf, 'string')
 
@@ -704,32 +918,46 @@ suite('the macOS backend', @{
       sheets.append(sheet != nil)
 
       # Cancels it, as its Cancel button does.
-      _objc.function(
-        'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.long],
-      )(main, _sel('endSheet:returnCode:'), sheet, 0)
+      _objc.function('objc_msgSend', ffi.void, [
+        ffi.ptr,
+        ffi.ptr,
+        ffi.ptr,
+        ffi.long,
+      ])(main, _sel('endSheet:returnCode:'), sheet, 0)
     }
     var inside = nil
 
-    run_steps(App({ windows: [Window('Print', Builder(@(context) {
-      inside = context
-      return Text('x')
-    }), { size: Size(400, 300) })] }), [
-      @(runtime) {
-        page_setup(inside).then(@(setup) {
-          results.append(setup)
-        })
-      },
-      @(runtime) {},
-      end_sheet,
-      @(runtime) {
-        print_pages(inside, { paint: @(painter, page) {} }).then(@(printed) {
-          results.append(printed)
-        })
-      },
-      @(runtime) {},
-      end_sheet,
-      @(runtime) {},
-    ])
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Print',
+            Builder(@(context) {
+              inside = context
+              return Text('x')
+            }),
+            { size: Size(400, 300) },
+          ),
+        ],
+      }),
+      [
+        @(runtime) {
+          page_setup(inside).then(@(setup) {
+            results.append(setup)
+          })
+        },
+        @(runtime) {},
+        end_sheet,
+        @(runtime) {
+          print_pages(inside, { paint: @(painter, page) {} }).then(@(printed) {
+            results.append(printed)
+          })
+        },
+        @(runtime) {},
+        end_sheet,
+        @(runtime) {},
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(sheets).to_equal([true, true])
@@ -743,70 +971,101 @@ suite('the macOS backend', @{
     imagine.create(40, 20, 'blue').fill_rect(0, 0, 20, 20, 'red').save(path)
 
     var seen = {}
-    var send_rect_arg = _objc.function(
-      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, _Bounds],
-    )
-    var cache = _objc.function(
-      'objc_msgSend', ffi.void, [ffi.ptr, ffi.ptr, _Bounds, ffi.ptr],
-    )
-    var color_at = _objc.function(
-      'objc_msgSend', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long, ffi.long],
-    )
-    var component = _objc.function(
-      'objc_msgSend', ffi.double, [ffi.ptr, ffi.ptr],
-    )
+    var send_rect_arg = _objc.function('objc_msgSend', ffi.ptr, [
+      ffi.ptr,
+      ffi.ptr,
+      _Bounds,
+    ])
+    var cache = _objc.function('objc_msgSend', ffi.void, [
+      ffi.ptr,
+      ffi.ptr,
+      _Bounds,
+      ffi.ptr,
+    ])
+    var color_at = _objc.function('objc_msgSend', ffi.ptr, [
+      ffi.ptr,
+      ffi.ptr,
+      ffi.long,
+      ffi.long,
+    ])
+    var component = _objc.function('objc_msgSend', ffi.double, [
+      ffi.ptr,
+      ffi.ptr,
+    ])
 
     # Whether the view shows red or blue at a point, in points from its
     # top left.
     var hue_at = @(view, x, y) {
       var bounds = _bounds(view, _sel('bounds'))
       var rep = send_rect_arg(
-        view, _sel('bitmapImageRepForCachingDisplayInRect:'), bounds,
+        view,
+        _sel('bitmapImageRepForCachingDisplayInRect:'),
+        bounds,
       )
       cache(view, _sel('cacheDisplayInRect:toBitmapImageRep:'), bounds, rep)
       var scale = _send_long(rep, _sel('pixelsWide')) / bounds.w
       var color = color_at(
-        rep, _sel('colorAtX:y:'), (x * scale).floor(), (y * scale).floor(),
+        rep,
+        _sel('colorAtX:y:'),
+        (x * scale).floor(),
+        (y * scale).floor(),
       )
-      return component(color, _sel('redComponent'))
-        > component(color, _sel('blueComponent'))
-        ? 'red'
-        : 'blue'
+      return component(color, _sel('redComponent')) >
+              component(color, _sel('blueComponent'))
+          ? 'red'
+          : 'blue'
     }
 
-    run_steps(App({ windows: [Window('Images', Column([
-      Image(ImageSource.file(path), { accessibility_identifier: 'plain' }),
-      Image(ImageSource.file(path), {
-        flip_horizontal: true,
-        accessibility_identifier: 'across',
+    run_steps(
+      App({
+        windows: [
+          Window(
+            'Images',
+            Column(
+              [
+                Image(ImageSource.file(path), {
+                  accessibility_identifier: 'plain',
+                }),
+                Image(ImageSource.file(path), {
+                  flip_horizontal: true,
+                  accessibility_identifier: 'across',
+                }),
+                Image(ImageSource.file(path), {
+                  rotation: 90,
+                  accessibility_identifier: 'turned',
+                }),
+              ],
+              { spacing: 4, align_items: AlignItems.START },
+            ),
+            { size: Size(200, 120) },
+          ),
+        ],
       }),
-      Image(ImageSource.file(path), {
-        rotation: 90,
-        accessibility_identifier: 'turned',
-      }),
-    ], { spacing: 4, align_items: AlignItems.START }), {
-      size: Size(200, 120),
-    })] }), [
-      @(runtime) {
-        var views = {}
+      [
+        @(runtime) {
+          var views = {}
 
-        for host in hosts(runtime, 'image') {
-          views[host.props.accessibility_identifier] = host.view.native
-        }
+          for host in hosts(runtime, 'image') {
+            views[host.props.accessibility_identifier] = host.view.native
+          }
 
-        var turned = _bounds(views.turned, _sel('bounds'))
-        seen['turned_size'] = Size(turned.w, turned.h)
-        seen['plain'] = [
-          hue_at(views.plain, 5, 10), hue_at(views.plain, 35, 10),
-        ]
-        seen['across'] = [
-          hue_at(views.across, 5, 10), hue_at(views.across, 35, 10),
-        ]
-        seen['turned'] = [
-          hue_at(views.turned, 10, 5), hue_at(views.turned, 10, 35),
-        ]
-      },
-    ])
+          var turned = _bounds(views.turned, _sel('bounds'))
+          seen['turned_size'] = Size(turned.w, turned.h)
+          seen['plain'] = [
+            hue_at(views.plain, 5, 10),
+            hue_at(views.plain, 35, 10),
+          ]
+          seen['across'] = [
+            hue_at(views.across, 5, 10),
+            hue_at(views.across, 35, 10),
+          ]
+          seen['turned'] = [
+            hue_at(views.turned, 10, 5),
+            hue_at(views.turned, 10, 35),
+          ]
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
     expect(seen.turned_size).to_equal(Size(20, 40))
@@ -827,7 +1086,8 @@ suite('the macOS backend', @{
       var name = names(
         _send(
           _send(
-            hosts(runtime, 'text')[0].view.native, _sel('effectiveAppearance'),
+            hosts(runtime, 'text')[0].view.native,
+            _sel('effectiveAppearance'),
           ),
           _sel('name'),
         ),
@@ -839,33 +1099,47 @@ suite('the macOS backend', @{
       seen.append([runtime.appearance, view_appearance(runtime)])
     }
 
-    run_steps(Observer(chosen, @(context) => App({
-      appearance: chosen.value(),
-      windows: [Window('Look', Builder(
-        @(inner) => Text('mode ${Appearance.of(inner)}'),
-      ))],
-    })), [
-      record,
-      @(runtime) {
-        chosen.set(Appearance.LIGHT)
-      },
-      record,
-      @(runtime) {
-        chosen.set(Appearance.SYSTEM)
-      },
-      @(runtime) {
-        seen.append(runtime.appearance == runtime.backend.appearance())
-      },
-    ])
+    run_steps(
+      Observer(
+        chosen,
+        @(context) => App({
+          appearance: chosen.value(),
+          windows: [
+            Window(
+              'Look',
+              Builder(@(inner) => Text('mode ${Appearance.of(inner)}')),
+            ),
+          ],
+        }),
+      ),
+      [
+        record,
+        @(runtime) {
+          chosen.set(Appearance.LIGHT)
+        },
+        record,
+        @(runtime) {
+          chosen.set(Appearance.SYSTEM)
+        },
+        @(runtime) {
+          seen.append(runtime.appearance == runtime.backend.appearance())
+        },
+      ],
+    )
 
     expect(reported).to_be_empty()
-    expect(seen).to_equal([['dark', 'dark'], ['light', 'light'], true])
+    expect(seen)
+        .to_equal([
+          ['dark', 'dark'],
+          ['light', 'light'],
+          true,
+        ])
   })
 
   it('keeps the backend contract', @{
     var report = check_backend(create_backend('macos'))
-    expect(report
-      .failures()
-      .map(@(result) => '${result.name}: ${result.detail}')).to_be_empty()
+    expect(
+      report.failures().map(@(result) => '${result.name}: ${result.detail}'),
+    ).to_be_empty()
   })
 })

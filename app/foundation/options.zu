@@ -169,9 +169,9 @@ def _distance(a: string, b: string) {
 
     iter var j = 1; j <= b.length(); j++ {
       var cost = a[i - 1] == b[j - 1] ? 0 : 1
-      current.append((previous[j] + 1)
-        .min(current[j - 1] + 1)
-        .min(previous[j - 1] + cost))
+      current.append(
+        (previous[j] + 1).min(current[j - 1] + 1).min(previous[j - 1] + cost),
+      )
     }
 
     previous = current

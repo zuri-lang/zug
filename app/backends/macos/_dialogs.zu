@@ -10,9 +10,22 @@
 
 import ffi
 import ._runtime {
-  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
-  send_void_uint, send_int, typed, ns_string, zuri_string, from_ns_array,
-  ns_array, Block, define_class,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_uint,
+  send_int,
+  typed,
+  ns_string,
+  zuri_string,
+  from_ns_array,
+  ns_array,
+  Block,
+  define_class,
 }
 import ._cocoa { ns_font, ns_color, css_weight }
 import ._controls { from_ns_color }
@@ -40,7 +53,9 @@ def _present(panel, window, finish: function) {
     finish(response)
   }, [ffi.long])
   _begin_sheet(
-    panel, sel('beginSheetModalForWindow:completionHandler:'), window.native,
+    panel,
+    sel('beginSheetModalForWindow:completionHandler:'),
+    window.native,
     block.pointer,
   )
 }
@@ -58,7 +73,9 @@ def show_alert(backend, window, spec: dict, done: function) {
   send_void_id(alert, 'setMessageText:', ns_string(spec.get('title', '')))
   send_void_id(alert, 'setInformativeText:', ns_string(spec.get('message', '')))
   send_void_uint(
-    alert, 'setAlertStyle:', _STYLES.get(spec.get('style', 'informational'), 1),
+    alert,
+    'setAlertStyle:',
+    _STYLES.get(spec.get('style', 'informational'), 1),
   )
 
   for title in spec.get('buttons', ['OK']) {
@@ -70,14 +87,16 @@ def show_alert(backend, window, spec: dict, done: function) {
   if suppression != nil {
     send_void_bool(alert, 'setShowsSuppressionButton:', true)
     send_void_id(
-      send(alert, 'suppressionButton'), 'setTitle:', ns_string(suppression),
+      send(alert, 'suppressionButton'),
+      'setTitle:',
+      ns_string(suppression),
     )
   }
 
   _present(alert, window, @(response) {
     # NSAlertFirstButtonReturn is 1000, and each button after counts up.
-    var suppressed = suppression != nil
-      and send_int(send(alert, 'suppressionButton'), 'state') == 1
+    var suppressed = suppression != nil and
+        send_int(send(alert, 'suppressionButton'), 'state') == 1
     send_void(alert, 'release')
     backend.answer(done, { button: response - 1000, suppressed })
   })
@@ -94,7 +113,8 @@ def _apply_common(panel, spec: dict) {
 
   if types != nil and !types.is_empty() {
     send_void_id(
-      panel, 'setAllowedFileTypes:',
+      panel,
+      'setAllowedFileTypes:',
       ns_array(types.map(@(type) => ns_string(type))),
     )
   }
@@ -103,7 +123,9 @@ def _apply_common(panel, spec: dict) {
 
   if directory != nil {
     var url = typed(ffi.ptr, [ffi.ptr, ffi.bool])(
-      cls('NSURL'), sel('fileURLWithPath:isDirectory:'), ns_string(directory),
+      cls('NSURL'),
+      sel('fileURLWithPath:isDirectory:'),
+      ns_string(directory),
       true,
     )
     send_void_id(panel, 'setDirectoryURL:', url)
@@ -123,10 +145,14 @@ def pick_files(backend, window, spec: dict, done: function) {
   var panel = send(cls('NSOpenPanel'), 'openPanel')
   send_void_bool(panel, 'setCanChooseFiles:', spec.get('files', true) != false)
   send_void_bool(
-    panel, 'setCanChooseDirectories:', spec.get('directories', false) == true,
+    panel,
+    'setCanChooseDirectories:',
+    spec.get('directories', false) == true,
   )
   send_void_bool(
-    panel, 'setAllowsMultipleSelection:', spec.get('multiple', false) == true,
+    panel,
+    'setAllowsMultipleSelection:',
+    spec.get('multiple', false) == true,
   )
   _apply_common(panel, spec)
   send_void(panel, 'retain')
@@ -135,9 +161,8 @@ def pick_files(backend, window, spec: dict, done: function) {
     var paths = nil
 
     if response == _OK {
-      paths = from_ns_array(send(
-        panel, 'URLs',
-      )).map(@(url) => zuri_string(send(url, 'path')))
+      paths = from_ns_array(send(panel, 'URLs'))
+          .map(@(url) => zuri_string(send(url, 'path')))
     }
 
     send_void(panel, 'release')
@@ -194,9 +219,10 @@ var _will_close = nil
 
 def _will_close_name() {
   if _will_close == nil {
-    _will_close = ffi.open().symbol('NSWindowWillCloseNotification').read(
-      ffi.ptr,
-    )
+    _will_close = ffi
+        .open()
+        .symbol('NSWindowWillCloseNotification')
+        .read(ffi.ptr)
   }
 
   return _will_close
@@ -209,23 +235,38 @@ def _will_close_name() {
  * @type Pointer
  */
 var ZugPanelTarget = define_class('ZugPanelTarget', 'NSObject', {
-  'zugFontChanged:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
-    _font_changed(sender)
-  }],
-  'zugColorChanged:': ['v@:@', ffi.void, [ffi.ptr], @(this, sender) {
-    _color_changed(sender)
-  }],
-  'panelWillClose:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var panel = send(note, 'object')
+  'zugFontChanged:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, sender) {
+      _font_changed(sender)
+    },
+  ],
+  'zugColorChanged:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, sender) {
+      _color_changed(sender)
+    },
+  ],
+  'panelWillClose:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var panel = send(note, 'object')
 
-    for name in ['font', 'color'] {
-      var pick = _picks[name]
+      for name in ['font', 'color'] {
+        var pick = _picks[name]
 
-      if pick != nil and pick.panel == panel {
-        _finish(name)
+        if pick != nil and pick.panel == panel {
+          _finish(name)
+        }
       }
-    }
-  }],
+    },
+  ],
 })
 
 var _target = nil
@@ -247,8 +288,12 @@ def _start(name: string, pick: dict) {
   _finish(name)
   _picks[name] = pick
   _observe(
-    _center(), sel('addObserver:selector:name:object:'), _panel_target(),
-    sel('panelWillClose:'), _will_close_name(), pick.panel,
+    _center(),
+    sel('addObserver:selector:name:object:'),
+    _panel_target(),
+    sel('panelWillClose:'),
+    _will_close_name(),
+    pick.panel,
   )
 }
 
@@ -262,8 +307,11 @@ def _finish(name: string) {
 
   _picks[name] = nil
   _stop_observing(
-    _center(), sel('removeObserver:name:object:'), _panel_target(),
-    _will_close_name(), pick.panel,
+    _center(),
+    sel('removeObserver:name:object:'),
+    _panel_target(),
+    _will_close_name(),
+    pick.panel,
   )
   send_void_id(pick.source, 'setTarget:', nil)
   _set_action(pick.source, sel('setAction:'), nil)
@@ -365,9 +413,7 @@ def pick_font(backend, window, spec: dict, changed: function, done: function) {
  * @param function changed
  * @param function done
  */
-def pick_color(
-  backend, window, spec: dict, changed: function, done: function,
-) {
+def pick_color(backend, window, spec: dict, changed: function, done: function) {
   var panel = send(cls('NSColorPanel'), 'sharedColorPanel')
   _start('color', { backend, panel, source: panel, changed, done, last: nil })
   send_void_bool(panel, 'setShowsAlpha:', spec.get('alpha', false) == true)

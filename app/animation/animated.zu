@@ -64,10 +64,12 @@ class AnimatedValue < StatefulWidget {
    * @constructor
    */
   @new(value, builder: function, options: dict) {
-    var o = check_options(
-      options, 'AnimatedValue',
-      { key: Key, duration: Duration, curve: Curve, on_end: 'function' },
-    )
+    var o = check_options(options, 'AnimatedValue', {
+      key: Key,
+      duration: Duration,
+      curve: Curve,
+      on_end: 'function',
+    })
 
     if o.get('duration') == nil {
       raise ValueError('an AnimatedValue needs a duration')
@@ -126,7 +128,8 @@ class AnimatedValueState < State {
     }
 
     return lerp(
-      self._from, self._to,
+      self._from,
+      self._to,
       self.widget.curve.transform(self._animation.value()),
     )
   }
@@ -144,9 +147,22 @@ var _OWN_OPTIONS = { duration: Duration, curve: Curve, on_end: 'function' }
 
 # The options of Box that AnimatedBox moves rather than switches.
 var _MOVING = [
-  'width', 'height', 'min_width', 'max_width', 'min_height', 'max_height',
-  'width_factor', 'height_factor', 'padding', 'margin', 'alignment', 'color',
-  'border', 'radius', 'shadow', 'opacity',
+  'width',
+  'height',
+  'min_width',
+  'max_width',
+  'min_height',
+  'max_height',
+  'width_factor',
+  'height_factor',
+  'padding',
+  'margin',
+  'alignment',
+  'color',
+  'border',
+  'radius',
+  'shadow',
+  'opacity',
 ]
 
 /**
@@ -268,8 +284,8 @@ class AnimatedBoxState < State {
     for name, end in self._to {
       var start = self._from.get(name)
       values[name] = _movable(start, end)
-        ? _hold(name, lerp(start, end, t))
-        : end
+          ? _hold(name, lerp(start, end, t))
+          : end
     }
 
     return values

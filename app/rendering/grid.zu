@@ -85,14 +85,17 @@ class RenderGrid < RenderObject {
    * @param ?number aspect_ratio
    */
   configure(
-    columns: number, column_spacing: number, row_spacing: number,
-    row_height: ?number, aspect_ratio: ?number,
+    columns: number,
+    column_spacing: number,
+    row_spacing: number,
+    row_height: ?number,
+    aspect_ratio: ?number,
   ) {
-    if columns != self.columns
-      or column_spacing != self.column_spacing
-      or row_spacing != self.row_spacing
-      or row_height != self.row_height
-      or aspect_ratio != self.aspect_ratio {
+    if columns != self.columns or
+        column_spacing != self.column_spacing or
+        row_spacing != self.row_spacing or
+        row_height != self.row_height or
+        aspect_ratio != self.aspect_ratio {
       self.columns = columns
       self.column_spacing = column_spacing
       self.row_spacing = row_spacing
@@ -144,8 +147,8 @@ class RenderGrid < RenderObject {
   }
 
   _cell_width(width: number) {
-    return ((width - self.column_spacing * (self.columns - 1))
-      / self.columns).max(0)
+    return ((width - self.column_spacing * (self.columns - 1)) / self.columns)
+        .max(0)
   }
 
   _span_width(cell: number, span: number) {
@@ -158,8 +161,8 @@ class RenderGrid < RenderObject {
     for child in self.children {
       var span = child.parent_data.column_span.min(self.columns)
       var per = (child.max_intrinsic_width(INFINITY) -
-        self.column_spacing * (span - 1))
-        / span
+              self.column_spacing * (span - 1)) /
+          span
       widest = widest.max(per)
     }
 
@@ -170,8 +173,8 @@ class RenderGrid < RenderObject {
     var c = self.constraints
     var rows = self._place_cells()
     var width = c.has_bounded_width()
-      ? c.max_width
-      : c.constrain_width(self._natural_width())
+        ? c.max_width
+        : c.constrain_width(self._natural_width())
     var cell = self._cell_width(width)
     var heights = []
 
@@ -181,8 +184,8 @@ class RenderGrid < RenderObject {
 
     if self.row_height != nil or self.aspect_ratio != nil {
       var fixed = self.row_height != nil
-        ? self.row_height
-        : cell / self.aspect_ratio
+          ? self.row_height
+          : cell / self.aspect_ratio
 
       iter var r = 0; r < rows; r++ {
         heights[r] = fixed
@@ -193,7 +196,8 @@ class RenderGrid < RenderObject {
 
         if data.row_span == 1 {
           var span_width = self._span_width(
-            cell, data.column_span.min(self.columns),
+            cell,
+            data.column_span.min(self.columns),
           )
           var natural = child.max_intrinsic_height(span_width)
           heights[data.cell[0]] = heights[data.cell[0]].max(natural)
@@ -224,7 +228,8 @@ class RenderGrid < RenderObject {
       var span_width = self._span_width(cell, span)
       child.layout(Constraints.tight(Size(span_width, span_height)), false)
       self.place_child(
-        child, Point(column * (cell + self.column_spacing), tops[row]),
+        child,
+        Point(column * (cell + self.column_spacing), tops[row]),
       )
     }
 
@@ -251,8 +256,8 @@ class RenderGrid < RenderObject {
 
     if self.row_height != nil or self.aspect_ratio != nil {
       var fixed = self.row_height != nil
-        ? self.row_height
-        : cell / self.aspect_ratio
+          ? self.row_height
+          : cell / self.aspect_ratio
       return fixed * rows + self.row_spacing * (rows - 1).max(0)
     }
 
@@ -266,9 +271,9 @@ class RenderGrid < RenderObject {
       var data = child.parent_data
 
       if data.row_span == 1 {
-        var natural = child.max_intrinsic_height(self._span_width(
-          cell, data.column_span.min(self.columns),
-        ))
+        var natural = child.max_intrinsic_height(
+          self._span_width(cell, data.column_span.min(self.columns)),
+        )
         heights[data.cell[0]] = heights[data.cell[0]].max(natural)
       }
     }
@@ -284,7 +289,11 @@ class RenderGrid < RenderObject {
 }
 
 def _fits(
-  taken: list, row: number, column: number, span: number, row_span: number,
+  taken: list,
+  row: number,
+  column: number,
+  span: number,
+  row_span: number,
   columns: number,
 ) {
   iter var r = row; r < row + row_span; r++ {
@@ -299,7 +308,11 @@ def _fits(
 }
 
 def _take(
-  taken: list, row: number, column: number, span: number, row_span: number,
+  taken: list,
+  row: number,
+  column: number,
+  span: number,
+  row_span: number,
   columns: number,
 ) {
   iter var r = row; r < row + row_span; r++ {

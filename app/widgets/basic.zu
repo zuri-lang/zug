@@ -13,19 +13,47 @@
  */
 
 import ..foundation {
-  Key, EdgeInsets, Alignment, Constraints, Color, INFINITY, check_options,
+  Key,
+  EdgeInsets,
+  Alignment,
+  Constraints,
+  Color,
+  INFINITY,
+  check_options,
 }
 import ..painting { Border, Shadow }
 import ..rendering {
-  RenderPadding, RenderAlign, RenderConstrained, RenderLimited,
-  RenderFractional, RenderAspectRatio, RenderFitContent, RenderVisibility,
-  RenderResponsive, RenderFlex, RenderGap, FlexParentData, RenderStack,
-  StackParentData, RenderWrap, RenderGrid, GridParentData, RenderHostProxy,
-  Axis, check_justify, check_align_items, check_axis, check_stack_fit,
+  RenderPadding,
+  RenderAlign,
+  RenderConstrained,
+  RenderLimited,
+  RenderFractional,
+  RenderAspectRatio,
+  RenderFitContent,
+  RenderVisibility,
+  RenderResponsive,
+  RenderFlex,
+  RenderGap,
+  FlexParentData,
+  RenderStack,
+  StackParentData,
+  RenderWrap,
+  RenderGrid,
+  GridParentData,
+  RenderHostProxy,
+  Axis,
+  check_justify,
+  check_align_items,
+  check_axis,
+  check_stack_fit,
 }
 import .framework {
-  Widget, StatelessWidget, SingleChildRenderObjectWidget,
-  MultiChildRenderObjectWidget, LeafRenderObjectWidget, ParentDataWidget,
+  Widget,
+  StatelessWidget,
+  SingleChildRenderObjectWidget,
+  MultiChildRenderObjectWidget,
+  LeafRenderObjectWidget,
+  ParentDataWidget,
   SingleChildRenderObjectElement,
 }
 import .host { SingleChildHostWidget, host_options, common_props }
@@ -90,15 +118,12 @@ class Align < SingleChildRenderObjectWidget {
    * @constructor
    */
   @new(child: ?Widget, options: ?dict) {
-    var o = check_options(
-      options, 'Align',
-      {
-        key: Key,
-        alignment: Alignment,
-        width_factor: 'number',
-        height_factor: 'number',
-      },
-    )
+    var o = check_options(options, 'Align', {
+      key: Key,
+      alignment: Alignment,
+      width_factor: 'number',
+      height_factor: 'number',
+    })
     self.key = o.get('key')
     self.child = child
     self.alignment = o.get('alignment', Alignment.CENTER)
@@ -112,7 +137,9 @@ class Align < SingleChildRenderObjectWidget {
 
   update_render_object(context, render_object) {
     render_object.configure(
-      self.alignment, self.width_factor, self.height_factor,
+      self.alignment,
+      self.width_factor,
+      self.height_factor,
     )
   }
 }
@@ -128,10 +155,11 @@ class Center < Align {
    * @constructor
    */
   @new(child: ?Widget, options: ?dict) {
-    var o = check_options(
-      options, 'Center',
-      { key: Key, width_factor: 'number', height_factor: 'number' },
-    )
+    var o = check_options(options, 'Center', {
+      key: Key,
+      width_factor: 'number',
+      height_factor: 'number',
+    })
     self.key = o.get('key')
     self.child = child
     self.alignment = Alignment.CENTER
@@ -312,11 +340,18 @@ class Box < StatelessWidget {
     var opacity = o.get('opacity', 1)
 
     if !(opacity >= 0 and opacity <= 1) {
-      raise ValueError('the opacity of a Box must be from 0 to 1, got ${opacity}')
+      raise ValueError(
+        'the opacity of a Box must be from 0 to 1, got ${opacity}',
+      )
     }
 
     for name in [
-      'width', 'height', 'min_width', 'max_width', 'min_height', 'max_height',
+      'width',
+      'height',
+      'min_width',
+      'max_width',
+      'min_height',
+      'max_height',
       'radius',
     ] {
       var value = o.get(name)
@@ -337,12 +372,12 @@ class Box < StatelessWidget {
     var min_height = o.get('min_height')
     var max_height = o.get('max_height')
 
-    if width == nil
-      and height == nil
-      and min_width == nil
-      and max_width == nil
-      and min_height == nil
-      and max_height == nil {
+    if width == nil and
+        height == nil and
+        min_width == nil and
+        max_width == nil and
+        min_height == nil and
+        max_height == nil {
       return nil
     }
 
@@ -378,25 +413,29 @@ class Box < StatelessWidget {
     }
 
     var common = common_props(o)
-    var decorated = o.get('color') != nil
-      or o.get('border') != nil
-      or o.get('radius', 0) > 0
-      or o.get('shadow') != nil
-      or o.get('clip', false)
-      or o.get('opacity', 1) < 1
+    var decorated = o.get('color') != nil or
+        o.get('border') != nil or
+        o.get('radius', 0) > 0 or
+        o.get('shadow') != nil or
+        o.get('clip', false) or
+        o.get('opacity', 1) < 1
 
-    if decorated
-      or common.tooltip != nil
-      or common.accessibility_label != nil
-      or common.accessibility_identifier != nil {
-      current = DecoratedBox({
-        color: o.get('color'),
-        border: o.get('border'),
-        radius: o.get('radius', 0),
-        shadow: o.get('shadow'),
-        clip: o.get('clip', false),
-        opacity: o.get('opacity', 1),
-      }, common, current)
+    if decorated or
+        common.tooltip != nil or
+        common.accessibility_label != nil or
+        common.accessibility_identifier != nil {
+      current = DecoratedBox(
+        {
+          color: o.get('color'),
+          border: o.get('border'),
+          radius: o.get('radius', 0),
+          shadow: o.get('shadow'),
+          clip: o.get('clip', false),
+          opacity: o.get('opacity', 1),
+        },
+        common,
+        current,
+      )
     }
 
     if extra != nil {
@@ -405,7 +444,9 @@ class Box < StatelessWidget {
 
     if o.get('width_factor') != nil or o.get('height_factor') != nil {
       current = FractionalBox(
-        o.get('width_factor'), o.get('height_factor'), current,
+        o.get('width_factor'),
+        o.get('height_factor'),
+        current,
       )
     }
 
@@ -535,21 +576,31 @@ class Flex < MultiChildRenderObjectWidget {
     check_align_items(self.align_items, owner)
 
     if self.spacing < 0 {
-      raise ValueError('spacing of ${owner} must not be negative, got ${self.spacing}')
+      raise ValueError(
+        'spacing of ${owner} must not be negative, got ${self.spacing}',
+      )
     }
   }
 
   create_render_object(context) {
     var flex = RenderFlex(self.axis)
     flex.configure(
-      self.axis, self.justify, self.align_items, self.shrink_wrap, self.spacing,
+      self.axis,
+      self.justify,
+      self.align_items,
+      self.shrink_wrap,
+      self.spacing,
     )
     return flex
   }
 
   update_render_object(context, render_object) {
     render_object.configure(
-      self.axis, self.justify, self.align_items, self.shrink_wrap, self.spacing,
+      self.axis,
+      self.justify,
+      self.align_items,
+      self.shrink_wrap,
+      self.spacing,
     )
   }
 }
@@ -591,7 +642,9 @@ class Column < Flex {
 def _check_children(children: list, owner: string) {
   iter var i = 0; i < children.length(); i++ {
     if !instance_of(children[i], Widget) {
-      raise TypeError('child ${i} of ${owner} must be a widget, got ${typeof(children[i])}')
+      raise TypeError(
+        'child ${i} of ${owner} must be a widget, got ${typeof(children[i])}',
+      )
     }
   }
 }
@@ -620,7 +673,9 @@ class Expanded < ParentDataWidget {
     self.flex = o.get('flex', 1)
 
     if !(self.flex > 0) {
-      raise ValueError('flex of ${typeof(self)} must be above zero, got ${self.flex}')
+      raise ValueError(
+        'flex of ${typeof(self)} must be above zero, got ${self.flex}',
+      )
     }
   }
 
@@ -635,7 +690,9 @@ class Expanded < ParentDataWidget {
     var data = render_object.parent_data
 
     if !instance_of(data, FlexParentData) {
-      raise TypeError('${typeof(self)} must be a direct child of a Row, Column or Flex')
+      raise TypeError(
+        '${typeof(self)} must be a direct child of a Row, Column or Flex',
+      )
     }
 
     if data.flex != self.flex or data.fit != self.fit() {
@@ -707,9 +764,11 @@ class Stack < MultiChildRenderObjectWidget {
    * @constructor
    */
   @new(children: list, options: ?dict) {
-    var o = check_options(
-      options, 'Stack', { key: Key, alignment: Alignment, fit: 'string' },
-    )
+    var o = check_options(options, 'Stack', {
+      key: Key,
+      alignment: Alignment,
+      fit: 'string',
+    })
     _check_children(children, 'Stack')
     self.key = o.get('key')
     self.children = children
@@ -746,18 +805,15 @@ class Positioned < ParentDataWidget {
    * @constructor
    */
   @new(child: Widget, options: dict) {
-    var o = check_options(
-      options, 'Positioned',
-      {
-        key: Key,
-        left: 'number',
-        top: 'number',
-        right: 'number',
-        bottom: 'number',
-        width: 'number',
-        height: 'number',
-      },
-    )
+    var o = check_options(options, 'Positioned', {
+      key: Key,
+      left: 'number',
+      top: 'number',
+      right: 'number',
+      bottom: 'number',
+      width: 'number',
+      height: 'number',
+    })
     self.key = o.get('key')
     self.child = child
     self.left = o.get('left')
@@ -768,11 +824,15 @@ class Positioned < ParentDataWidget {
     self.height = o.get('height')
 
     if self.left != nil and self.right != nil and self.width != nil {
-      raise ValueError('Positioned may set at most two of left, right and width')
+      raise ValueError(
+        'Positioned may set at most two of left, right and width',
+      )
     }
 
     if self.top != nil and self.bottom != nil and self.height != nil {
-      raise ValueError('Positioned may set at most two of top, bottom and height')
+      raise ValueError(
+        'Positioned may set at most two of top, bottom and height',
+      )
     }
   }
 
@@ -793,12 +853,12 @@ class Positioned < ParentDataWidget {
       raise TypeError('Positioned must be a direct child of a Stack')
     }
 
-    var changed = data.left != self.left
-      or data.top != self.top
-      or data.right != self.right
-      or data.bottom != self.bottom
-      or data.width != self.width
-      or data.height != self.height
+    var changed = data.left != self.left or
+        data.top != self.top or
+        data.right != self.right or
+        data.bottom != self.bottom or
+        data.width != self.width or
+        data.height != self.height
 
     if changed {
       data.left = self.left
@@ -835,18 +895,15 @@ class Wrap < MultiChildRenderObjectWidget {
    * @constructor
    */
   @new(children: list, options: ?dict) {
-    var o = check_options(
-      options, 'Wrap',
-      {
-        key: Key,
-        axis: 'string',
-        spacing: 'number',
-        run_spacing: 'number',
-        justify: 'string',
-        run_justify: 'string',
-        align_items: 'string',
-      },
-    )
+    var o = check_options(options, 'Wrap', {
+      key: Key,
+      axis: 'string',
+      spacing: 'number',
+      run_spacing: 'number',
+      justify: 'string',
+      run_justify: 'string',
+      align_items: 'string',
+    })
     _check_children(children, 'Wrap')
     self.key = o.get('key')
     self.children = children
@@ -861,7 +918,9 @@ class Wrap < MultiChildRenderObjectWidget {
     check_justify(self.run_justify, 'Wrap')
 
     if !['start', 'end', 'center'].contains(self.align_items) {
-      raise ValueError("align_items of Wrap must be AlignItems.START, END or CENTER, got '${self.align_items}'")
+      raise ValueError(
+        "align_items of Wrap must be AlignItems.START, END or CENTER, got '${self.align_items}'",
+      )
     }
   }
 
@@ -873,7 +932,11 @@ class Wrap < MultiChildRenderObjectWidget {
 
   update_render_object(context, render_object) {
     render_object.configure(
-      self.axis, self.spacing, self.run_spacing, self.justify, self.run_justify,
+      self.axis,
+      self.spacing,
+      self.run_spacing,
+      self.justify,
+      self.run_justify,
       self.align_items,
     )
   }
@@ -909,23 +972,22 @@ class Grid < MultiChildRenderObjectWidget {
    * @constructor
    */
   @new(children: list, options: dict) {
-    var o = check_options(
-      options, 'Grid',
-      {
-        key: Key,
-        columns: 'number',
-        spacing: 'number',
-        column_spacing: 'number',
-        row_spacing: 'number',
-        row_height: 'number',
-        aspect_ratio: 'number',
-      },
-    )
+    var o = check_options(options, 'Grid', {
+      key: Key,
+      columns: 'number',
+      spacing: 'number',
+      column_spacing: 'number',
+      row_spacing: 'number',
+      row_height: 'number',
+      aspect_ratio: 'number',
+    })
     _check_children(children, 'Grid')
     var columns = o.get('columns')
 
     if columns == nil or !is_int(columns) or columns < 1 {
-      raise ValueError('a Grid needs a whole number of columns, at least 1, got ${columns}')
+      raise ValueError(
+        'a Grid needs a whole number of columns, at least 1, got ${columns}',
+      )
     }
 
     var spacing = o.get('spacing', 0)
@@ -938,7 +1000,9 @@ class Grid < MultiChildRenderObjectWidget {
     self.aspect_ratio = o.get('aspect_ratio')
 
     if self.aspect_ratio != nil and !(self.aspect_ratio > 0) {
-      raise ValueError('aspect_ratio of a Grid must be above zero, got ${self.aspect_ratio}')
+      raise ValueError(
+        'aspect_ratio of a Grid must be above zero, got ${self.aspect_ratio}',
+      )
     }
   }
 
@@ -950,7 +1014,10 @@ class Grid < MultiChildRenderObjectWidget {
 
   update_render_object(context, render_object) {
     render_object.configure(
-      self.columns, self.column_spacing, self.row_spacing, self.row_height,
+      self.columns,
+      self.column_spacing,
+      self.row_spacing,
+      self.row_height,
       self.aspect_ratio,
     )
   }
@@ -970,10 +1037,11 @@ class GridCell < ParentDataWidget {
    * @constructor
    */
   @new(child: Widget, options: dict) {
-    var o = check_options(
-      options, 'GridCell',
-      { key: Key, column_span: 'number', row_span: 'number' },
-    )
+    var o = check_options(options, 'GridCell', {
+      key: Key,
+      column_span: 'number',
+      row_span: 'number',
+    })
     self.key = o.get('key')
     self.child = child
     self.column_span = o.get('column_span', 1)
@@ -981,7 +1049,9 @@ class GridCell < ParentDataWidget {
 
     for span in [self.column_span, self.row_span] {
       if !is_int(span) or span < 1 {
-        raise ValueError('a GridCell span must be a whole number, at least 1, got ${span}')
+        raise ValueError(
+          'a GridCell span must be a whole number, at least 1, got ${span}',
+        )
       }
     }
   }
@@ -1120,9 +1190,11 @@ class Visibility < StatelessWidget {
    * @constructor
    */
   @new(child: Widget, options: dict) {
-    var o = check_options(
-      options, 'Visibility', { key: Key, visible: 'bool', keep_state: 'bool' },
-    )
+    var o = check_options(options, 'Visibility', {
+      key: Key,
+      visible: 'bool',
+      keep_state: 'bool',
+    })
     self.key = o.get('key')
     self.child = child
     self.visible = o.get('visible', true)

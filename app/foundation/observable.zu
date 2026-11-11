@@ -206,7 +206,9 @@ class MergedObservable < Observable {
   @new(sources: list) {
     for source in sources {
       if !instance_of(source, Observable) {
-        raise TypeError('Observable.merge() takes observables, got ${typeof(source)}')
+        raise TypeError(
+          'Observable.merge() takes observables, got ${typeof(source)}',
+        )
       }
     }
 

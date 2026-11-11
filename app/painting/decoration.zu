@@ -38,7 +38,9 @@ class Border {
    */
   @new(width: number, color: Color) {
     if width < 0 or !width.is_finite() {
-      raise ValueError('a border width must be finite and not negative, got ${width}')
+      raise ValueError(
+        'a border width must be finite and not negative, got ${width}',
+      )
     }
 
     self.width = width
@@ -58,9 +60,9 @@ class Border {
   }
 
   @eq(other) {
-    return instance_of(other, Border)
-      and self.width == other.width
-      and self.color == other.color
+    return instance_of(other, Border) and
+        self.width == other.width and
+        self.color == other.color
   }
 
   @to_string() {
@@ -121,11 +123,11 @@ class Shadow {
   }
 
   @eq(other) {
-    return instance_of(other, Shadow)
-      and self.color == other.color
-      and self.blur == other.blur
-      and self.x == other.x
-      and self.y == other.y
+    return instance_of(other, Shadow) and
+        self.color == other.color and
+        self.blur == other.blur and
+        self.x == other.x and
+        self.y == other.y
   }
 
   @to_string() {

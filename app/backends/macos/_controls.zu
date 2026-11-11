@@ -6,10 +6,32 @@
 import ffi
 import .. ..foundation { Size, Color, EdgeInsets, Constraints }
 import ._runtime {
-  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
-  send_void_int, send_void_uint, send_void_double, send_void_rect, send_int,
-  send_uint, send_double, send_bool, send_size, send_rect, typed, ns_string,
-  retain, release, rect, create_with_frame, CGRect, CGSize, send_void_size,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_void_uint,
+  send_void_double,
+  send_void_rect,
+  send_int,
+  send_uint,
+  send_double,
+  send_bool,
+  send_size,
+  send_rect,
+  typed,
+  ns_string,
+  retain,
+  release,
+  rect,
+  create_with_frame,
+  CGRect,
+  CGSize,
+  send_void_size,
   from_ns_array,
 }
 import ._classes { register, unregister, shared_target }
@@ -59,7 +81,9 @@ class MacCheckbox < MacView {
         # so the state is set again.
         send_void_bool(self.native, 'setAllowsMixedState:', value == true)
         send_void_int(
-          self.native, 'setState:', _state_of(self.props.get('value')),
+          self.native,
+          'setState:',
+          _state_of(self.props.get('value')),
         )
       }
       when 'enabled' {
@@ -118,7 +142,9 @@ class MacRadio < MacView {
   set_frame(frame) {
     parent.set_frame(frame)
     send_void_rect(
-      self.button, 'setFrame:', rect(0, 0, frame.width, frame.height),
+      self.button,
+      'setFrame:',
+      rect(0, 0, frame.width, frame.height),
     )
   }
 
@@ -201,7 +227,9 @@ class MacSlider < MacView {
       }
       when 'divisions' {
         send_void_int(
-          self.native, 'setNumberOfTickMarks:', value > 0 ? value + 1 : 0,
+          self.native,
+          'setNumberOfTickMarks:',
+          value > 0 ? value + 1 : 0,
         )
         send_void_bool(self.native, 'setAllowsTickMarkValuesOnly:', value > 0)
       }
@@ -231,7 +259,8 @@ class MacSlider < MacView {
     var value = send_double(self.native, 'doubleValue')
     self.fire('changed', { value })
     var event = send(
-      send(cls('NSApplication'), 'sharedApplication'), 'currentEvent',
+      send(cls('NSApplication'), 'sharedApplication'),
+      'currentEvent',
     )
 
     # NSEventTypeLeftMouseUp ends a drag; a key press changes the value in
@@ -328,7 +357,9 @@ class MacProgress < MacView {
       }
       when 'animating' {
         send_void_id(
-          self.native, value ? 'startAnimation:' : 'stopAnimation:', nil,
+          self.native,
+          value ? 'startAnimation:' : 'stopAnimation:',
+          nil,
         )
       }
       when 'control_size' {
@@ -376,17 +407,23 @@ class MacSegmented < MacView {
         iter var i = 0; i < value.length(); i++ {
           var segment = value[i]
           set_label(
-            self.native, sel('setLabel:forSegment:'),
-            ns_string(segment.get('label', '')), i,
+            self.native,
+            sel('setLabel:forSegment:'),
+            ns_string(segment.get('label', '')),
+            i,
           )
           set_enabled(
-            self.native, sel('setEnabled:forSegment:'),
-            segment.get('enabled', true) != false, i,
+            self.native,
+            sel('setEnabled:forSegment:'),
+            segment.get('enabled', true) != false,
+            i,
           )
           var tip = segment.get('tooltip')
           set_label(
-            self.native, sel('setToolTip:forSegment:'),
-            tip == nil ? nil : ns_string(tip), i,
+            self.native,
+            sel('setToolTip:forSegment:'),
+            tip == nil ? nil : ns_string(tip),
+            i,
           )
         }
 
@@ -415,7 +452,10 @@ class MacSegmented < MacView {
 
     iter var i = 0; i < count; i++ {
       set_selected(
-        self.native, sel('setSelected:forSegment:'), chosen.contains(i), i,
+        self.native,
+        sel('setSelected:forSegment:'),
+        chosen.contains(i),
+        i,
       )
     }
   }
@@ -447,8 +487,10 @@ class MacPopup < MacView {
 
   @new(backend, props: dict, dispatch: function) {
     var button = typed(ffi.ptr, [CGRect, ffi.bool])(
-      send(cls('NSPopUpButton'), 'alloc'), sel('initWithFrame:pullsDown:'),
-      rect(0, 0, 100, 22), false,
+      send(cls('NSPopUpButton'), 'alloc'),
+      sel('initWithFrame:pullsDown:'),
+      rect(0, 0, 100, 22),
+      false,
     )
     send_void_bool(button, 'setAutoenablesItems:', false)
     _wire(button)
@@ -465,7 +507,9 @@ class MacPopup < MacView {
         for item in value {
           if item.get('separator', false) {
             send_void_id(
-              menu, 'addItem:', send(cls('NSMenuItem'), 'separatorItem'),
+              menu,
+              'addItem:',
+              send(cls('NSMenuItem'), 'separatorItem'),
             )
             continue
           }
@@ -473,10 +517,14 @@ class MacPopup < MacView {
           var entry = make(
             send(cls('NSMenuItem'), 'alloc'),
             sel('initWithTitle:action:keyEquivalent:'),
-            ns_string(item.get('title', '')), nil, ns_string(''),
+            ns_string(item.get('title', '')),
+            nil,
+            ns_string(''),
           )
           send_void_bool(
-            entry, 'setEnabled:', item.get('enabled', true) != false,
+            entry,
+            'setEnabled:',
+            item.get('enabled', true) != false,
           )
           send_void_id(menu, 'addItem:', entry)
           release(entry)
@@ -507,9 +555,9 @@ class MacPopup < MacView {
   }
 
   on_action() {
-    self.fire(
-      'changed', { selected: send_int(self.native, 'indexOfSelectedItem') },
-    )
+    self.fire('changed', {
+      selected: send_int(self.native, 'indexOfSelectedItem'),
+    })
   }
 }
 
@@ -521,7 +569,9 @@ var _DATE_STYLES = { field: 0, compact: 2, graphical: 1 }
 
 def _ns_date(seconds) {
   return typed(ffi.ptr, [ffi.double])(
-    cls('NSDate'), sel('dateWithTimeIntervalSince1970:'), seconds,
+    cls('NSDate'),
+    sel('dateWithTimeIntervalSince1970:'),
+    seconds,
   )
 }
 
@@ -541,28 +591,37 @@ class MacDatePicker < MacView {
     using name {
       when 'value' {
         send_void_id(
-          self.native, 'setDateValue:', _ns_date(value == nil ? 0 : value),
+          self.native,
+          'setDateValue:',
+          _ns_date(value == nil ? 0 : value),
         )
       }
       when 'min' {
         send_void_id(
-          self.native, 'setMinDate:', value == nil ? nil : _ns_date(value),
+          self.native,
+          'setMinDate:',
+          value == nil ? nil : _ns_date(value),
         )
       }
       when 'max' {
         send_void_id(
-          self.native, 'setMaxDate:', value == nil ? nil : _ns_date(value),
+          self.native,
+          'setMaxDate:',
+          value == nil ? nil : _ns_date(value),
         )
       }
       when 'mode' {
         send_void_uint(
-          self.native, 'setDatePickerElements:',
+          self.native,
+          'setDatePickerElements:',
           _DATE_ELEMENTS.get(value, 0x00e0),
         )
       }
       when 'style' {
         send_void_uint(
-          self.native, 'setDatePickerStyle:', _DATE_STYLES.get(value, 0),
+          self.native,
+          'setDatePickerStyle:',
+          _DATE_STYLES.get(value, 0),
         )
       }
       when 'enabled' {
@@ -584,7 +643,8 @@ class MacDatePicker < MacView {
 
   on_action() {
     var stamp = send_double(
-      send(self.native, 'dateValue'), 'timeIntervalSince1970',
+      send(self.native, 'dateValue'),
+      'timeIntervalSince1970',
     )
     self.fire('changed', { value: stamp.round() })
   }
@@ -598,7 +658,9 @@ class MacDatePicker < MacView {
  */
 def from_ns_color(color) {
   var srgb = send_id(
-    color, 'colorUsingColorSpace:', send(cls('NSColorSpace'), 'sRGBColorSpace'),
+    color,
+    'colorUsingColorSpace:',
+    send(cls('NSColorSpace'), 'sRGBColorSpace'),
   )
 
   if srgb == nil {
@@ -607,7 +669,9 @@ def from_ns_color(color) {
 
   var part = @(name) => (send_double(srgb, name) * 255).round().max(0).min(255)
   return Color(
-    part('redComponent'), part('greenComponent'), part('blueComponent'),
+    part('redComponent'),
+    part('greenComponent'),
+    part('blueComponent'),
     send_double(srgb, 'alphaComponent').max(0).min(1),
   )
 }
@@ -672,19 +736,23 @@ class MacLevel < MacView {
       }
       when 'warning' {
         send_void_double(
-          self.native, 'setWarningValue:',
+          self.native,
+          'setWarningValue:',
           value == nil ? self.props.get('max', 5) + 1 : value,
         )
       }
       when 'critical' {
         send_void_double(
-          self.native, 'setCriticalValue:',
+          self.native,
+          'setCriticalValue:',
           value == nil ? self.props.get('max', 5) + 1 : value,
         )
       }
       when 'style' {
         send_void_uint(
-          self.native, 'setLevelIndicatorStyle:', _LEVEL_STYLES.get(value, 1),
+          self.native,
+          'setLevelIndicatorStyle:',
+          _LEVEL_STYLES.get(value, 1),
         )
       }
       when 'editable' {
@@ -745,7 +813,9 @@ class MacGroupBox < MacView {
   apply(name: string, value) {
     if name == 'title' {
       send_void_id(
-        self.native, 'setTitle:', ns_string(value == nil ? '' : value),
+        self.native,
+        'setTitle:',
+        ns_string(value == nil ? '' : value),
       )
 
       # NSNoTitle 0, NSAtTop 2.
@@ -761,7 +831,8 @@ class MacGroupBox < MacView {
     var frame = send_rect(self.native, 'frame')
     var probe = 200
     send_void_rect(
-      self.native, 'setFrame:',
+      self.native,
+      'setFrame:',
       rect(frame.origin.x, frame.origin.y, probe, probe),
     )
     var inner = send_rect(self.content, 'frame')
@@ -821,7 +892,8 @@ class MacImage < MacView {
       }
       when 'tint' {
         send_void_id(
-          self.native, 'setContentTintColor:',
+          self.native,
+          'setContentTintColor:',
           value == nil ? nil : ns_color(value),
         )
       }
@@ -835,18 +907,23 @@ class MacImage < MacView {
 
     if source.contains('path') {
       return typed(ffi.ptr, [ffi.ptr])(
-        send(cls('NSImage'), 'alloc'), sel('initWithContentsOfFile:'),
+        send(cls('NSImage'), 'alloc'),
+        sel('initWithContentsOfFile:'),
         ns_string(source.path),
       )
     }
 
     if source.contains('bytes') {
       var data = typed(ffi.ptr, [ffi.ptr, ffi.ulong])(
-        cls('NSData'), sel('dataWithBytes:length:'), source.bytes,
+        cls('NSData'),
+        sel('dataWithBytes:length:'),
+        source.bytes,
         source.bytes.length(),
       )
       return typed(ffi.ptr, [ffi.ptr])(
-        send(cls('NSImage'), 'alloc'), sel('initWithData:'), data,
+        send(cls('NSImage'), 'alloc'),
+        sel('initWithData:'),
+        data,
       )
     }
 
@@ -854,7 +931,8 @@ class MacImage < MacView {
       var base = typed(ffi.ptr, [ffi.ptr, ffi.ptr])(
         cls('NSImage'),
         sel('imageWithSystemSymbolName:accessibilityDescription:'),
-        ns_string(source.symbol), nil,
+        ns_string(source.symbol),
+        nil,
       )
 
       if base == nil {
@@ -864,7 +942,8 @@ class MacImage < MacView {
       var weight = _symbol_weight(source.get('weight', 400))
       var config = typed(ffi.ptr, [ffi.double, ffi.double])(
         cls('NSImageSymbolConfiguration'),
-        sel('configurationWithPointSize:weight:'), source.get('size', 13),
+        sel('configurationWithPointSize:weight:'),
+        source.get('size', 13),
         weight,
       )
       return retain(send_id(base, 'imageWithSymbolConfiguration:', config))
@@ -940,17 +1019,27 @@ class MacImage < MacView {
 
     var rep = _bitmap(
       send(cls('NSBitmapImageRep'), 'alloc'),
-      sel('initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:'),
-      nil, (width * scale).round().max(1), (height * scale).round().max(1), 8,
-      4, true, false, ffi.open().symbol('NSDeviceRGBColorSpace').read(ffi.ptr),
-      0, 0,
+      sel(
+        'initWithBitmapDataPlanes:pixelsWide:pixelsHigh:bitsPerSample:samplesPerPixel:hasAlpha:isPlanar:colorSpaceName:bytesPerRow:bitsPerPixel:',
+      ),
+      nil,
+      (width * scale).round().max(1),
+      (height * scale).round().max(1),
+      8,
+      4,
+      true,
+      false,
+      ffi.open().symbol('NSDeviceRGBColorSpace').read(ffi.ptr),
+      0,
+      0,
     )
     send_void_size(rep, 'setSize:', { width, height })
 
     var NSGraphicsContext = cls('NSGraphicsContext')
     send_void(NSGraphicsContext, 'saveGraphicsState')
     send_void_id(
-      NSGraphicsContext, 'setCurrentContext:',
+      NSGraphicsContext,
+      'setCurrentContext:',
       send_id(NSGraphicsContext, 'graphicsContextWithBitmapImageRep:', rep),
     )
 
@@ -961,17 +1050,26 @@ class MacImage < MacView {
     _one_double(turn, sel('rotateByDegrees:'), -rotation)
     _two_doubles(turn, sel('scaleXBy:yBy:'), across ? -1 : 1, down ? -1 : 1)
     _two_doubles(
-      turn, sel('translateXBy:yBy:'), -size.width / 2, -size.height / 2,
+      turn,
+      sel('translateXBy:yBy:'),
+      -size.width / 2,
+      -size.height / 2,
     )
     send_void(turn, 'concat')
     _draw_in_rect(
-      original, sel('drawInRect:fromRect:operation:fraction:'),
-      rect(0, 0, size.width, size.height), rect(0, 0, 0, 0), _SOURCE_OVER, 1,
+      original,
+      sel('drawInRect:fromRect:operation:fraction:'),
+      rect(0, 0, size.width, size.height),
+      rect(0, 0, 0, 0),
+      _SOURCE_OVER,
+      1,
     )
     send_void(NSGraphicsContext, 'restoreGraphicsState')
 
     var image = typed(ffi.ptr, [CGSize])(
-      send(cls('NSImage'), 'alloc'), sel('initWithSize:'), { width, height },
+      send(cls('NSImage'), 'alloc'),
+      sel('initWithSize:'),
+      { width, height },
     )
     send_void_id(image, 'addRepresentation:', rep)
     release(rep)
@@ -987,14 +1085,28 @@ var _two_doubles = typed(ffi.void, [ffi.double, ffi.double])
 var _one_double = typed(ffi.void, [ffi.double])
 var _draw_in_rect = typed(ffi.void, [CGRect, CGRect, ffi.ulong, ffi.double])
 var _bitmap = typed(ffi.ptr, [
-  ffi.ptr, ffi.long, ffi.long, ffi.long, ffi.long, ffi.bool, ffi.bool, ffi.ptr,
-  ffi.long, ffi.long,
+  ffi.ptr,
+  ffi.long,
+  ffi.long,
+  ffi.long,
+  ffi.long,
+  ffi.bool,
+  ffi.bool,
+  ffi.ptr,
+  ffi.long,
+  ffi.long,
 ])
 
 def _symbol_weight(css: number) {
   var weights = [
-    [150, -0.8], [250, -0.6], [350, -0.4], [450, 0], [550, 0.23], [650, 0.3],
-    [750, 0.4], [850, 0.56],
+    [150, -0.8],
+    [250, -0.6],
+    [350, -0.4],
+    [450, 0],
+    [550, 0.23],
+    [650, 0.3],
+    [750, 0.4],
+    [850, 0.56],
   ]
 
   for pair in weights {

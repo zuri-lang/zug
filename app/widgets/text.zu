@@ -113,15 +113,21 @@ class Text < HostWidget {
     self.selectable = o.get('selectable', false)
 
     if !_ALIGNS.contains(self.align) {
-      raise ValueError("align of Text must be one of TextAlign's values (${', '.join(_ALIGNS)}), got '${self.align}'")
+      raise ValueError(
+        "align of Text must be one of TextAlign's values (${', '.join(_ALIGNS)}), got '${self.align}'",
+      )
     }
 
     if !_OVERFLOWS.contains(self.overflow) {
-      raise ValueError("overflow of Text must be one of TextOverflow's values (${', '.join(_OVERFLOWS)}), got '${self.overflow}'")
+      raise ValueError(
+        "overflow of Text must be one of TextOverflow's values (${', '.join(_OVERFLOWS)}), got '${self.overflow}'",
+      )
     }
 
     if !is_int(self.max_lines) or self.max_lines < 0 {
-      raise ValueError('max_lines of Text must be a whole number, 0 for no limit, got ${self.max_lines}')
+      raise ValueError(
+        'max_lines of Text must be a whole number, 0 for no limit, got ${self.max_lines}',
+      )
     }
   }
 

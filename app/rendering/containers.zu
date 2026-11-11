@@ -45,10 +45,12 @@ class RenderScroll < RenderHost {
     var child = self.child()
 
     if child == nil {
-      self.size = c.constrain(Size(
-        c.has_bounded_width() ? c.max_width : 0,
-        c.has_bounded_height() ? c.max_height : 0,
-      ))
+      self.size = c.constrain(
+        Size(
+          c.has_bounded_width() ? c.max_width : 0,
+          c.has_bounded_height() ? c.max_height : 0,
+        ),
+      )
       self.content_size = self.size
       return
     }
@@ -69,17 +71,19 @@ class RenderScroll < RenderHost {
     }
 
     child.layout(
-      Constraints(min_width, max_width, min_height, max_height), true,
+      Constraints(min_width, max_width, min_height, max_height),
+      true,
     )
     var width = c.has_bounded_width()
-      ? c.max_width
-      : c.constrain_width(child.size.width)
+        ? c.max_width
+        : c.constrain_width(child.size.width)
     var height = c.has_bounded_height()
-      ? c.max_height
-      : c.constrain_height(child.size.height)
+        ? c.max_height
+        : c.constrain_height(child.size.height)
     self.size = Size(width, height)
     self.content_size = Size(
-      child.size.width.max(width), child.size.height.max(height),
+      child.size.width.max(width),
+      child.size.height.max(height),
     )
     self.place_child(child, Point.ZERO)
   }
@@ -128,11 +132,11 @@ class RenderSlotted < RenderHost {
   perform_layout() {
     var c = self.constraints
     var width = c.has_bounded_width()
-      ? c.max_width
-      : c.constrain_width(self._natural(true))
+        ? c.max_width
+        : c.constrain_width(self._natural(true))
     var height = c.has_bounded_height()
-      ? c.max_height
-      : c.constrain_height(self._natural(false))
+        ? c.max_height
+        : c.constrain_height(self._natural(false))
     self.size = Size(width, height)
     self.ensure_view()
     self.flush_props()
@@ -141,7 +145,8 @@ class RenderSlotted < RenderHost {
       var child = self.children[i]
       var area = self.view.slot_size(i, self.size)
       child.layout(
-        Constraints.tight(Size(area.width.max(0), area.height.max(0))), false,
+        Constraints.tight(Size(area.width.max(0), area.height.max(0))),
+        false,
       )
       self.place_child(child, Point.ZERO)
     }
@@ -155,8 +160,8 @@ class RenderSlotted < RenderHost {
     for child in self.children {
       largest = largest.max(
         horizontal
-          ? child.max_intrinsic_width(INFINITY)
-          : child.max_intrinsic_height(INFINITY),
+            ? child.max_intrinsic_width(INFINITY)
+            : child.max_intrinsic_height(INFINITY),
       )
     }
 

@@ -20,16 +20,19 @@ import ..app.testing { check_backend }
 
 var parser = args.Parser('check_backend', false)
 parser.add_index(
-  'backend', "The backend to check, the platform's own when left out",
+  'backend',
+  "The backend to check, the platform's own when left out",
   { type: args.STRING },
 )
 parser.add_option(
-  'load', 'A file to import first, which registers the backend',
+  'load',
+  'A file to import first, which registers the backend',
   { type: args.STRING },
 )
 parser.add_option('all', 'Print every check, not only those that did not pass')
 parser.add_option(
-  'quick', 'Check the contract alone, without the widget gallery',
+  'quick',
+  'Check the contract alone, without the widget gallery',
 )
 var parsed = parser.parse()
 var o = parsed.options

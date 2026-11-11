@@ -10,11 +10,32 @@
 import ffi
 import .. ..foundation { Size, EdgeInsets, Constraints }
 import ._runtime {
-  cls, sel, send, send_id, send_void, send_void_id, send_void_bool,
-  send_void_int, send_void_uint, send_void_double, send_void_rect,
-  send_void_size, send_void_point, send_int, send_double, send_rect, typed,
-  ns_string, zuri_string, retain, release, rect, create, create_with_frame,
-  define_class, from_ns_array,
+  cls,
+  sel,
+  send,
+  send_id,
+  send_void,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_void_uint,
+  send_void_double,
+  send_void_rect,
+  send_void_size,
+  send_void_point,
+  send_int,
+  send_double,
+  send_rect,
+  typed,
+  ns_string,
+  zuri_string,
+  retain,
+  release,
+  rect,
+  create,
+  create_with_frame,
+  define_class,
+  from_ns_array,
 }
 import ._classes { register, unregister, host_for, B }
 import ._cocoa { ns_color, text_alignment }
@@ -26,15 +47,23 @@ import ._views { MacView }
  * @type Pointer
  */
 var ZugEvents = define_class('ZugEvents', 'NSObject', {
-  'boundsDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'boundsDidChange:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.bounds_changed()
-    }
-  }],
+      if host != nil {
+        host.bounds_changed()
+      }
+    },
+  ],
   'tabView:didSelectTabViewItem:': [
-    'v@:@@', ffi.void, [ffi.ptr, ffi.ptr], @(this, view, item) {
+    'v@:@@',
+    ffi.void,
+    [ffi.ptr, ffi.ptr],
+    @(this, view, item) {
       var host = host_for(view)
 
       if host != nil {
@@ -42,39 +71,64 @@ var ZugEvents = define_class('ZugEvents', 'NSObject', {
       }
     },
   ],
-  'splitViewDidResizeSubviews:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'splitViewDidResizeSubviews:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.panes_resized()
-    }
-  }],
-  'numberOfRowsInTableView:': ['q@:@', ffi.long, [ffi.ptr], @(this, table) {
-    var host = host_for(table)
-    return host == nil ? 0 : host.props.get('row_count', 0)
-  }, 0],
+      if host != nil {
+        host.panes_resized()
+      }
+    },
+  ],
+  'numberOfRowsInTableView:': [
+    'q@:@',
+    ffi.long,
+    [ffi.ptr],
+    @(this, table) {
+      var host = host_for(table)
+      return host == nil ? 0 : host.props.get('row_count', 0)
+    },
+    0,
+  ],
   'tableView:objectValueForTableColumn:row:': [
-    '@@:@@q', ffi.ptr, [ffi.ptr, ffi.ptr, ffi.long],
+    '@@:@@q',
+    ffi.ptr,
+    [ffi.ptr, ffi.ptr, ffi.long],
     @(this, table, column, row) {
       var host = host_for(table)
       return host == nil ? nil : host.cell_value(column, row)
     },
   ],
-  'tableViewSelectionDidChange:': ['v@:@', ffi.void, [ffi.ptr], @(this, note) {
-    var host = host_for(send(note, 'object'))
+  'tableViewSelectionDidChange:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, note) {
+      var host = host_for(send(note, 'object'))
 
-    if host != nil {
-      host.selection_changed()
-    }
-  }],
+      if host != nil {
+        host.selection_changed()
+      }
+    },
+  ],
   'selectionShouldChangeInTableView:': [
-    '${B}@:@', ffi.bool, [ffi.ptr], @(this, table) {
+    '${B}@:@',
+    ffi.bool,
+    [ffi.ptr],
+    @(this, table) {
       var host = host_for(table)
       return host == nil or host.props.get('selection') != 'none'
-    }, true,
+    },
+    true,
   ],
   'tableView:sortDescriptorsDidChange:': [
-    'v@:@@', ffi.void, [ffi.ptr, ffi.ptr], @(this, table, previous) {
+    'v@:@@',
+    ffi.void,
+    [ffi.ptr, ffi.ptr],
+    @(this, table, previous) {
       var host = host_for(table)
 
       if host != nil {
@@ -82,13 +136,18 @@ var ZugEvents = define_class('ZugEvents', 'NSObject', {
       }
     },
   ],
-  'zugDoubleAction:': ['v@:@', ffi.void, [ffi.ptr], @(this, table) {
-    var host = host_for(table)
+  'zugDoubleAction:': [
+    'v@:@',
+    ffi.void,
+    [ffi.ptr],
+    @(this, table) {
+      var host = host_for(table)
 
-    if host != nil {
-      host.double_clicked()
-    }
-  }],
+      if host != nil {
+        host.double_clicked()
+      }
+    },
+  ],
 })
 
 var _events = nil
@@ -137,9 +196,12 @@ class MacScroll < MacView {
     self.clip = send(scroll, 'contentView')
     send_void_bool(self.clip, 'setPostsBoundsChangedNotifications:', true)
     typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr, ffi.ptr])(
-      _notifications(), sel('addObserver:selector:name:object:'),
-      shared_events(), sel('boundsDidChange:'),
-      _global('NSViewBoundsDidChangeNotification'), self.clip,
+      _notifications(),
+      sel('addObserver:selector:name:object:'),
+      shared_events(),
+      sel('boundsDidChange:'),
+      _global('NSViewBoundsDidChangeNotification'),
+      self.clip,
     )
     register(self.clip, self)
     self.setup(backend, 'scroll', scroll, props, dispatch)
@@ -149,11 +211,13 @@ class MacScroll < MacView {
     using name {
       when 'axis' {
         send_void_bool(
-          self.native, 'setHasVerticalScroller:',
+          self.native,
+          'setHasVerticalScroller:',
           value == 'vertical' or value == 'both',
         )
         send_void_bool(
-          self.native, 'setHasHorizontalScroller:',
+          self.native,
+          'setHasHorizontalScroller:',
           value == 'horizontal' or value == 'both',
         )
       }
@@ -170,9 +234,10 @@ class MacScroll < MacView {
       when 'scroll_to' {
         if value != nil and value != self.applied_request {
           self.applied_request = value
-          send_void_point(
-            self.clip, 'scrollToPoint:', { x: value[0], y: value[1] },
-          )
+          send_void_point(self.clip, 'scrollToPoint:', {
+            x: value[0],
+            y: value[1],
+          })
           send_void_id(self.native, 'reflectScrolledClipView:', self.clip)
         }
       }
@@ -184,10 +249,10 @@ class MacScroll < MacView {
   }
 
   set_content_size(slot, size: Size) {
-    send_void_size(
-      self.document, 'setFrameSize:',
-      { width: size.width, height: size.height },
-    )
+    send_void_size(self.document, 'setFrameSize:', {
+      width: size.width,
+      height: size.height,
+    })
   }
 
   measure(constraints: Constraints) {
@@ -208,8 +273,11 @@ class MacScroll < MacView {
 
   before_destroy() {
     typed(ffi.void, [ffi.ptr, ffi.ptr, ffi.ptr])(
-      _notifications(), sel('removeObserver:name:object:'), shared_events(),
-      _global('NSViewBoundsDidChangeNotification'), self.clip,
+      _notifications(),
+      sel('removeObserver:name:object:'),
+      shared_events(),
+      _global('NSViewBoundsDidChangeNotification'),
+      self.clip,
     )
     unregister(self.clip)
     release(self.document)
@@ -246,7 +314,8 @@ class MacTabs < MacView {
           } else {
             var pane = create_with_frame('ZugView', nil)
             var item = send_id(
-              send(cls('NSTabViewItem'), 'alloc'), 'initWithIdentifier:',
+              send(cls('NSTabViewItem'), 'alloc'),
+              'initWithIdentifier:',
               ns_string('${i}'),
             )
             send_void_id(item, 'setLabel:', ns_string(value[i]))
@@ -282,9 +351,10 @@ class MacTabs < MacView {
 
   _content_rect(size: Size) {
     var frame = send_rect(self.native, 'frame')
-    send_void_size(
-      self.native, 'setFrameSize:', { width: size.width, height: size.height },
-    )
+    send_void_size(self.native, 'setFrameSize:', {
+      width: size.width,
+      height: size.height,
+    })
     var content = send_rect(self.native, 'contentRect')
     send_void_size(self.native, 'setFrameSize:', frame.size)
     return content
@@ -301,7 +371,9 @@ class MacTabs < MacView {
     var left = content.origin.x
     var top = content.origin.y
     return EdgeInsets(
-      left, top, probe.width - left - content.size.width,
+      left,
+      top,
+      probe.width - left - content.size.width,
       probe.height - top - content.size.height,
     )
   }
@@ -321,7 +393,9 @@ class MacTabs < MacView {
     if !self._applying {
       var item = send(self.native, 'selectedTabViewItem')
       var index = typed(ffi.long, [ffi.ptr])(
-        self.native, sel('indexOfTabViewItem:'), item,
+        self.native,
+        sel('indexOfTabViewItem:'),
+        item,
       )
       self.fire('changed', { selected: index })
     }
@@ -386,13 +460,13 @@ class MacSplit < MacView {
     self._adjusting = true
     var current = send_rect(self.native, 'frame').size
 
-    if current.width != size.width
-      or current.height != size.height
-      or !self._initial_applied {
-      send_void_size(
-        self.native, 'setFrameSize:',
-        { width: size.width, height: size.height },
-      )
+    if current.width != size.width or
+        current.height != size.height or
+        !self._initial_applied {
+      send_void_size(self.native, 'setFrameSize:', {
+        width: size.width,
+        height: size.height,
+      })
       send_void(self.native, 'adjustSubviews')
       self._apply_initial(size)
     }
@@ -426,7 +500,10 @@ class MacSplit < MacView {
     iter var i = 0; i < initial.length() and i < self.panes.length() - 1; i++ {
       position += initial[i]
       set_position(
-        self.native, sel('setPosition:ofDividerAtIndex:'), position, i,
+        self.native,
+        sel('setPosition:ofDividerAtIndex:'),
+        position,
+        i,
       )
       position += thickness
     }
@@ -489,7 +566,9 @@ class MacTable < MacView {
     send_void_id(self.table, 'setDelegate:', shared_events())
     send_void_id(self.table, 'setTarget:', shared_events())
     typed(ffi.void, [ffi.ptr])(
-      self.table, sel('setDoubleAction:'), sel('zugDoubleAction:'),
+      self.table,
+      sel('setDoubleAction:'),
+      sel('zugDoubleAction:'),
     )
 
     # NSTableViewStylePlain keeps rows the width of the table.
@@ -510,19 +589,23 @@ class MacTable < MacView {
 
         for spec in value {
           var column = send_id(
-            send(cls('NSTableColumn'), 'alloc'), 'initWithIdentifier:',
+            send(cls('NSTableColumn'), 'alloc'),
+            'initWithIdentifier:',
             ns_string(spec.id),
           )
           send_void_id(
-            send(column, 'headerCell'), 'setStringValue:',
+            send(column, 'headerCell'),
+            'setStringValue:',
             ns_string(spec.title),
           )
           send_void_int(
-            send(column, 'headerCell'), 'setAlignment:',
+            send(column, 'headerCell'),
+            'setAlignment:',
             text_alignment(spec.get('align', 'start')),
           )
           send_void_int(
-            send(column, 'dataCell'), 'setAlignment:',
+            send(column, 'dataCell'),
+            'setAlignment:',
             text_alignment(spec.get('align', 'start')),
           )
 
@@ -540,8 +623,10 @@ class MacTable < MacView {
 
           if spec.get('sortable', false) {
             var prototype = typed(ffi.ptr, [ffi.ptr, ffi.bool])(
-              cls('NSSortDescriptor'), sel('sortDescriptorWithKey:ascending:'),
-              ns_string(spec.id), true,
+              cls('NSSortDescriptor'),
+              sel('sortDescriptorWithKey:ascending:'),
+              ns_string(spec.id),
+              true,
             )
             send_void_id(column, 'setSortDescriptorPrototype:', prototype)
           }
@@ -566,7 +651,9 @@ class MacTable < MacView {
       }
       when 'selection' {
         send_void_bool(
-          self.table, 'setAllowsMultipleSelection:', value == 'multiple',
+          self.table,
+          'setAllowsMultipleSelection:',
+          value == 'multiple',
         )
         send_void_bool(self.table, 'setAllowsEmptySelection:', true)
       }
@@ -575,7 +662,9 @@ class MacTable < MacView {
       }
       when 'alternating' {
         send_void_bool(
-          self.table, 'setUsesAlternatingRowBackgroundColors:', value == true,
+          self.table,
+          'setUsesAlternatingRowBackgroundColors:',
+          value == true,
         )
       }
       when 'grid' {
@@ -602,7 +691,10 @@ class MacTable < MacView {
 
     self._applying = true
     typed(ffi.void, [ffi.ptr, ffi.bool])(
-      self.table, sel('selectRowIndexes:byExtendingSelection:'), set, false,
+      self.table,
+      sel('selectRowIndexes:byExtendingSelection:'),
+      set,
+      false,
     )
     self._applying = false
   }
@@ -617,17 +709,21 @@ class MacTable < MacView {
 
       if sort != nil and sort.column == id {
         image = send_id(
-          cls('NSImage'), 'imageNamed:',
+          cls('NSImage'),
+          'imageNamed:',
           ns_string(
             sort.ascending
-              ? 'NSAscendingSortIndicator'
-              : 'NSDescendingSortIndicator',
+                ? 'NSAscendingSortIndicator'
+                : 'NSDescendingSortIndicator',
           ),
         )
       }
 
       set_indicator(
-        self.table, sel('setIndicatorImage:inTableColumn:'), image, column,
+        self.table,
+        sel('setIndicatorImage:inTableColumn:'),
+        image,
+        column,
       )
     }
   }
@@ -704,13 +800,10 @@ class MacTable < MacView {
     }
 
     var first = descriptors[0]
-    self.fire(
-      'sorted',
-      {
-        column: zuri_string(send(first, 'key')),
-        ascending: typed(ffi.bool, [])(first, sel('ascending')),
-      },
-    )
+    self.fire('sorted', {
+      column: zuri_string(send(first, 'key')),
+      ascending: typed(ffi.bool, [])(first, sel('ascending')),
+    })
   }
 
   /**
@@ -772,7 +865,9 @@ class MacVisualEffect < MacView {
       }
       when 'blending' {
         send_void_int(
-          self.native, 'setBlendingMode:', value == 'within' ? 1 : 0,
+          self.native,
+          'setBlendingMode:',
+          value == 'within' ? 1 : 0,
         )
       }
     }
@@ -781,7 +876,9 @@ class MacVisualEffect < MacView {
   set_frame(frame) {
     parent.set_frame(frame)
     send_void_rect(
-      self.content, 'setFrame:', rect(0, 0, frame.width, frame.height),
+      self.content,
+      'setFrame:',
+      rect(0, 0, frame.width, frame.height),
     )
   }
 

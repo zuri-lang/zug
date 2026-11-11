@@ -29,25 +29,24 @@ import ..app { * }
 import ..app.testing { WidgetTester }
 
 var parser = args.Parser('bench', false)
-parser.add_option(
-  'rounds', 'How many times to time each measurement',
-  { type: args.INT, value: 9 },
-)
-parser.add_option(
-  'only', 'Run only the headless or the macos measurements',
-  { type: args.STRING },
-)
-parser.add_option(
-  'max-load', 'The load average to wait for before measuring',
-  { type: args.NUMBER, value: 1.5 },
-)
-parser.add_option(
-  'wait', 'Minutes to wait for the load to fall',
-  { type: args.NUMBER, value: 30 },
-)
-parser.add_option(
-  'json', 'A file to write the results to', { type: args.STRING },
-)
+parser.add_option('rounds', 'How many times to time each measurement', {
+  type: args.INT,
+  value: 9,
+})
+parser.add_option('only', 'Run only the headless or the macos measurements', {
+  type: args.STRING,
+})
+parser.add_option('max-load', 'The load average to wait for before measuring', {
+  type: args.NUMBER,
+  value: 1.5,
+})
+parser.add_option('wait', 'Minutes to wait for the load to fall', {
+  type: args.NUMBER,
+  value: 30,
+})
+parser.add_option('json', 'A file to write the results to', {
+  type: args.STRING,
+})
 
 var results = []
 
@@ -96,7 +95,9 @@ def wait_for_quiet(limit: number, minutes: number) {
   var load = load_average()
 
   while load != nil and load >= limit and time() < deadline {
-    io.stderr.write('bench: load is ${load}, waiting for it to fall below ${limit}\n')
+    io.stderr.write(
+      'bench: load is ${load}, waiting for it to fall below ${limit}\n',
+    )
     os.sleep(30)
     load = load_average()
   }
@@ -133,17 +134,24 @@ class RowsState < State {
 
     iter var i = 0; i < self.widget.count; i++ {
       var label = i == self.marked ? 'Row ${i} *' : 'Row ${i}'
-      rows.append(Row([
-        Text(self.version == 0 ? label : '${label} v${self.version}'),
-        Spacer(),
-        Button('Open', { on_pressed: @{} }),
-      ], { spacing: 8, key: ValueKey(i) }))
+      rows.append(
+        Row(
+          [
+            Text(self.version == 0 ? label : '${label} v${self.version}'),
+            Spacer(),
+            Button('Open', { on_pressed: @{} }),
+          ],
+          { spacing: 8, key: ValueKey(i) },
+        ),
+      )
     }
 
-    return ScrollView(Padding(
-      EdgeInsets.all(8),
-      Column(rows, { spacing: 4, align_items: AlignItems.STRETCH }),
-    ))
+    return ScrollView(
+      Padding(
+        EdgeInsets.all(8),
+        Column(rows, { spacing: 4, align_items: AlignItems.STRETCH }),
+      ),
+    )
   }
 }
 
@@ -165,9 +173,12 @@ def touch_all() {
 
 def long_list() {
   return ListView.builder(
-    100000, @(context, index) => Row([
-      Text('Item ${index}'), Spacer(), Text('${index * 3}'),
-    ], { spacing: 8 }), { item_extent: 20 },
+    100000,
+    @(context, index) => Row(
+      [Text('Item ${index}'), Spacer(), Text('${index * 3}')],
+      { spacing: 8 },
+    ),
+    { item_extent: 20 },
   )
 }
 
@@ -179,7 +190,9 @@ def people_table(count: number) {
     [
       DataColumn('name', 'Name', { width: 160 }),
       DataColumn('n', 'Number', { width: 80 }),
-    ], count, @(row, column) {
+    ],
+    count,
+    @(row, column) {
       last_cell = time()
       return column == 'name' ? 'Person ${row}' : '${row}'
     },
@@ -190,82 +203,139 @@ def headless(rounds: number) {
   var group = 'headless'
   var size = Size(400, 600)
 
-  record(group, 'mount 1,000 rows', 'ms', in_ms(timed(rounds, @{
-    var t = WidgetTester()
-    t.pump_widget(Rows(1000), { size })
-    t.dispose()
-  })))
+  record(
+    group,
+    'mount 1,000 rows',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        var t = WidgetTester()
+        t.pump_widget(Rows(1000), { size })
+        t.dispose()
+      }),
+    ),
+  )
 
   var t = WidgetTester().pump_widget(Rows(1000), { size })
-  record(group, 'rebuild 1,000 rows, nothing changed', 'ms', in_ms(timed(
-    rounds, @{
-      touch_nothing()
-      t.pump()
-    },
-  )))
-  record(group, 'rebuild 1,000 rows, one label changed', 'ms', in_ms(timed(
-    rounds, @{
-      touch_one()
-      t.pump()
-    },
-  )))
-  record(group, 'rebuild 1,000 rows, every label changed', 'ms', in_ms(timed(
-    rounds, @{
-      touch_all()
-      t.pump()
-    },
-  )))
+  record(
+    group,
+    'rebuild 1,000 rows, nothing changed',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        touch_nothing()
+        t.pump()
+      }),
+    ),
+  )
+  record(
+    group,
+    'rebuild 1,000 rows, one label changed',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        touch_one()
+        t.pump()
+      }),
+    ),
+  )
+  record(
+    group,
+    'rebuild 1,000 rows, every label changed',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        touch_all()
+        t.pump()
+      }),
+    ),
+  )
   var wide = false
-  record(group, 'lay 1,000 rows out again for a new width', 'ms', in_ms(timed(
-    rounds, @{
-      wide = !wide
-      t.window().resize(Size(wide ? 480 : 400, 600))
-      t.pump()
-    },
-  )))
+  record(
+    group,
+    'lay 1,000 rows out again for a new width',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        wide = !wide
+        t.window().resize(Size(wide ? 480 : 400, 600))
+        t.pump()
+      }),
+    ),
+  )
   t.dispose()
 
   var value = ObservableValue(0)
-  t = WidgetTester().pump_widget(Column([
-    Observer(value, @(context) => Text('Value ${value.value()}')),
-    Expanded(Rows(1000)),
-  ], { align_items: AlignItems.STRETCH }), { size })
-  record(group, 'rebuild one Observer beside 1,000 rows', 'ms', in_ms(timed(
-    rounds, @{
-      value.update(@(n) => n + 1)
-      t.pump()
-    },
-  )))
+  t = WidgetTester().pump_widget(
+    Column(
+      [
+        Observer(value, @(context) => Text('Value ${value.value()}')),
+        Expanded(Rows(1000)),
+      ],
+      { align_items: AlignItems.STRETCH },
+    ),
+    { size },
+  )
+  record(
+    group,
+    'rebuild one Observer beside 1,000 rows',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        value.update(@(n) => n + 1)
+        t.pump()
+      }),
+    ),
+  )
   t.dispose()
 
   t = WidgetTester().pump_widget(long_list(), { size })
   var scroll = t.find_kind('scroll')[0]
   var y = 0
-  record(group, 'scroll a 100,000-item list by five items', 'ms', in_ms(timed(
-    rounds, @{
-      y += 100
-      scroll.fire('scrolled', { x: 0, y })
-    },
-  )))
+  record(
+    group,
+    'scroll a 100,000-item list by five items',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        y += 100
+        scroll.fire('scrolled', { x: 0, y })
+      }),
+    ),
+  )
   t.dispose()
 
   var open = ObservableValue(false)
-  t = WidgetTester().pump_widget(Column([
-    Observer(open, @(context) => AnimatedBox({
-      duration: Duration.seconds(10),
-      width: open.value() ? 300 : 100,
-      height: 20,
-      color: Color.RED,
-    })),
-    Expanded(Rows(1000)),
-  ], { align_items: AlignItems.START }), { size })
+  t = WidgetTester().pump_widget(
+    Column(
+      [
+        Observer(
+          open,
+          @(context) => AnimatedBox({
+            duration: Duration.seconds(10),
+            width: open.value() ? 300 : 100,
+            height: 20,
+            color: Color.RED,
+          }),
+        ),
+        Expanded(Rows(1000)),
+      ],
+      { align_items: AlignItems.START },
+    ),
+    { size },
+  )
   open.set(true)
   t.pump()
-  record(group, 'animate a box beside 1,000 rows, per frame', 'ms', in_ms(timed(
-    rounds, @{
-      t.advance(1 / 60)
-    },
-  )))
+  record(
+    group,
+    'animate a box beside 1,000 rows, per frame',
+    'ms',
+    in_ms(
+      timed(rounds, @{
+        t.advance(1 / 60)
+      }),
+    ),
+  )
   t.dispose()
 }
 
@@ -314,18 +384,23 @@ class RootState < State {
 
 def objc_calls(rounds: number) {
   var here = os.dir_name(__file__)
-  var objc = zuri.import_file(os.join_paths(
-    here, '..', 'app', 'backends', 'macos', '_runtime.zu',
-  ))
+  var objc = zuri.import_file(
+    os.join_paths(here, '..', 'app', 'backends', 'macos', '_runtime.zu'),
+  )
   var calls = 200000
   var object = objc.send(objc.send(objc.cls('NSObject'), 'alloc'), 'init')
   var hash = objc.typed(ffi.ulong, [])
   var selector = objc.sel('hash')
-  record('macos', 'call an Objective-C method', 'ns', timed(rounds, @{
-    iter var i = 0; i < calls; i++ {
-      hash(object, selector)
-    }
-  }).map(@(s) => s * 1000000000 / calls))
+  record(
+    'macos',
+    'call an Objective-C method',
+    'ns',
+    timed(rounds, @{
+      iter var i = 0; i < calls; i++ {
+        hash(object, selector)
+      }
+    }).map(@(s) => s * 1000000000 / calls),
+  )
 
   var target = objc.define_class('ZugBenchTarget', 'NSObject', {
     'zugBenchValue': ['q@:', ffi.long, [], @(this) => 42, 0],
@@ -334,7 +409,10 @@ def objc_calls(rounds: number) {
   var value = objc.typed(ffi.long, [])
   var value_selector = objc.sel('zugBenchValue')
   record(
-    'macos', 'call Zuri from Objective-C and return', 'ns', timed(rounds, @{
+    'macos',
+    'call Zuri from Objective-C and return',
+    'ns',
+    timed(rounds, @{
       iter var i = 0; i < calls / 4; i++ {
         value(instance, value_selector)
       }
@@ -344,9 +422,16 @@ def objc_calls(rounds: number) {
 
 def macos(rounds: number) {
   objc_calls(rounds)
-  var objc = zuri.import_file(os.join_paths(
-    os.dir_name(__file__), '..', 'app', 'backends', 'macos', '_runtime.zu',
-  ))
+  var objc = zuri.import_file(
+    os.join_paths(
+      os.dir_name(__file__),
+      '..',
+      'app',
+      'backends',
+      'macos',
+      '_runtime.zu',
+    ),
+  )
 
   var backend = create_backend('macos')
   var runtime = TimedRuntime(backend)
@@ -400,33 +485,53 @@ def macos(rounds: number) {
   steps.append(@{
     root_state.show(Rows(1000))
     frame()
-    record(group, 'rebuild 1,000 rows, nothing changed', 'ms', in_ms(timed(
-      rounds, @{
-        touch_nothing()
-        frame()
-      },
-    )))
-    record(group, 'rebuild 1,000 rows, one label changed', 'ms', in_ms(timed(
-      rounds, @{
-        touch_one()
-        frame()
-      },
-    )))
-    record(group, 'rebuild 1,000 rows, every label changed', 'ms', in_ms(timed(
-      rounds, @{
-        touch_all()
-        frame()
-      },
-    )))
+    record(
+      group,
+      'rebuild 1,000 rows, nothing changed',
+      'ms',
+      in_ms(
+        timed(rounds, @{
+          touch_nothing()
+          frame()
+        }),
+      ),
+    )
+    record(
+      group,
+      'rebuild 1,000 rows, one label changed',
+      'ms',
+      in_ms(
+        timed(rounds, @{
+          touch_one()
+          frame()
+        }),
+      ),
+    )
+    record(
+      group,
+      'rebuild 1,000 rows, every label changed',
+      'ms',
+      in_ms(
+        timed(rounds, @{
+          touch_all()
+          frame()
+        }),
+      ),
+    )
     var wide = false
     var window = runtime.windows()[0].view
-    record(group, 'resize the window of 1,000 rows', 'ms', in_ms(timed(
-      rounds, @{
-        wide = !wide
-        window.set_content_size_to(Size(wide ? 480 : 400, 600))
-        frame()
-      },
-    )))
+    record(
+      group,
+      'resize the window of 1,000 rows',
+      'ms',
+      in_ms(
+        timed(rounds, @{
+          wide = !wide
+          window.set_content_size_to(Size(wide ? 480 : 400, 600))
+          frame()
+        }),
+      ),
+    )
     window.set_content_size_to(Size(400, 600))
   })
   # A table asks for the cells it shows only once the event loop runs, so
@@ -463,11 +568,15 @@ def macos(rounds: number) {
 
   steps.append(@{
     record(
-      group, 'show a table of 100,000 rows until its cells are in', 'ms',
+      group,
+      'show a table of 100,000 rows until its cells are in',
+      'ms',
       in_ms(shown),
     )
     record(
-      group, 'reload a table of 100,000 rows until its cells are in', 'ms',
+      group,
+      'reload a table of 100,000 rows until its cells are in',
+      'ms',
       in_ms(reloaded),
     )
   })
@@ -481,13 +590,18 @@ def macos(rounds: number) {
     var with_rows = beside
     var label = with_rows ? 'beside 1,000 rows' : 'alone'
     steps.append(@{
-      var children = [Observer(open, @(context) => AnimatedBox({
-        duration: Duration.seconds(1),
-        curve: Curve.LINEAR,
-        width: open.value() ? 300 : 100,
-        height: 20,
-        color: Color.system('accent'),
-      }))]
+      var children = [
+        Observer(
+          open,
+          @(context) => AnimatedBox({
+            duration: Duration.seconds(1),
+            curve: Curve.LINEAR,
+            width: open.value() ? 300 : 100,
+            height: 20,
+            color: Color.system('accent'),
+          }),
+        ),
+      ]
 
       if with_rows {
         children.append(Expanded(Rows(1000)))
@@ -509,18 +623,16 @@ def macos(rounds: number) {
         record(group, 'animate a box ${label}, per frame', 'ms', in_ms(frames))
       }
 
-      record(
-        group, 'frames in a second of animation, box ${label}',
-        'frames', [frames.length()],
-      )
+      record(group, 'frames in a second of animation, box ${label}', 'frames', [
+        frames.length(),
+      ])
     })
   }
 
   steps.append(@{
-    record(
-      group, 'the display refreshing at', 'Hz',
-      [(1 / backend.frame_interval()).round()],
-    )
+    record(group, 'the display refreshing at', 'Hz', [
+      (1 / backend.frame_interval()).round(),
+    ])
   })
 
   # Each step starts the next once it is done, so a slow step never
@@ -540,7 +652,9 @@ def macos(rounds: number) {
     catch {
       step()
     } as error {
-      io.stderr.write('bench: a step failed: ${typeof(error)}: ${error.message}\n')
+      io.stderr.write(
+        'bench: a step failed: ${typeof(error)}: ${error.message}\n',
+      )
       steps = []
     }
 
@@ -548,10 +662,14 @@ def macos(rounds: number) {
   }
   backend.start_timer(0.5, false, next)
 
-  runtime.run(App({
-    title: 'zug bench',
-    windows: [Window('zug bench', Root(), { size: Size(400, 600) })],
-  }))
+  runtime.run(
+    App({
+      title: 'zug bench',
+      windows: [
+        Window('zug bench', Root(), { size: Size(400, 600) }),
+      ],
+    }),
+  )
 }
 
 def startup(rounds: number) {
@@ -584,14 +702,17 @@ def startup(rounds: number) {
 
   record('macos', 'start zuri and import zug', 'ms', in_ms(imported))
   record(
-    'macos', 'start an application until its first frame', 'ms', in_ms(drawn),
+    'macos',
+    'start an application until its first frame',
+    'ms',
+    in_ms(drawn),
   )
 }
 
 def show_results(load) {
   var machine = os.platform == 'macos'
-    ? os.exec('sysctl', '-n', 'machdep.cpu.brand_string').output.trim()
-    : os.platform
+      ? os.exec('sysctl', '-n', 'machdep.cpu.brand_string').output.trim()
+      : os.platform
   echo 'zug benchmarks on ${machine}, ${os.exec(os.exe_path, "--version").output.lines()[0]}, load ${load}'
   echo ''
 

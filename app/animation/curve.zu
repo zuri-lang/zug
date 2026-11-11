@@ -126,7 +126,8 @@ class Curve {
   flipped() {
     var original = self
     return Curve(
-      @(t) => 1 - original.transform(1 - t), '${self.name}.flipped()',
+      @(t) => 1 - original.transform(1 - t),
+      '${self.name}.flipped()',
     )
   }
 
@@ -143,11 +144,14 @@ class Curve {
    */
   static cubic(x1: number, y1: number, x2: number, y2: number) {
     if !(x1 >= 0 and x1 <= 1 and x2 >= 0 and x2 <= 1) {
-      raise ValueError('the x of a cubic curve control point must be from 0 to 1, got ${x1} and ${x2}')
+      raise ValueError(
+        'the x of a cubic curve control point must be from 0 to 1, got ${x1} and ${x2}',
+      )
     }
 
     return Curve(
-      _cubic(x1, y1, x2, y2), 'Curve.cubic(${x1}, ${y1}, ${x2}, ${y2})',
+      _cubic(x1, y1, x2, y2),
+      'Curve.cubic(${x1}, ${y1}, ${x2}, ${y2})',
     )
   }
 
@@ -161,7 +165,9 @@ class Curve {
    */
   static steps(count: number) {
     if !is_int(count) or count < 1 {
-      raise ValueError('a stepped curve needs a whole number of steps, at least 1, got ${count}')
+      raise ValueError(
+        'a stepped curve needs a whole number of steps, at least 1, got ${count}',
+      )
     }
 
     return Curve(@(t) => (t * count).floor() / count, 'Curve.steps(${count})')
@@ -180,23 +186,23 @@ class Curve {
    */
   static interval(start: number, end: number, curve: ?Curve) {
     if !(start >= 0 and end <= 1 and start < end) {
-      raise ValueError('an interval must run forwards within 0 to 1, got ${start} to ${end}')
+      raise ValueError(
+        'an interval must run forwards within 0 to 1, got ${start} to ${end}',
+      )
     }
 
     var inner = curve == nil ? Curve.LINEAR : curve
-    return Curve(
-      @(t) {
-        if t <= start {
-          return 0
-        }
+    return Curve(@(t) {
+      if t <= start {
+        return 0
+      }
 
-        if t >= end {
-          return 1
-        }
+      if t >= end {
+        return 1
+      }
 
-        return inner.transform((t - start) / (end - start))
-      }, 'Curve.interval(${start}, ${end}, ${inner.name})',
-    )
+      return inner.transform((t - start) / (end - start))
+    }, 'Curve.interval(${start}, ${end}, ${inner.name})')
   }
 
   @to_string() {

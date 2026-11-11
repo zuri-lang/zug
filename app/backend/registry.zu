@@ -67,7 +67,9 @@ def create_backend(name: ?string) {
       }
     }
 
-    raise BackendError("there is no backend named '${name}'; the backends are ${', '.join(backend_names())}")
+    raise BackendError(
+      "there is no backend named '${name}'; the backends are ${', '.join(backend_names())}",
+    )
   }
 
   for entry in _entries {
@@ -76,5 +78,7 @@ def create_backend(name: ?string) {
     }
   }
 
-  raise BackendError("no backend suits the platform '${os.platform}'; the backends are ${', '.join(backend_names())}")
+  raise BackendError(
+    "no backend suits the platform '${os.platform}'; the backends are ${', '.join(backend_names())}",
+  )
 }

@@ -197,10 +197,10 @@ class Size {
    * @returns bool
    */
   contains(point: Point) {
-    return point.x >= 0
-      and point.y >= 0
-      and point.x < self.width
-      and point.y < self.height
+    return point.x >= 0 and
+        point.y >= 0 and
+        point.x < self.width and
+        point.y < self.height
   }
 
   /**
@@ -234,9 +234,9 @@ class Size {
   }
 
   @eq(other) {
-    return instance_of(other, Size)
-      and self.width == other.width
-      and self.height == other.height
+    return instance_of(other, Size) and
+        self.width == other.width and
+        self.height == other.height
   }
 
   @to_string() {
@@ -388,10 +388,10 @@ class Rect {
    * @returns bool
    */
   contains(point: Point) {
-    return point.x >= self.x
-      and point.y >= self.y
-      and point.x < self.x + self.width
-      and point.y < self.y + self.height
+    return point.x >= self.x and
+        point.y >= self.y and
+        point.x < self.x + self.width and
+        point.y < self.y + self.height
   }
 
   /**
@@ -401,10 +401,10 @@ class Rect {
    * @returns bool
    */
   overlaps(other: Rect) {
-    return self.x < other.right()
-      and other.x < self.right()
-      and self.y < other.bottom()
-      and other.y < self.bottom()
+    return self.x < other.right() and
+        other.x < self.right() and
+        self.y < other.bottom() and
+        other.y < self.bottom()
   }
 
   /**
@@ -461,7 +461,9 @@ class Rect {
    */
   inflate(delta: number) {
     return Rect(
-      self.x - delta, self.y - delta, self.width + delta * 2,
+      self.x - delta,
+      self.y - delta,
+      self.width + delta * 2,
       self.height + delta * 2,
     )
   }
@@ -482,11 +484,11 @@ class Rect {
   }
 
   @eq(other) {
-    return instance_of(other, Rect)
-      and self.x == other.x
-      and self.y == other.y
-      and self.width == other.width
-      and self.height == other.height
+    return instance_of(other, Rect) and
+        self.x == other.x and
+        self.y == other.y and
+        self.width == other.width and
+        self.height == other.height
   }
 
   @to_string() {
@@ -545,7 +547,9 @@ class EdgeInsets {
   @new(left: number, top: number, right: number, bottom: number) {
     for value in [left, top, right, bottom] {
       if value < 0 or !value.is_finite() {
-        raise ValueError('EdgeInsets values must be finite and not negative, got ${value}')
+        raise ValueError(
+          'EdgeInsets values must be finite and not negative, got ${value}',
+        )
       }
     }
 
@@ -627,10 +631,10 @@ class EdgeInsets {
    * @returns bool
    */
   is_zero() {
-    return self.left == 0
-      and self.top == 0
-      and self.right == 0
-      and self.bottom == 0
+    return self.left == 0 and
+        self.top == 0 and
+        self.right == 0 and
+        self.bottom == 0
   }
 
   /**
@@ -675,11 +679,11 @@ class EdgeInsets {
   }
 
   @eq(other) {
-    return instance_of(other, EdgeInsets)
-      and self.left == other.left
-      and self.top == other.top
-      and self.right == other.right
-      and self.bottom == other.bottom
+    return instance_of(other, EdgeInsets) and
+        self.left == other.left and
+        self.top == other.top and
+        self.right == other.right and
+        self.bottom == other.bottom
   }
 
   @to_string() {
@@ -774,9 +778,9 @@ class Alignment {
   }
 
   @eq(other) {
-    return instance_of(other, Alignment)
-      and self.x == other.x
-      and self.y == other.y
+    return instance_of(other, Alignment) and
+        self.x == other.x and
+        self.y == other.y
   }
 
   @to_string() {
@@ -850,18 +854,24 @@ class Constraints {
    * @constructor
    */
   @new(
-    min_width: number, max_width: number, min_height: number,
+    min_width: number,
+    max_width: number,
+    min_height: number,
     max_height: number,
   ) {
     if !(min_width >= 0) or !(min_height >= 0) {
-      raise ValueError('constraint minimums must not be negative, got width ${_num(min_width)} and height ${_num(min_height)}')
+      raise ValueError(
+        'constraint minimums must not be negative, got width ${_num(min_width)} and height ${_num(min_height)}',
+      )
     }
 
-    if max_width < min_width
-      or max_height < min_height
-      or max_width.is_nan()
-      or max_height.is_nan() {
-      raise ValueError('constraint maximums must not be below their minimums: width ${_num(min_width)}..${_num(max_width)}, height ${_num(min_height)}..${_num(max_height)}')
+    if max_width < min_width or
+        max_height < min_height or
+        max_width.is_nan() or
+        max_height.is_nan() {
+      raise ValueError(
+        'constraint maximums must not be below their minimums: width ${_num(min_width)}..${_num(max_width)}, height ${_num(min_height)}..${_num(max_height)}',
+      )
     }
 
     self.min_width = min_width
@@ -952,8 +962,8 @@ class Constraints {
    * @returns bool
    */
   is_tight() {
-    return self.min_width >= self.max_width
-      and self.min_height >= self.max_height
+    return self.min_width >= self.max_width and
+        self.min_height >= self.max_height
   }
 
   /**
@@ -1038,7 +1048,8 @@ class Constraints {
    */
   constrain(size: Size) {
     return Size(
-      self.constrain_width(size.width), self.constrain_height(size.height),
+      self.constrain_width(size.width),
+      self.constrain_height(size.height),
     )
   }
 
@@ -1152,7 +1163,9 @@ class Constraints {
     var min_height = self.min_height.max(other.min_height).min(other.max_height)
     var max_height = self.max_height.max(other.min_height).min(other.max_height)
     return Constraints(
-      min_width, max_width.max(min_width), min_height,
+      min_width,
+      max_width.max(min_width),
+      min_height,
       max_height.max(min_height),
     )
   }
@@ -1165,10 +1178,12 @@ class Constraints {
    * @returns Constraints
    */
   copy_with(values: dict) {
-    _check_keys(
-      values, ['min_width', 'max_width', 'min_height', 'max_height'],
-      'Constraints.copy_with',
-    )
+    _check_keys(values, [
+      'min_width',
+      'max_width',
+      'min_height',
+      'max_height',
+    ], 'Constraints.copy_with')
     return Constraints(
       values.get('min_width', self.min_width),
       values.get('max_width', self.max_width),
@@ -1178,11 +1193,11 @@ class Constraints {
   }
 
   @eq(other) {
-    return instance_of(other, Constraints)
-      and self.min_width == other.min_width
-      and self.max_width == other.max_width
-      and self.min_height == other.min_height
-      and self.max_height == other.max_height
+    return instance_of(other, Constraints) and
+        self.min_width == other.min_width and
+        self.max_width == other.max_width and
+        self.min_height == other.min_height and
+        self.max_height == other.max_height
   }
 
   @to_string() {

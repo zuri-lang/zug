@@ -9,8 +9,16 @@
 
 import ffi
 import ._runtime {
-  cls, sel, send, send_void_id, send_void_bool, send_void_int, send_void_uint,
-  typed, ns_string, release,
+  cls,
+  sel,
+  send,
+  send_void_id,
+  send_void_bool,
+  send_void_int,
+  send_void_uint,
+  typed,
+  ns_string,
+  release,
 }
 import ._cocoa { parse_shortcut }
 
@@ -104,7 +112,8 @@ var _set_action = typed(ffi.void, [ffi.ptr])
 
 def _make_menu(spec: dict, target, ids: dict, action: ?string) {
   var menu = typed(ffi.ptr, [ffi.ptr])(
-    send(cls('NSMenu'), 'alloc'), sel('initWithTitle:'),
+    send(cls('NSMenu'), 'alloc'),
+    sel('initWithTitle:'),
     ns_string(spec.get('title', '')),
   )
 
@@ -130,7 +139,9 @@ def _make_menu(spec: dict, target, ids: dict, action: ?string) {
     native = _new_item(
       send(cls('NSMenuItem'), 'alloc'),
       sel('initWithTitle:action:keyEquivalent:'),
-      ns_string(item.get('title', '')), nil, ns_string(key),
+      ns_string(item.get('title', '')),
+      nil,
+      ns_string(key),
     )
     send_void_uint(native, 'setKeyEquivalentModifierMask:', mask)
 
@@ -146,7 +157,8 @@ def _make_menu(spec: dict, target, ids: dict, action: ?string) {
     if id != nil {
       send_void_id(native, 'setTarget:', target)
       _set_action(
-        native, sel('setAction:'),
+        native,
+        sel('setAction:'),
         sel(action == nil ? 'zugMenuAction:' : action),
       )
       ids[native.address()] = id
@@ -166,7 +178,10 @@ def _make_menu(spec: dict, target, ids: dict, action: ?string) {
 
     if children != nil {
       var submenu = _make_menu(
-        { title: item.get('title', ''), items: children }, target, ids, action,
+        { title: item.get('title', ''), items: children },
+        target,
+        ids,
+        action,
       )
       send_void_id(native, 'setSubmenu:', submenu)
       release(submenu)
@@ -193,7 +208,9 @@ def _make_menu(spec: dict, target, ids: dict, action: ?string) {
  */
 def build_menu_bar(menus: list, app_name: string, target, ids: dict) {
   var bar = typed(ffi.ptr, [ffi.ptr])(
-    send(cls('NSMenu'), 'alloc'), sel('initWithTitle:'), ns_string('Main'),
+    send(cls('NSMenu'), 'alloc'),
+    sel('initWithTitle:'),
+    ns_string('Main'),
   )
   var app = send(cls('NSApplication'), 'sharedApplication')
   for spec in menus {
@@ -213,7 +230,9 @@ def build_menu_bar(menus: list, app_name: string, target, ids: dict) {
     var holder = _new_item(
       send(cls('NSMenuItem'), 'alloc'),
       sel('initWithTitle:action:keyEquivalent:'),
-      ns_string(spec.get('title', '')), nil, ns_string(''),
+      ns_string(spec.get('title', '')),
+      nil,
+      ns_string(''),
     )
     send_void_id(holder, 'setSubmenu:', menu)
     send_void_id(bar, 'addItem:', holder)

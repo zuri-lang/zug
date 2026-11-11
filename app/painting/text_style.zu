@@ -55,8 +55,15 @@ var _SPEC = {
 }
 
 var _FIELDS = [
-  'size', 'weight', 'family', 'italic', 'design', 'monospaced_digits', 'color',
-  'underline', 'strikethrough',
+  'size',
+  'weight',
+  'family',
+  'italic',
+  'design',
+  'monospaced_digits',
+  'color',
+  'underline',
+  'strikethrough',
 ]
 
 /**
@@ -150,11 +157,15 @@ class TextStyle {
     }
 
     if self.weight != nil and !(self.weight >= 100 and self.weight <= 900) {
-      raise ValueError('a font weight must be from 100 to 900, got ${self.weight}')
+      raise ValueError(
+        'a font weight must be from 100 to 900, got ${self.weight}',
+      )
     }
 
     if self.design != nil and !_DESIGNS.contains(self.design) {
-      raise ValueError("a font design must be one of ${', '.join(_DESIGNS)}, got '${self.design}'")
+      raise ValueError(
+        "a font design must be one of ${', '.join(_DESIGNS)}, got '${self.design}'",
+      )
     }
   }
 

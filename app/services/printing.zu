@@ -81,7 +81,9 @@ def _job(options, owner: string) {
       var total = count(painter)
 
       if !is_int(total) or total < 0 {
-        raise ValueError('pages of ${owner} gave ${total}, not a whole number of pages')
+        raise ValueError(
+          'pages of ${owner} gave ${total}, not a whole number of pages',
+        )
       }
 
       return total
@@ -116,9 +118,7 @@ def page_setup(context, options: ?dict) {
   var o = check_options(options, 'page_setup', { setup: PageSetup })
   var setup = o.get('setup')
   var deferred = Deferred()
-  var spec = {
-    setup: setup == nil ? _backend().default_page_setup() : setup,
-  }
+  var spec = { setup: setup == nil ? _backend().default_page_setup() : setup }
   _backend().page_setup(_window(context), spec, @(chosen) {
     deferred.resolve(chosen)
   })
@@ -155,7 +155,11 @@ def print_pages(context, options: dict) {
   var job = _job(options, 'print_pages')
   var deferred = Deferred()
   _backend().print_pages(
-    _window(context), job.spec, job.count, job.paint, @(printed) {
+    _window(context),
+    job.spec,
+    job.count,
+    job.paint,
+    @(printed) {
       deferred.resolve(printed == true)
     },
   )

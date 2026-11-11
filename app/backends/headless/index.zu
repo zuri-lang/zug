@@ -12,11 +12,23 @@
  */
 
 import .. ..backend {
-  Backend, ViewHost, WindowHost, TimerHandle, Painter, CAPABILITIES, kind_spec,
+  Backend,
+  ViewHost,
+  WindowHost,
+  TimerHandle,
+  Painter,
+  CAPABILITIES,
+  kind_spec,
   kind_names,
 }
 import .. ..foundation {
-  Size, Rect, Point, EdgeInsets, Constraints, INFINITY, UnsupportedError,
+  Size,
+  Rect,
+  Point,
+  EdgeInsets,
+  Constraints,
+  INFINITY,
+  UnsupportedError,
   BackendError,
 }
 import imagine
@@ -58,7 +70,10 @@ def _image_size(source) {
 }
 
 def measure_text_rule(
-  text: string, style: dict, max_width: ?number, max_lines: ?number,
+  text: string,
+  style: dict,
+  max_width: ?number,
+  max_lines: ?number,
 ) {
   var size = style.get('size', 13)
   var char_width = size * 0.6
@@ -70,10 +85,10 @@ def measure_text_rule(
   for line in lines {
     var width = line.length() * char_width
 
-    if max_width != nil
-      and max_width != INFINITY
-      and width > max_width
-      and max_width > 0 {
+    if max_width != nil and
+        max_width != INFINITY and
+        width > max_width and
+        max_width > 0 {
       var wrapped = (width / max_width).ceil()
       count += wrapped
       widest = widest.max(max_width)
@@ -408,7 +423,9 @@ class HeadlessView < ViewHost {
     var spec = kind_spec(self.kind_name)
 
     if !spec.events.contains(event) {
-      raise ValueError("the '${self.kind_name}' view kind has no event '${event}'")
+      raise ValueError(
+        "the '${self.kind_name}' view kind has no event '${event}'",
+      )
     }
 
     # A native control changes itself before it reports the change.
@@ -426,8 +443,8 @@ class HeadlessView < ViewHost {
   @to_string() {
     var text = self.text()
     return text == nil
-      ? 'HeadlessView(${self.kind_name})'
-      : 'HeadlessView(${self.kind_name}: ${text})'
+        ? 'HeadlessView(${self.kind_name})'
+        : 'HeadlessView(${self.kind_name}: ${text})'
   }
 }
 
@@ -504,18 +521,19 @@ class HeadlessWindow < WindowHost {
       self.props[name] = value
     }
 
-    if changes.contains('size')
-      and changes.size != nil
-      and changes.size != self.content {
+    if changes.contains('size') and
+        changes.size != nil and
+        changes.size != self.content {
       self.content = changes.size
-      self.dispatch(
-        'resized', { width: self.content.width, height: self.content.height },
-      )
+      self.dispatch('resized', {
+        width: self.content.width,
+        height: self.content.height,
+      })
     }
 
-    if changes.contains('visible')
-      and self.shown != changes.visible
-      and !self.closed {
+    if changes.contains('visible') and
+        self.shown != changes.visible and
+        !self.closed {
       self.shown = changes.visible
     }
   }
@@ -676,18 +694,21 @@ class HeadlessWindow < WindowHost {
     # Escape goes to the focused view first, as on a real display.
     var focused = self.backend.focused
 
-    if key == 'escape'
-      and modifiers.is_empty()
-      and focused != nil
-      and !focused.destroyed
-      and focused.dispatch('escape', nil) == true {
+    if key == 'escape' and
+        modifiers.is_empty() and
+        focused != nil and
+        !focused.destroyed and
+        focused.dispatch('escape', nil) == true {
       self.backend.event_handled()
       return true
     }
 
-    var used = self.dispatch(
-      'key', { key, characters: typed, modifiers, repeat: false },
-    )
+    var used = self.dispatch('key', {
+      key,
+      characters: typed,
+      modifiers,
+      repeat: false,
+    })
     self.backend.event_handled()
     return used == true
   }
@@ -868,7 +889,10 @@ class RecordingPainter < Painter {
 
   measure_text(text: string, style, max_width: ?number) {
     return measure_text_rule(
-      text, style == nil ? {} : style.to_data(), max_width, nil,
+      text,
+      style == nil ? {} : style.to_data(),
+      max_width,
+      nil,
     )
   }
 
@@ -1049,7 +1073,9 @@ class HeadlessBackend < Backend {
       count++
 
       if count > 1000 {
-        raise BackendError('frames kept asking for another frame 1000 times over; something marks itself dirty on every frame')
+        raise BackendError(
+          'frames kept asking for another frame 1000 times over; something marks itself dirty on every frame',
+        )
       }
 
       self.delegate.on_frame()
@@ -1093,9 +1119,9 @@ class HeadlessBackend < Backend {
       # A timer due within a nanosecond of the target counts as due, so
       # rounding in the due times does not hold back a tick.
       for timer in self._timers {
-        if timer.active
-          and timer.due <= target + 0.000000001
-          and (next == nil or timer.due < next.due) {
+        if timer.active and
+            timer.due <= target + 0.000000001 and
+            (next == nil or timer.due < next.due) {
           next = timer
         }
       }
@@ -1153,14 +1179,19 @@ class HeadlessBackend < Backend {
 
     if view.kind_name == 'text' {
       return measure_text_rule(
-        props.get('text', ''), props.get('style', {}), constraints.max_width,
+        props.get('text', ''),
+        props.get('style', {}),
+        constraints.max_width,
         props.get('max_lines'),
       )
     }
 
     if view.kind_name == 'button' {
       var text = measure_text_rule(
-        props.get('title', ''), props.get('style', {}), nil, 1,
+        props.get('title', ''),
+        props.get('style', {}),
+        nil,
+        1,
       )
       return Size(text.width + 24, 21)
     }
@@ -1174,9 +1205,9 @@ class HeadlessBackend < Backend {
       var widest = 0
 
       for item in props.get('items', []) {
-        widest = widest.max(measure_text_rule(
-          item.get('title', ''), {}, nil, 1,
-        ).width)
+        widest = widest.max(
+          measure_text_rule(item.get('title', ''), {}, nil, 1).width,
+        )
       }
 
       return Size(widest + 40, 21)
@@ -1186,8 +1217,8 @@ class HeadlessBackend < Backend {
       var total = 0
 
       for segment in props.get('segments', []) {
-        total += measure_text_rule(segment.get('label', ''), {}, nil, 1).width
-          + 20
+        total += measure_text_rule(segment.get('label', ''), {}, nil, 1).width +
+            20
       }
 
       return Size(total, 24)
@@ -1205,8 +1236,8 @@ class HeadlessBackend < Backend {
       var size = _image_size(props.get('source'))
       var rotation = props.get('rotation', 0)
       return rotation == 90 or rotation == 270
-        ? Size(size.height, size.width)
-        : size
+          ? Size(size.height, size.width)
+          : size
     }
 
     var fixed = _FIXED_SIZES.get(view.kind_name)
@@ -1325,7 +1356,11 @@ class HeadlessBackend < Backend {
   }
 
   print_pages(
-    window, spec: dict, count: function, paint: function, done: function,
+    window,
+    spec: dict,
+    count: function,
+    paint: function,
+    done: function,
   ) {
     self.dialogs.append({ type: 'print', window, spec, count, paint, done })
   }
@@ -1437,8 +1472,8 @@ class HeadlessBackend < Backend {
 
   appearance() {
     return self.app_appearance == 'system'
-      ? self._appearance
-      : self.app_appearance
+        ? self._appearance
+        : self.app_appearance
   }
 
   set_app_appearance(appearance: string) {
@@ -1470,11 +1505,13 @@ class HeadlessBackend < Backend {
   }
 
   screens() {
-    return [{
-      frame: Rect(0, 0, 1440, 900),
-      visible_frame: Rect(0, 25, 1440, 875),
-      scale: 2,
-    }]
+    return [
+      {
+        frame: Rect(0, 0, 1440, 900),
+        visible_frame: Rect(0, 25, 1440, 875),
+        scale: 2,
+      },
+    ]
   }
 
   measure_text(text: string, style: dict, max_width: ?number) {

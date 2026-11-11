@@ -53,7 +53,8 @@ describe('check_backend', @{
     var report = check(HeadlessBackend())
     expect(failed_names(report)).to_be_empty()
     expect(report.count('passed')).to_be_greater_than(100)
-    expect(report.summary()).to_match('/^headless: \\d+ passed, 0 failed, 2 skipped$/')
+    expect(report.summary())
+        .to_match('/^headless: \\d+ passed, 0 failed, 2 skipped$/')
   })
 
   it('finds what a faulty backend gets wrong', @{
@@ -107,9 +108,8 @@ describe('check_backend', @{
     t.pump()
     expect(t.find_kind('checkbox')[0].props.value).to_be_true()
     expect(t.find_kind('text_field')[0].props.text).to_be('second text')
-    expect(t.backend.windows.filter(
-      @(window) => !window.closed,
-    )).to_have_length(2)
+    expect(t.backend.windows.filter(@(window) => !window.closed))
+        .to_have_length(2)
 
     changed.set(false)
     t.pump()
@@ -131,7 +131,8 @@ describe('check_backend', @{
     t.tap('Alert…')
     t.backend.answer_dialog({ button: 1, suppressed: false })
     t.pump()
-    expect(t.find_text('alert: {button: 1, suppressed: false}')).to_have_length(1)
+    expect(t.find_text('alert: {button: 1, suppressed: false}'))
+        .to_have_length(1)
 
     t.tap('Save…')
     expect(t.backend.dialogs[0].spec.name).to_be('first.txt')
@@ -145,10 +146,9 @@ describe('check_backend', @{
     expect(t.find_text('colour chosen: nil')).to_have_length(1)
 
     t.tap('Page Setup…')
-    t.backend.answer_dialog(PageSetup({
-      orientation: PageOrientation.LANDSCAPE,
-      paper_name: 'A4',
-    }))
+    t.backend.answer_dialog(
+      PageSetup({ orientation: PageOrientation.LANDSCAPE, paper_name: 'A4' }),
+    )
     t.pump()
     expect(t.find_text('page setup: A4, landscape')).to_have_length(1)
 
@@ -176,8 +176,8 @@ describe('check_backend', @{
       advance: @(seconds) => backend.advance(seconds),
     })
     expect(report.passed()).to_be_true()
-    expect(report.results.filter(
-      @(result) => result.name == 'builds every widget',
-    )).to_be_empty()
+    expect(
+      report.results.filter(@(result) => result.name == 'builds every widget'),
+    ).to_be_empty()
   })
 })

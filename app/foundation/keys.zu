@@ -64,9 +64,9 @@ class ValueKey < Key {
   }
 
   @eq(other) {
-    return instance_of(other, ValueKey)
-      and zuri.reflect.class_of(other) == zuri.reflect.class_of(self)
-      and other.value == self.value
+    return instance_of(other, ValueKey) and
+        zuri.reflect.class_of(other) == zuri.reflect.class_of(self) and
+        other.value == self.value
   }
 
   @to_string() {

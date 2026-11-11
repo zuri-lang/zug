@@ -6,8 +6,14 @@ import ..app.testing { WidgetTester }
 describe('Curve', @{
   it('starts at 0 and ends at 1', @{
     for curve in [
-      Curve.LINEAR, Curve.EASE, Curve.EASE_IN, Curve.EASE_OUT,
-      Curve.EASE_IN_OUT, Curve.BACK_IN, Curve.BACK_OUT, Curve.BOUNCE_OUT,
+      Curve.LINEAR,
+      Curve.EASE,
+      Curve.EASE_IN,
+      Curve.EASE_OUT,
+      Curve.EASE_IN_OUT,
+      Curve.BACK_IN,
+      Curve.BACK_OUT,
+      Curve.BOUNCE_OUT,
     ] {
       expect(curve.transform(0)).to_be(0)
       expect(curve.transform(1)).to_be(1)
@@ -28,9 +34,8 @@ describe('Curve', @{
   it('solves a cubic curve as CSS does', @{
     # cubic-bezier(0.25, 0.1, 0.25, 1) is 0.8024 at 0.5, as browsers draw
     # it.
-    expect(Curve.cubic(0.25, 0.1, 0.25, 1).transform(0.5)).to_be_close_to(
-      0.8024, 3,
-    )
+    expect(Curve.cubic(0.25, 0.1, 0.25, 1).transform(0.5))
+        .to_be_close_to(0.8024, 3)
     expect(@{
       Curve.cubic(1.2, 0, 0, 1)
     }).to_raise_instance_of(ValueError)
@@ -42,9 +47,8 @@ describe('Curve', @{
     expect(late.transform(0.25)).to_be(0)
     expect(late.transform(0.75)).to_be(0.5)
     var flipped = Curve.EASE_IN.flipped()
-    expect(flipped.transform(0.3)).to_be_close_to(
-      1 - Curve.EASE_IN.transform(0.7), 9,
-    )
+    expect(flipped.transform(0.3))
+        .to_be_close_to(1 - Curve.EASE_IN.transform(0.7), 9)
     expect(Curve.EASE_OUT.name).to_be('Curve.EASE_OUT')
     expect(late.name).to_be('Curve.interval(0.5, 1, Curve.LINEAR)')
     expect(@{
@@ -65,9 +69,8 @@ describe('lerp and Tween', @{
     expect(lerp(10, 20, 0.25)).to_be(12.5)
     expect(lerp(Point(0, 0), Point(10, 20), 0.5)).to_equal(Point(5, 10))
     expect(lerp(Size(10, 10), Size(20, 30), 0.5)).to_equal(Size(15, 20))
-    expect(lerp(Alignment.TOP_LEFT, Alignment.BOTTOM_RIGHT, 0.5)).to_equal(
-      Alignment.CENTER,
-    )
+    expect(lerp(Alignment.TOP_LEFT, Alignment.BOTTOM_RIGHT, 0.5))
+        .to_equal(Alignment.CENTER)
   })
 
   it('keeps insets and colours in range when overshooting', @{
@@ -149,11 +152,9 @@ describe('Animation', @{
       outcomes.append(finished)
     })
     t.advance(0.25)
-    animation.animate_to(0.1, { duration: Duration.ms(100) }).then(
-      @(finished) {
-        outcomes.append(finished)
-      },
-    )
+    animation.animate_to(0.1, { duration: Duration.ms(100) }).then(@(finished) {
+      outcomes.append(finished)
+    })
     t.advance(0.2)
     expect(animation.value()).to_be(0.1)
     animation.forward().then(@(finished) {
@@ -167,9 +168,10 @@ describe('Animation', @{
 
   it('animates to a value along a curve', @{
     var animation = Animation({ duration: Duration.seconds(1) })
-    animation.animate_to(
-      0.8, { duration: Duration.seconds(1), curve: Curve.steps(2) },
-    )
+    animation.animate_to(0.8, {
+      duration: Duration.seconds(1),
+      curve: Curve.steps(2),
+    })
     t.advance(0.3)
     expect(animation.value()).to_be(0)
     t.advance(0.3)
@@ -215,9 +217,9 @@ describe('Animation', @{
 
   it('draws one frame for each refresh of the display', @{
     var animation = Animation({ duration: Duration.seconds(1) })
-    t.pump_widget(Observer(
-      animation, @(context) => Text('at ${animation.value()}'),
-    ))
+    t.pump_widget(
+      Observer(animation, @(context) => Text('at ${animation.value()}')),
+    )
     animation.forward()
     t.pump()
     var frames = t.runtime.frames()
@@ -228,9 +230,12 @@ describe('Animation', @{
 
   it('rebuilds an Observer on every step', @{
     var animation = Animation({ duration: Duration.seconds(1) })
-    t.pump_widget(Observer(
-      animation, @(context) => Text('at ${(animation.value() * 10).round()}'),
-    ))
+    t.pump_widget(
+      Observer(
+        animation,
+        @(context) => Text('at ${(animation.value() * 10).round()}'),
+      ),
+    )
     animation.forward()
     t.advance(0.3)
     expect(t.find_text('at 3')).to_have_length(1)
@@ -290,17 +295,24 @@ class ToggleState < State {
 describe('AnimatedBox', @{
   it('moves its size and colour to new ones', @{
     var ended = []
-    var t = WidgetTester().pump_widget(Align(Toggle(@(on) => AnimatedBox({
-      duration: Duration.seconds(1),
-      curve: Curve.LINEAR,
-      width: on ? 200 : 100,
-      height: 20,
-      color: on ? Color.WHITE : Color.BLACK,
-      accessibility_identifier: 'box',
-      on_end: @{
-        ended.append(true)
-      },
-    })), { alignment: Alignment.TOP_LEFT }))
+    var t = WidgetTester().pump_widget(
+      Align(
+        Toggle(
+          @(on) => AnimatedBox({
+            duration: Duration.seconds(1),
+            curve: Curve.LINEAR,
+            width: on ? 200 : 100,
+            height: 20,
+            color: on ? Color.WHITE : Color.BLACK,
+            accessibility_identifier: 'box',
+            on_end: @{
+              ended.append(true)
+            },
+          }),
+        ),
+        { alignment: Alignment.TOP_LEFT },
+      ),
+    )
     expect(t.one('box').window_frame().width).to_be(100)
     t.state_of(ToggleState).flip()
     t.pump()
@@ -315,13 +327,20 @@ describe('AnimatedBox', @{
   })
 
   it('moves on from where it is when changed on the way', @{
-    var t = WidgetTester().pump_widget(Align(Toggle(@(on) => AnimatedBox({
-      duration: Duration.seconds(1),
-      curve: Curve.LINEAR,
-      width: on ? 200 : 100,
-      height: 10,
-      accessibility_identifier: 'box',
-    })), { alignment: Alignment.TOP_LEFT }))
+    var t = WidgetTester().pump_widget(
+      Align(
+        Toggle(
+          @(on) => AnimatedBox({
+            duration: Duration.seconds(1),
+            curve: Curve.LINEAR,
+            width: on ? 200 : 100,
+            height: 10,
+            accessibility_identifier: 'box',
+          }),
+        ),
+        { alignment: Alignment.TOP_LEFT },
+      ),
+    )
     var toggle = t.state_of(ToggleState)
     toggle.flip()
     t.pump()
@@ -345,12 +364,15 @@ describe('AnimatedBox', @{
 
 describe('AnimatedValue', @{
   it('builds from the value on its way to a new one', @{
-    var t = WidgetTester().pump_widget(Toggle(@(on) => AnimatedValue(
-      on ? 10 : 0, @(context, value) => Text('value ${value.round()}'), {
-        duration: Duration.seconds(1),
-        curve: Curve.LINEAR,
-      },
-    )))
+    var t = WidgetTester().pump_widget(
+      Toggle(
+        @(on) => AnimatedValue(
+          on ? 10 : 0,
+          @(context, value) => Text('value ${value.round()}'),
+          { duration: Duration.seconds(1), curve: Curve.LINEAR },
+        ),
+      ),
+    )
     expect(t.find_text('value 0')).to_have_length(1)
     t.state_of(ToggleState).flip()
     t.pump()

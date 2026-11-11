@@ -37,8 +37,18 @@ class ExpressionError < Error {
 }
 
 var _FUNCTIONS = [
-  'sin', 'cos', 'tan', 'asin', 'acos', 'atan', 'sqrt', 'cbrt', 'ln', 'log',
-  'exp', 'abs',
+  'sin',
+  'cos',
+  'tan',
+  'asin',
+  'acos',
+  'atan',
+  'sqrt',
+  'cbrt',
+  'ln',
+  'log',
+  'exp',
+  'abs',
 ]
 
 # Splits text into tokens: numbers, names and single-character symbols,
@@ -58,21 +68,21 @@ def _tokenize(text: string) {
     if ch.is_number() or ch == '.' {
       var start = i
 
-      while i < text.length()
-        and (text[i].is_number() or text[i] == '.' or text[i] == ',') {
+      while i < text.length() and
+          (text[i].is_number() or text[i] == '.' or text[i] == ',') {
         i++
       }
 
       # An exponent, such as the e5 of 1.5e5.
-      if i < text.length()
-        and (text[i] == 'e' or text[i] == 'E')
-        and i + 1 < text.length() {
+      if i < text.length() and
+          (text[i] == 'e' or text[i] == 'E') and
+          i + 1 < text.length() {
         var next = text[i + 1]
 
-        if next.is_number()
-          or ((next == '-' or next == '+')
-            and i + 2 < text.length()
-            and text[i + 2].is_number()) {
+        if next.is_number() or
+            ((next == '-' or next == '+') and
+                i + 2 < text.length() and
+                text[i + 2].is_number()) {
           i += 2
 
           while i < text.length() and text[i].is_number() {
@@ -118,7 +128,8 @@ def _tokenize(text: string) {
 
     if !['+', '-', '*', '/', '^', '(', ')', '%', '!'].contains(symbol) {
       raise ExpressionError(
-        "'${ch}' is not something a calculator understands", i,
+        "'${ch}' is not something a calculator understands",
+        i,
       )
     }
 
@@ -269,7 +280,8 @@ class Parser {
 
         if result == nil {
           raise ExpressionError(
-            'a factorial needs a whole number from 0 to 170', at,
+            'a factorial needs a whole number from 0 to 170',
+            at,
           )
         }
 
@@ -312,7 +324,8 @@ class Parser {
 
       if !_FUNCTIONS.contains(token.text) {
         raise ExpressionError(
-          "there is no function called '${token.text}'", token.position,
+          "there is no function called '${token.text}'",
+          token.position,
         )
       }
 
@@ -349,7 +362,8 @@ class Parser {
       when 'sqrt' {
         if x < 0 {
           raise ExpressionError(
-            'the square root of a negative number is not real', at,
+            'the square root of a negative number is not real',
+            at,
           )
         }
 

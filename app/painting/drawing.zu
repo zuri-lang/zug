@@ -74,16 +74,13 @@ class Paint {
    * @constructor
    */
   @new(options: ?dict) {
-    var o = check_options(
-      options, 'Paint',
-      {
-        color: Color,
-        width: 'number',
-        cap: 'string',
-        join: 'string',
-        dash: 'list',
-      },
-    )
+    var o = check_options(options, 'Paint', {
+      color: Color,
+      width: 'number',
+      cap: 'string',
+      join: 'string',
+      dash: 'list',
+    })
     self.color = o.get('color', Color.system('label'))
     self.width = o.get('width', 1)
     self.cap = o.get('cap', 'butt')
@@ -96,12 +93,12 @@ class Paint {
   }
 
   @eq(other) {
-    return instance_of(other, Paint)
-      and self.color == other.color
-      and self.width == other.width
-      and self.cap == other.cap
-      and self.join == other.join
-      and self.dash == other.dash
+    return instance_of(other, Paint) and
+        self.color == other.color and
+        self.width == other.width and
+        self.cap == other.cap and
+        self.join == other.join and
+        self.dash == other.dash
   }
 
   @to_string() {
@@ -173,7 +170,12 @@ class Path {
    * @returns Path
    */
   cubic_to(
-    c1x: number, c1y: number, c2x: number, c2y: number, x: number, y: number,
+    c1x: number,
+    c1y: number,
+    c2x: number,
+    c2y: number,
+    x: number,
+    y: number,
   ) {
     self.commands.append(['cubic', c1x, c1y, c2x, c2y, x, y])
     return self
@@ -226,7 +228,12 @@ class Path {
    */
   add_rounded_rect(rect: Rect, radius: number) {
     self.commands.append([
-      'rounded_rect', rect.x, rect.y, rect.width, rect.height, radius,
+      'rounded_rect',
+      rect.x,
+      rect.y,
+      rect.width,
+      rect.height,
+      radius,
     ])
     return self
   }

@@ -18,7 +18,10 @@ import .menus { MenuBar }
 import .style { Style, StyleSheet, AppearanceTracker }
 import ..rendering { RenderWindow, RenderWindowSet }
 import .framework {
-  Widget, StatefulWidget, State, SingleChildRenderObjectWidget,
+  Widget,
+  StatefulWidget,
+  State,
+  SingleChildRenderObjectWidget,
   MultiChildRenderObjectWidget,
 }
 
@@ -134,7 +137,9 @@ class App < StatefulWidget {
     var o = check_options(options, 'App', _APP_OPTIONS)
 
     if o.get('windows') == nil {
-      raise ValueError('an App needs windows, such as windows: [Window(\'Title\', content)]')
+      raise ValueError(
+        'an App needs windows, such as windows: [Window(\'Title\', content)]',
+      )
     }
 
     self.key = o.get('key')
@@ -148,7 +153,9 @@ class App < StatefulWidget {
     self.appearance = o.get('appearance', 'system')
 
     if !_APPEARANCES.contains(self.appearance) {
-      raise ValueError("appearance of App must be one of Appearance's values (system, light, dark), got '${self.appearance}'")
+      raise ValueError(
+        "appearance of App must be one of Appearance's values (system, light, dark), got '${self.appearance}'",
+      )
     }
   }
 
@@ -225,8 +232,8 @@ class AppState < State {
     var best = nil
 
     for window in runtime == nil ? [] : runtime.windows() {
-      if window.is_shown()
-        and (best == nil or window.focused_at > best.focused_at) {
+      if window.is_shown() and
+          (best == nil or window.focused_at > best.focused_at) {
         best = window
       }
     }
@@ -248,11 +255,11 @@ class AppState < State {
     var widget = self.widget
     runtime.quit_on_last_window_closed = widget.quit_on_last_window_closed
     runtime.on_quit_requested_handler = widget.on_quit_request == nil
-      ? nil
-      : @(payload) => widget.on_quit_request()
+        ? nil
+        : @(payload) => widget.on_quit_request()
     runtime.on_reopen_handler = widget.on_reopen == nil
-      ? nil
-      : @(payload) => widget.on_reopen()
+        ? nil
+        : @(payload) => widget.on_reopen()
     runtime.set_app_appearance(widget.appearance)
   }
 
@@ -271,8 +278,8 @@ class AppState < State {
     )
     var tracked = AppearanceTracker(windows)
     return self.widget.style == nil
-      ? tracked
-      : Style(self.widget.style, tracked)
+        ? tracked
+        : Style(self.widget.style, tracked)
   }
 }
 
@@ -363,7 +370,9 @@ class Window < SingleChildRenderObjectWidget {
     var o = check_options(options, 'Window', _WINDOW_OPTIONS)
 
     if !_TITLE_BARS.contains(o.get('title_bar', 'normal')) {
-      raise ValueError("title_bar of Window must be one of TitleBar's values (${', '.join(_TITLE_BARS)}), got '${o.get('title_bar')}'")
+      raise ValueError(
+        "title_bar of Window must be one of TitleBar's values (${', '.join(_TITLE_BARS)}), got '${o.get('title_bar')}'",
+      )
     }
 
     self.key = o.get('key')
@@ -400,8 +409,8 @@ class Window < SingleChildRenderObjectWidget {
 
     return {
       close_requested: @(payload) => on_close_request == nil
-        ? true
-        : on_close_request() != false,
+          ? true
+          : on_close_request() != false,
       closed: @(payload) {
         if on_closed != nil {
           on_closed()
@@ -418,8 +427,8 @@ class Window < SingleChildRenderObjectWidget {
         }
       },
       key: @(payload) => runtime == nil
-        ? false
-        : runtime.dispatch_key(window, payload),
+          ? false
+          : runtime.dispatch_key(window, payload),
     }
   }
 
@@ -435,9 +444,9 @@ class Window < SingleChildRenderObjectWidget {
     render_object.set_handlers(self._handlers(context, render_object))
     render_object.sheet_parent = self.sheet_parent
     render_object.set_props(self._props())
-    render_object.set_size_to_content(self.options.get(
-      'size_to_content', false,
-    ))
+    render_object.set_size_to_content(
+      self.options.get('size_to_content', false),
+    )
   }
 
   @to_string() {

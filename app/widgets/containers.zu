@@ -15,15 +15,31 @@
  */
 
 import ..foundation {
-  Key, Point, Size, Color, Observable, EdgeInsets, ValueKey, check_options,
+  Key,
+  Point,
+  Size,
+  Color,
+  Observable,
+  EdgeInsets,
+  ValueKey,
+  check_options,
 }
 import ..rendering {
-  RenderScroll, RenderSlotted, RenderHostProxy, RenderHost, Axis, check_axis,
+  RenderScroll,
+  RenderSlotted,
+  RenderHostProxy,
+  RenderHost,
+  Axis,
+  check_axis,
 }
 import .framework { Widget, StatelessWidget, StatefulWidget, State }
 import .host {
-  HostWidget, SingleChildHostWidget, MultiChildHostWidget, host_options,
-  focus_options, common_props,
+  HostWidget,
+  SingleChildHostWidget,
+  MultiChildHostWidget,
+  host_options,
+  focus_options,
+  common_props,
 }
 import .basic { Column, Row, Padding, Box, Stack, Positioned, Responsive }
 
@@ -102,7 +118,12 @@ class ScrollHost < SingleChildHostWidget {
   var on_scroll
 
   @new(
-    child: Widget, axis: string, bordered: bool, background, request, on_scroll,
+    child: Widget,
+    axis: string,
+    bordered: bool,
+    background,
+    request,
+    on_scroll,
     common: dict,
   ) {
     self.child = child
@@ -131,8 +152,8 @@ class ScrollHost < SingleChildHostWidget {
     var on_scroll = self.on_scroll
     return {
       scrolled: @(payload) => on_scroll == nil
-        ? nil
-        : on_scroll(Point(payload.x, payload.y)),
+          ? nil
+          : on_scroll(Point(payload.x, payload.y)),
     }
   }
 
@@ -159,7 +180,8 @@ class ScrollView < StatefulWidget {
    */
   @new(child: Widget, options: ?dict) {
     var o = check_options(
-      options, 'ScrollView',
+      options,
+      'ScrollView',
       host_options({
         axis: 'string',
         controller: ScrollController,
@@ -170,7 +192,9 @@ class ScrollView < StatefulWidget {
     )
 
     if !_AXES.contains(o.get('axis', 'vertical')) {
-      raise ValueError("axis of ScrollView must be 'vertical', 'horizontal' or 'both', got '${o.get('axis')}'")
+      raise ValueError(
+        "axis of ScrollView must be 'vertical', 'horizontal' or 'both', got '${o.get('axis')}'",
+      )
     }
 
     self.key = o.get('key')
@@ -267,17 +291,14 @@ class ListView < StatelessWidget {
    * @constructor
    */
   @new(children: list, options: ?dict) {
-    var o = check_options(
-      options, 'ListView',
-      {
-        key: Key,
-        spacing: 'number',
-        padding: EdgeInsets,
-        axis: 'string',
-        controller: ScrollController,
-        on_scroll: 'function',
-      },
-    )
+    var o = check_options(options, 'ListView', {
+      key: Key,
+      spacing: 'number',
+      padding: EdgeInsets,
+      axis: 'string',
+      controller: ScrollController,
+      on_scroll: 'function',
+    })
     self.key = o.get('key')
     self.children = children
     self.options = o
@@ -303,21 +324,26 @@ class ListView < StatelessWidget {
     var axis = o.get('axis', 'vertical')
     var spacing = o.get('spacing', 0)
     var content = axis == 'horizontal'
-      ? Row(
-        self.children, { spacing, shrink_wrap: true, align_items: 'stretch' },
-      )
-      : Column(
-        self.children, { spacing, shrink_wrap: true, align_items: 'stretch' },
-      )
+        ? Row(self.children, {
+            spacing,
+            shrink_wrap: true,
+            align_items: 'stretch',
+          })
+        : Column(self.children, {
+            spacing,
+            shrink_wrap: true,
+            align_items: 'stretch',
+          })
 
     if o.get('padding') != nil {
       content = Padding(o.get('padding'), content)
     }
 
-    return ScrollView(
-      content,
-      { axis, controller: o.get('controller'), on_scroll: o.get('on_scroll') },
-    )
+    return ScrollView(content, {
+      axis,
+      controller: o.get('controller'),
+      on_scroll: o.get('on_scroll'),
+    })
   }
 }
 
@@ -332,24 +358,23 @@ class LazyList < StatefulWidget {
   var options = {}
 
   @new(count: number, builder: function, options: dict) {
-    var o = check_options(
-      options, 'ListView.builder',
-      {
-        key: Key,
-        item_extent: 'number',
-        axis: 'string',
-        controller: ScrollController,
-        on_scroll: 'function',
-        overscan: 'number',
-      },
-    )
+    var o = check_options(options, 'ListView.builder', {
+      key: Key,
+      item_extent: 'number',
+      axis: 'string',
+      controller: ScrollController,
+      on_scroll: 'function',
+      overscan: 'number',
+    })
 
     if o.get('item_extent') == nil or !(o.get('item_extent') > 0) {
       raise ValueError('ListView.builder needs an item_extent above zero')
     }
 
     if !is_int(count) or count < 0 {
-      raise ValueError('ListView.builder needs a whole number of rows, got ${count}')
+      raise ValueError(
+        'ListView.builder needs a whole number of rows, got ${count}',
+      )
     }
 
     self.key = o.get('key')
@@ -393,34 +418,32 @@ class LazyListState < State {
         var row = self.widget.builder(inner, i)
 
         if horizontal {
-          rows.append(Positioned(
-            row,
-            {
+          rows.append(
+            Positioned(row, {
               key: ValueKey(i),
               left: i * extent,
               top: 0,
               bottom: 0,
               width: extent,
-            },
-          ))
+            }),
+          )
         } else {
-          rows.append(Positioned(
-            row,
-            {
+          rows.append(
+            Positioned(row, {
               key: ValueKey(i),
               top: i * extent,
               left: 0,
               right: 0,
               height: extent,
-            },
-          ))
+            }),
+          )
         }
       }
 
       var total = count * extent
       var content = horizontal
-        ? Box({ width: total, child: Stack(rows) })
-        : Box({ height: total, child: Stack(rows) })
+          ? Box({ width: total, child: Stack(rows) })
+          : Box({ height: total, child: Stack(rows) })
 
       return ScrollView(content, {
         axis: horizontal ? 'horizontal' : 'vertical',
@@ -429,10 +452,10 @@ class LazyListState < State {
           var next = horizontal ? point.x : point.y
 
           # Rebuild only when the rows in view change.
-          var moved_top = (next / extent).floor()
-            != (self.offset / extent).floor()
-          var moved_bottom = ((next + viewport) / extent).ceil()
-            != ((self.offset + viewport) / extent).ceil()
+          var moved_top = (next / extent).floor() !=
+              (self.offset / extent).floor()
+          var moved_bottom = ((next + viewport) / extent).ceil() !=
+              ((self.offset + viewport) / extent).ceil()
 
           if moved_top or moved_bottom {
             self.set_state(@{
@@ -485,7 +508,9 @@ class TabView < MultiChildHostWidget {
    */
   @new(tabs: list, selected: number, options: ?dict) {
     var o = check_options(
-      options, 'TabView', focus_options({ on_changed: 'function' }),
+      options,
+      'TabView',
+      focus_options({ on_changed: 'function' }),
     )
 
     for tab in tabs {
@@ -515,8 +540,8 @@ class TabView < MultiChildHostWidget {
     var on_changed = self.on_changed
     return {
       changed: @(payload) => on_changed == nil
-        ? nil
-        : on_changed(payload.selected),
+          ? nil
+          : on_changed(payload.selected),
     }
   }
 
@@ -554,7 +579,8 @@ class SplitView < MultiChildHostWidget {
    */
   @new(children: list, options: ?dict) {
     var o = check_options(
-      options, 'SplitView',
+      options,
+      'SplitView',
       host_options({
         axis: 'string',
         divider: 'string',
@@ -617,16 +643,13 @@ class DataColumn {
    * @constructor
    */
   @new(id: string, title: string, options: ?dict) {
-    var o = check_options(
-      options, 'DataColumn',
-      {
-        width: 'number',
-        min_width: 'number',
-        max_width: 'number',
-        align: 'string',
-        sortable: 'bool',
-      },
-    )
+    var o = check_options(options, 'DataColumn', {
+      width: 'number',
+      min_width: 'number',
+      max_width: 'number',
+      align: 'string',
+      sortable: 'bool',
+    })
     self.id = id
     self.title = title
     self.width = o.get('width')
@@ -701,17 +724,21 @@ class DataTable < HostWidget {
    * @constructor
    */
   @new(columns: list, row_count: number, cell: function, options: ?dict) {
-    var o = check_options(options, 'DataTable', focus_options({
-      selection: 'string',
-      selected: 'list',
-      on_selection_changed: 'function',
-      on_activate: 'function',
-      sort: 'list',
-      on_sort: 'function',
-      alternating: 'bool',
-      grid: 'bool',
-      header: 'bool',
-    }))
+    var o = check_options(
+      options,
+      'DataTable',
+      focus_options({
+        selection: 'string',
+        selected: 'list',
+        on_selection_changed: 'function',
+        on_activate: 'function',
+        sort: 'list',
+        on_sort: 'function',
+        alternating: 'bool',
+        grid: 'bool',
+        header: 'bool',
+      }),
+    )
 
     for column in columns {
       if !instance_of(column, DataColumn) {
@@ -770,14 +797,14 @@ class DataTable < HostWidget {
         return text == nil ? '' : '${text}'
       },
       changed: @(payload) => on_selection_changed == nil
-        ? nil
-        : on_selection_changed(payload.selected),
+          ? nil
+          : on_selection_changed(payload.selected),
       activated: @(payload) => on_activate == nil
-        ? nil
-        : on_activate(payload.row),
+          ? nil
+          : on_activate(payload.row),
       sorted: @(payload) => on_sort == nil
-        ? nil
-        : on_sort(payload.column, payload.ascending),
+          ? nil
+          : on_sort(payload.column, payload.ascending),
     }
   }
 }
@@ -813,7 +840,8 @@ class VisualEffect < SingleChildHostWidget {
    */
   @new(child: ?Widget, options: ?dict) {
     var o = check_options(
-      options, 'VisualEffect',
+      options,
+      'VisualEffect',
       host_options({ material: 'string', blending: 'string' }),
     )
     self.key = o.get('key')
