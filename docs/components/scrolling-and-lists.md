@@ -13,23 +13,38 @@ import zug { * }
 
 var terms = 'These terms explain what you can expect from us. ' * 40
 
-var agreement = Padding(EdgeInsets.all(16), Column([
-  Text('Terms of Service', {
-    style: TextStyle({ size: 17, weight: FontWeight.SEMIBOLD }),
-  }),
-  Expanded(ScrollView(Padding(EdgeInsets.all(10), Text(terms)), {
-    bordered: true,
-  })),
-  Row([
-    Spacer(),
-    Button('Decline', { role: ButtonRole.CANCEL, on_pressed: @{} }),
-    Button('Agree', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
-  ], { spacing: 8 }),
-], { spacing: 10, align_items: AlignItems.STRETCH }))
+var agreement = Padding(
+  EdgeInsets.all(16),
+  Column(
+    [
+      Text('Terms of Service', {
+        style: TextStyle({ size: 17, weight: FontWeight.SEMIBOLD }),
+      }),
+      Expanded(
+        ScrollView(Padding(EdgeInsets.all(10), Text(terms)), {
+          bordered: true,
+        }),
+      ),
+      Row(
+        [
+          Spacer(),
+          Button('Decline', { role: ButtonRole.CANCEL, on_pressed: @{} }),
+          Button('Agree', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
+        ],
+        { spacing: 8 },
+      ),
+    ],
+    { spacing: 10, align_items: AlignItems.STRETCH },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Terms', agreement, { size: Size(420, 320) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Terms', agreement, { size: Size(420, 320) }),
+    ],
+  }),
+)
 ```
 
 Content in a scroll view can be as long as it likes in the direction it
@@ -61,9 +76,11 @@ class LogState < State {
 
   build(context) {
     return Column([
-      Button('Back to Top', { on_pressed: @{
-        self.scroller.scroll_to(0, 0)
-      } }),
+      Button('Back to Top', {
+        on_pressed: @{
+          self.scroller.scroll_to(0, 0)
+        },
+      }),
       Expanded(ScrollView(LogLines(), { controller: self.scroller })),
     ])
   }
@@ -85,17 +102,18 @@ import zug { * }
 
 var accounts = ['Personal', 'Work', 'Family', 'Newsletters']
 
-var list = ListView(accounts.map(@(name) => Row([
-  Icon('tray.full'),
-  Text(name),
-], { spacing: 8 })), {
-  spacing: 8,
-  padding: EdgeInsets.all(12),
-})
+var list = ListView(
+  accounts.map(@(name) => Row([Icon('tray.full'), Text(name)], { spacing: 8 })),
+  { spacing: 8, padding: EdgeInsets.all(12) },
+)
 
-run_app(App({
-  windows: [Window('Mailboxes', list, { size: Size(220, 160) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Mailboxes', list, { size: Size(220, 160) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -124,18 +142,26 @@ import zug { * }
 
 var muted = TextStyle({ color: Color.system('secondary_label') })
 
-var log = ListView.builder(100000, @(context, index) => Padding(
-  EdgeInsets.symmetric({ horizontal: 12 }),
-  Row([
-    Text('Request ${index + 1}'),
-    Spacer(),
-    Text('${(index * 37) % 900 + 20} ms', { style: muted }),
-  ]),
-), { item_extent: 24 })
+var log = ListView.builder(
+  100000,
+  @(context, index) => Padding(
+    EdgeInsets.symmetric({ horizontal: 12 }),
+    Row([
+      Text('Request ${index + 1}'),
+      Spacer(),
+      Text('${(index * 37) % 900 + 20} ms', { style: muted }),
+    ]),
+  ),
+  { item_extent: 24 },
+)
 
-run_app(App({
-  windows: [Window('Requests', log, { size: Size(300, 320) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Requests', log, { size: Size(300, 320) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -229,9 +255,13 @@ class PeopleState < State {
   }
 }
 
-run_app(App({
-  windows: [Window('People', People(), { size: Size(420, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('People', People(), { size: Size(420, 200) }),
+    ],
+  }),
+)
 ```
 
 The table doesn't sort for you. When the user clicks a sortable header,

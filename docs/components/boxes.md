@@ -28,26 +28,38 @@ class Card < StatelessWidget {
       border: Border.all(1, Color.system('separator')),
       radius: 10,
       shadow: Shadow({ blur: 8, y: 3 }),
-      child: Column([
-        Text(self.title, {
-          style: TextStyle({ weight: FontWeight.SEMIBOLD }),
-        }),
-        Text(self.body, {
-          style: TextStyle({ color: Color.system('secondary_label') }),
-        }),
-      ], { spacing: 4, align_items: AlignItems.START }),
+      child: Column(
+        [
+          Text(self.title, {
+            style: TextStyle({ weight: FontWeight.SEMIBOLD }),
+          }),
+          Text(self.body, {
+            style: TextStyle({ color: Color.system('secondary_label') }),
+          }),
+        ],
+        { spacing: 4, align_items: AlignItems.START },
+      ),
     })
   }
 }
 
-var cards = Center(Row([
-  Card('Drafts', '3 documents waiting for review.'),
-  Card('Shared', 'Ada edited the budget an hour ago.'),
-], { spacing: 16, shrink_wrap: true }))
+var cards = Center(
+  Row(
+    [
+      Card('Drafts', '3 documents waiting for review.'),
+      Card('Shared', 'Ada edited the budget an hour ago.'),
+    ],
+    { spacing: 16, shrink_wrap: true },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Overview', cards, { size: Size(520, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Overview', cards, { size: Size(520, 200) }),
+    ],
+  }),
+)
 ```
 
 `padding` goes inside the decoration, between the border and the child,
@@ -91,9 +103,13 @@ var content = Padding(
   Text('24 points at the sides, and 16 at the top and bottom.'),
 )
 
-run_app(App({
-  windows: [Window('Padding', content, { size: Size(360, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Padding', content, { size: Size(360, 100) }),
+    ],
+  }),
+)
 ```
 
 `EdgeInsets` says how much space goes on each side:
@@ -113,17 +129,23 @@ given. `Center(child)` is the common case, the child in the middle.
 ```zuri
 import zug { * }
 
-var corner = Stack([
-  Center(Text('Drop files here')),
-  Align(
-    Padding(EdgeInsets.all(12), Button('Browse…', { on_pressed: @{} })),
-    { alignment: Alignment.BOTTOM_RIGHT },
-  ),
-], { fit: StackFit.EXPAND })
+var corner = Stack(
+  [
+    Center(Text('Drop files here')),
+    Align(Padding(EdgeInsets.all(12), Button('Browse…', { on_pressed: @{} })), {
+      alignment: Alignment.BOTTOM_RIGHT,
+    }),
+  ],
+  { fit: StackFit.EXPAND },
+)
 
-run_app(App({
-  windows: [Window('Import', corner, { size: Size(360, 220) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Import', corner, { size: Size(360, 220) }),
+    ],
+  }),
+)
 ```
 
 There are nine named alignments: `TOP_LEFT`, `TOP_CENTER`, `TOP_RIGHT`,
@@ -150,18 +172,31 @@ any window width:
 ```zuri
 import zug { * }
 
-var preview = Padding(EdgeInsets.all(16), Column([
-  AspectRatio(16 / 9, Box({
-    color: Color.BLACK,
-    radius: 6,
-    child: Center(Icon('play.fill', { size: 32, color: Color.WHITE })),
-  })),
-  Text('Keynote, 32 minutes'),
-], { spacing: 8, align_items: AlignItems.STRETCH }))
+var preview = Padding(
+  EdgeInsets.all(16),
+  Column(
+    [
+      AspectRatio(
+        16 / 9,
+        Box({
+          color: Color.BLACK,
+          radius: 6,
+          child: Center(Icon('play.fill', { size: 32, color: Color.WHITE })),
+        }),
+      ),
+      Text('Keynote, 32 minutes'),
+    ],
+    { spacing: 8, align_items: AlignItems.STRETCH },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Preview', preview, { size: Size(400, 300) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Preview', preview, { size: Size(400, 300) }),
+    ],
+  }),
+)
 ```
 
 ## FitContent
@@ -173,15 +208,26 @@ a column of buttons that should all be as wide as the widest one:
 ```zuri
 import zug { * }
 
-var actions = Center(FitContent(Column([
-  Button('New Document', { on_pressed: @{} }),
-  Button('Open…', { on_pressed: @{} }),
-  Button('Open Recent', { on_pressed: @{} }),
-], { spacing: 8, shrink_wrap: true, align_items: AlignItems.STRETCH })))
+var actions = Center(
+  FitContent(
+    Column(
+      [
+        Button('New Document', { on_pressed: @{} }),
+        Button('Open…', { on_pressed: @{} }),
+        Button('Open Recent', { on_pressed: @{} }),
+      ],
+      { spacing: 8, shrink_wrap: true, align_items: AlignItems.STRETCH },
+    ),
+  ),
+)
 
-run_app(App({
-  windows: [Window('Welcome', actions, { size: Size(320, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Welcome', actions, { size: Size(320, 200) }),
+    ],
+  }),
+)
 ```
 
 The column stretches its buttons, and `FitContent` makes the column
@@ -214,26 +260,36 @@ class SearchState < State {
   var advanced = false
 
   build(context) {
-    return Padding(EdgeInsets.all(16), Column([
-      Checkbox(self.advanced, {
-        label: 'Advanced options',
-        on_changed: @(on) {
-          self.set_state(@{
-            self.advanced = on
-          })
-        },
-      }),
-      Visibility(
-        TextField({ placeholder: 'Only in folder…' }),
-        { visible: self.advanced, keep_state: true },
+    return Padding(
+      EdgeInsets.all(16),
+      Column(
+        [
+          Checkbox(self.advanced, {
+            label: 'Advanced options',
+            on_changed: @(on) {
+              self.set_state(@{
+                self.advanced = on
+              })
+            },
+          }),
+          Visibility(TextField({ placeholder: 'Only in folder…' }), {
+            visible: self.advanced,
+            keep_state: true,
+          }),
+        ],
+        { spacing: 10, align_items: AlignItems.STRETCH },
       ),
-    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Search', Search(), { size: Size(300, 110) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Search', Search(), { size: Size(300, 110) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -259,15 +315,22 @@ var mail = Responsive(@(context, constraints) {
   var reader = Center(Text('Message'))
 
   if constraints.max_width >= 560 {
-    return Row([Box({ width: 220, child: list }), Expanded(reader)])
+    return Row([
+      Box({ width: 220, child: list }),
+      Expanded(reader),
+    ])
   }
 
   return list
 })
 
-run_app(App({
-  windows: [Window('Mail', mail, { size: Size(720, 400) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Mail', mail, { size: Size(720, 400) }),
+    ],
+  }),
+)
 ```
 
 In a wide window this shows the list and the message side by side, and

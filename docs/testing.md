@@ -25,11 +25,13 @@ class CounterState < State {
   build(context) {
     return Column([
       Text('Pressed ${self.count} times'),
-      Button('Press', { on_pressed: @{
-        self.set_state(@{
-          self.count++
-        })
-      } }),
+      Button('Press', {
+        on_pressed: @{
+          self.set_state(@{
+            self.count++
+          })
+        },
+      }),
     ])
   }
 }
@@ -85,7 +87,9 @@ as the native control would, and draws what changed:
 t.fire('remember', 'changed', { value: true })
 t.fire('name', 'changed', { text: 'Ada' })
 t.fire('name', 'submitted', nil)
-t.fire('people', 'changed', { selected: [2] })
+t.fire('people', 'changed', {
+  selected: [2],
+})
 t.fire('people', 'activated', { row: 2 })
 ```
 

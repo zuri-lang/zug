@@ -95,14 +95,25 @@ class Welcome < StatelessWidget {
   build(context) {
     var style = Style.of(context)
 
-    return Padding(style.padding, Column([
-      Text('Welcome', { style: style.headline }),
-      Text('Every Text below the sheet starts from its text style.'),
-    ], { spacing: style.spacing, align_items: AlignItems.START }))
+    return Padding(
+      style.padding,
+      Column(
+        [
+          Text('Welcome', { style: style.headline }),
+          Text('Every Text below the sheet starts from its text style.'),
+        ],
+        { spacing: style.spacing, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
-run_app(App({ style: sheet, windows: [Window('Welcome', Welcome())] }))
+run_app(
+  App({
+    style: sheet,
+    windows: [Window('Welcome', Welcome())],
+  }),
+)
 ```
 
 A sheet holds an `accent` colour, the text styles `text`, `title`,
@@ -174,7 +185,9 @@ for anything you draw yourself:
 Canvas(@(painter, size) {
   var ink = Appearance.of(context) == 'dark' ? Color.WHITE : Color.BLACK
   painter.line(
-    Point(0, 0), Point(size.width, size.height), Paint({ color: ink }),
+    Point(0, 0),
+    Point(size.width, size.height),
+    Paint({ color: ink }),
   )
 }, { repaint: Appearance.of(context) })
 ```

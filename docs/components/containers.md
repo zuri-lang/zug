@@ -22,35 +22,49 @@ class SettingsState < State {
   var autosave = true
 
   build(context) {
-    var general = Padding(EdgeInsets.all(16), Column([
-      Checkbox(self.autosave, {
-        label: 'Save documents automatically',
-        on_changed: @(on) {
-          self.set_state(@{
-            self.autosave = on
-          })
-        },
-      }),
-    ], { align_items: AlignItems.START }))
+    var general = Padding(
+      EdgeInsets.all(16),
+      Column(
+        [
+          Checkbox(self.autosave, {
+            label: 'Save documents automatically',
+            on_changed: @(on) {
+              self.set_state(@{
+                self.autosave = on
+              })
+            },
+          }),
+        ],
+        { align_items: AlignItems.START },
+      ),
+    )
 
     var accounts = Center(Text('No accounts yet'))
 
-    return Padding(EdgeInsets.all(12), TabView([
-      Tab('General', general),
-      Tab('Accounts', accounts),
-    ], self.tab, {
-      on_changed: @(index) {
-        self.set_state(@{
-          self.tab = index
-        })
-      },
-    }))
+    return Padding(
+      EdgeInsets.all(12),
+      TabView(
+        [Tab('General', general), Tab('Accounts', accounts)],
+        self.tab,
+        {
+          on_changed: @(index) {
+            self.set_state(@{
+              self.tab = index
+            })
+          },
+        },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Settings', Settings(), { size: Size(420, 240) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Settings', Settings(), { size: Size(420, 240) }),
+    ],
+  }),
+)
 ```
 
 Every tab's content stays in the tree while another tab is showing, so
@@ -70,24 +84,32 @@ editor with a preview beside it.
 ```zuri
 import zug { * }
 
-var folders = ListView.builder(40, @(context, index) => Padding(
-  EdgeInsets.symmetric({ horizontal: 12 }),
-  Row([Icon('folder'), Text('Folder ${index + 1}')], { spacing: 6 }),
-), { item_extent: 24 })
+var folders = ListView.builder(
+  40,
+  @(context, index) => Padding(
+    EdgeInsets.symmetric({ horizontal: 12 }),
+    Row([Icon('folder'), Text('Folder ${index + 1}')], { spacing: 6 }),
+  ),
+  { item_extent: 24 },
+)
 
-var browser = SplitView([
-  VisualEffect(folders),
-  Center(Text('Choose a folder')),
-], {
-  initial: [200],
-  on_resize: @(sizes) {
-    echo 'sidebar is now ${sizes[0]} points wide'
+var browser = SplitView(
+  [VisualEffect(folders), Center(Text('Choose a folder'))],
+  {
+    initial: [200],
+    on_resize: @(sizes) {
+      echo 'sidebar is now ${sizes[0]} points wide'
+    },
   },
-})
+)
 
-run_app(App({
-  windows: [Window('Files', browser, { size: Size(600, 360) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Files', browser, { size: Size(600, 360) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -120,31 +142,48 @@ class ExportState < State {
   var transparent = false
 
   build(context) {
-    return Padding(EdgeInsets.all(16), GroupBox(Column([
-      RadioGroup(['PNG', 'JPEG', 'PDF'], self.format, {
-        axis: Axis.HORIZONTAL,
-        on_changed: @(format) {
-          self.set_state(@{
-            self.format = format
-          })
-        },
-      }),
-      Checkbox(self.transparent, {
-        label: 'Transparent background',
-        enabled: self.format == 'PNG',
-        on_changed: @(on) {
-          self.set_state(@{
-            self.transparent = on
-          })
-        },
-      }),
-    ], { spacing: 10, align_items: AlignItems.START }), { title: 'Format' }))
+    return Padding(
+      EdgeInsets.all(16),
+      GroupBox(
+        Column(
+          [
+            RadioGroup(
+              ['PNG', 'JPEG', 'PDF'],
+              self.format,
+              {
+                axis: Axis.HORIZONTAL,
+                on_changed: @(format) {
+                  self.set_state(@{
+                    self.format = format
+                  })
+                },
+              },
+            ),
+            Checkbox(self.transparent, {
+              label: 'Transparent background',
+              enabled: self.format == 'PNG',
+              on_changed: @(on) {
+                self.set_state(@{
+                  self.transparent = on
+                })
+              },
+            }),
+          ],
+          { spacing: 10, align_items: AlignItems.START },
+        ),
+        { title: 'Format' },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Export', Export(), { size: Size(340, 140) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Export', Export(), { size: Size(340, 140) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -162,23 +201,32 @@ column it runs across, and in a row it runs down.
 ```zuri
 import zug { * }
 
-var toolbar = Padding(EdgeInsets.all(12), Row([
-  Button('Cut', { on_pressed: @{} }),
-  Button('Copy', { on_pressed: @{} }),
-  Button('Paste', { on_pressed: @{} }),
-  Box({ height: 20, child: Separator() }),
-  Button('Undo', { on_pressed: @{} }),
-], { spacing: 8 }))
+var toolbar = Padding(
+  EdgeInsets.all(12),
+  Row(
+    [
+      Button('Cut', { on_pressed: @{} }),
+      Button('Copy', { on_pressed: @{} }),
+      Button('Paste', { on_pressed: @{} }),
+      Box({ height: 20, child: Separator() }),
+      Button('Undo', { on_pressed: @{} }),
+    ],
+    { spacing: 8 },
+  ),
+)
 
-var page = Column([
-  toolbar,
-  Separator(),
-  Expanded(Center(Text('Document'))),
-], { align_items: AlignItems.STRETCH })
+var page = Column(
+  [toolbar, Separator(), Expanded(Center(Text('Document')))],
+  { align_items: AlignItems.STRETCH },
+)
 
-run_app(App({
-  windows: [Window('Editor', page, { size: Size(420, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Editor', page, { size: Size(420, 200) }),
+    ],
+  }),
+)
 ```
 
 A row only stretches its children with `AlignItems.STRETCH`, so a

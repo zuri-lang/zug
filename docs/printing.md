@@ -14,7 +14,8 @@ print_pages(context, {
   pages: 1,
   paint: @(painter, page) {
     painter.text(
-      'Invoice 1024', Point(0, 0),
+      'Invoice 1024',
+      Point(0, 0),
       TextStyle({ size: 24, weight: FontWeight.BOLD }),
     )
     painter.text('Due by 30 November.', Point(0, 40), TextStyle({ size: 12 }))
@@ -151,7 +152,10 @@ showing anything. It takes what `print_pages()` takes, and raises a
 for an Export as PDF command:
 
 ```zuri,ignore
-save_file(context, { name: 'Notes.pdf', types: ['pdf'] }).then(@(path) {
+save_file(context, {
+  name: 'Notes.pdf',
+  types: ['pdf'],
+}).then(@(path) {
   if path != nil {
     save_pdf(path, { title: 'Notes', pages: count, paint })
   }

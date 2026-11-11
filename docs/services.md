@@ -16,13 +16,13 @@ animation.
 import zug { * }
 
 var ready = Promise.resolved(41)
-  .then(@(value) => value + 1)
-  .then(@(value) {
-    echo 'got ${value}'
-  })
-  .catch_error(@(error) {
-    echo 'failed: ${error.message}'
-  })
+    .then(@(value) => value + 1)
+    .then(@(value) {
+      echo 'got ${value}'
+    })
+    .catch_error(@(error) {
+      echo 'failed: ${error.message}'
+    })
 ```
 
 `then(on_value)` runs a function with the value, and gives a new
@@ -109,7 +109,9 @@ in. It resolves with a list of paths, or `nil` if the user cancelled.
 `name`, and resolves with a path, or `nil`.
 
 ```zuri,ignore
-pick_files(context, { types: ['txt', 'md'] }).then(@(paths) {
+pick_files(context, {
+  types: ['txt', 'md'],
+}).then(@(paths) {
   if paths != nil {
     self.open(paths[0])
   }
@@ -165,24 +167,36 @@ class RenameState < State {
   build(context) {
     var close = self.widget.close
 
-    var buttons = Row([
-      Spacer(),
-      Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{
-        close(nil)
-      } }),
-      Button('Rename', { role: ButtonRole.PRIMARY, on_pressed: @{
-        close(self.field.text())
-      } }),
-    ], { spacing: 8 })
+    var buttons = Row(
+      [
+        Spacer(),
+        Button('Cancel', {
+          role: ButtonRole.CANCEL,
+          on_pressed: @{
+            close(nil)
+          },
+        }),
+        Button('Rename', {
+          role: ButtonRole.PRIMARY,
+          on_pressed: @{
+            close(self.field.text())
+          },
+        }),
+      ],
+      { spacing: 8 },
+    )
 
     return Box({
       width: 320,
       padding: EdgeInsets.all(20),
-      child: Column([
-        Text('Rename'),
-        TextField({ controller: self.field, autofocus: true }),
-        buttons,
-      ], { spacing: 12, align_items: AlignItems.STRETCH }),
+      child: Column(
+        [
+          Text('Rename'),
+          TextField({ controller: self.field, autofocus: true }),
+          buttons,
+        ],
+        { spacing: 12, align_items: AlignItems.STRETCH },
+      ),
     })
   }
 }

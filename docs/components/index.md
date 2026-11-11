@@ -146,20 +146,26 @@ class PreferencesState < State {
   var spell_check = true
 
   build(context) {
-    return Center(Checkbox(self.spell_check, {
-      label: 'Check spelling while typing',
-      on_changed: @(value) {
-        self.set_state(@{
-          self.spell_check = value
-        })
-      },
-    }))
+    return Center(
+      Checkbox(self.spell_check, {
+        label: 'Check spelling while typing',
+        on_changed: @(value) {
+          self.set_state(@{
+            self.spell_check = value
+          })
+        },
+      }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Preferences', Preferences(), { size: Size(320, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Preferences', Preferences(), { size: Size(320, 120) }),
+    ],
+  }),
+)
 ```
 
 If `on_changed` doesn't store the value, the checkbox goes back to

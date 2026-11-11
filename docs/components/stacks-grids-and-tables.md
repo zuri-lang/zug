@@ -15,30 +15,36 @@ places those children by its `alignment`. Wrap a child in
 ```zuri
 import zug { * }
 
-var thumbnail = Center(Stack([
-  Box({
-    width: 160,
-    height: 100,
-    radius: 6,
-    color: Color.system('control_background'),
-    child: Center(Icon('film', { size: 32, color: Color.system('gray') })),
-  }),
-  Positioned(
+var thumbnail = Center(
+  Stack([
     Box({
-      padding: EdgeInsets.symmetric({ horizontal: 5, vertical: 1 }),
-      radius: 4,
-      color: Color.BLACK.with_alpha(0.6),
-      child: Text('4:12', {
-        style: TextStyle({ size: 11, color: Color.WHITE }),
-      }),
+      width: 160,
+      height: 100,
+      radius: 6,
+      color: Color.system('control_background'),
+      child: Center(Icon('film', { size: 32, color: Color.system('gray') })),
     }),
-    { right: 6, bottom: 6 },
-  ),
-]))
+    Positioned(
+      Box({
+        padding: EdgeInsets.symmetric({ horizontal: 5, vertical: 1 }),
+        radius: 4,
+        color: Color.BLACK.with_alpha(0.6),
+        child: Text('4:12', {
+          style: TextStyle({ size: 11, color: Color.WHITE }),
+        }),
+      }),
+      { right: 6, bottom: 6 },
+    ),
+  ]),
+)
 
-run_app(App({
-  windows: [Window('Videos', thumbnail, { size: Size(300, 180) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Videos', thumbnail, { size: Size(300, 180) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -80,14 +86,18 @@ class Chip < StatelessWidget {
 
 var tags = ['design', 'research', 'urgent', 'q4', 'customers', 'mobile']
 
-var cloud = Padding(EdgeInsets.all(16), Wrap(tags.map(@(tag) => Chip(tag)), {
-  spacing: 6,
-  run_spacing: 6,
-}))
+var cloud = Padding(
+  EdgeInsets.all(16),
+  Wrap(tags.map(@(tag) => Chip(tag)), { spacing: 6, run_spacing: 6 }),
+)
 
-run_app(App({
-  windows: [Window('Tags', cloud, { size: Size(260, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Tags', cloud, { size: Size(260, 120) }),
+    ],
+  }),
+)
 ```
 
 Resize the window and the chips move onto as many lines as they need.
@@ -120,16 +130,33 @@ def key(label) {
   })
 }
 
-var keypad = Padding(EdgeInsets.all(12), Grid([
-  key('7'), key('8'), key('9'),
-  key('4'), key('5'), key('6'),
-  key('1'), key('2'), key('3'),
-  GridCell(key('0'), { column_span: 2 }), key('.'),
-], { columns: 3, spacing: 6, row_height: 40 }))
+var keypad = Padding(
+  EdgeInsets.all(12),
+  Grid(
+    [
+      key('7'),
+      key('8'),
+      key('9'),
+      key('4'),
+      key('5'),
+      key('6'),
+      key('1'),
+      key('2'),
+      key('3'),
+      GridCell(key('0'), { column_span: 2 }),
+      key('.'),
+    ],
+    { columns: 3, spacing: 6, row_height: 40 },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Keypad', keypad, { size: Size(200, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Keypad', keypad, { size: Size(200, 200) }),
+    ],
+  }),
+)
 ```
 
 `GridCell(child, options)` makes a child span several cells. It takes
@@ -157,25 +184,43 @@ sit in one column and fields in the next.
 ```zuri
 import zug { * }
 
-var form = Padding(EdgeInsets.all(20), Table([
-  [Text('Name'), TextField({ placeholder: 'Ada Lovelace' })],
-  [Text('Email'), TextField({ placeholder: 'ada@example.com' })],
-  [
-    Text('Team'),
-    Dropdown(['Analytics', 'Engineering', 'Design'], 'Analytics', {
-      on_changed: @(team) {},
-    }),
-  ],
-], {
-  columns: [ColumnWidth.fit(), ColumnWidth.flex()],
-  align_items: AlignItems.BASELINE,
-  column_spacing: 8,
-  row_spacing: 8,
-}))
+var form = Padding(
+  EdgeInsets.all(20),
+  Table(
+    [
+      [
+        Text('Name'),
+        TextField({ placeholder: 'Ada Lovelace' }),
+      ],
+      [
+        Text('Email'),
+        TextField({ placeholder: 'ada@example.com' }),
+      ],
+      [
+        Text('Team'),
+        Dropdown(
+          ['Analytics', 'Engineering', 'Design'],
+          'Analytics',
+          { on_changed: @(team) {} },
+        ),
+      ],
+    ],
+    {
+      columns: [ColumnWidth.fit(), ColumnWidth.flex()],
+      align_items: AlignItems.BASELINE,
+      column_spacing: 8,
+      row_spacing: 8,
+    },
+  ),
+)
 
-run_app(App({
-  windows: [Window('New member', form, { size: Size(380, 150) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('New member', form, { size: Size(380, 150) }),
+    ],
+  }),
+)
 ```
 
 Each row is a plain list of widgets. A row shorter than the others

@@ -46,16 +46,23 @@ class DetailsState < State {
       child: Text('Created 3 March. Last opened yesterday by Ada.'),
     })
 
-    return Padding(EdgeInsets.all(16), Column([
-      toggle,
-      details,
-    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+    return Padding(
+      EdgeInsets.all(16),
+      Column(
+        [toggle, details],
+        { spacing: 10, align_items: AlignItems.STRETCH },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Report', Details(), { size: Size(340, 180) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Report', Details(), { size: Size(340, 180) }),
+    ],
+  }),
+)
 ```
 
 A change in the middle of a move starts a new move from wherever the
@@ -98,28 +105,44 @@ class StorageState < State {
   var used = 0.25
 
   build(context) {
-    var meter = AnimatedValue(self.used, @(context, value) => Column([
-      ProgressBar({ value }),
-      Text('${(value * 100).round()}% used'),
-    ], { spacing: 6, align_items: AlignItems.STRETCH }), {
-      duration: Duration.ms(600),
-      curve: Curve.EASE_IN_OUT,
-    })
+    var meter = AnimatedValue(
+      self.used,
+      @(context, value) => Column(
+        [
+          ProgressBar({ value }),
+          Text('${(value * 100).round()}% used'),
+        ],
+        { spacing: 6, align_items: AlignItems.STRETCH },
+      ),
+      { duration: Duration.ms(600), curve: Curve.EASE_IN_OUT },
+    )
 
-    return Padding(EdgeInsets.all(20), Column([
-      meter,
-      Button('Add Photos', { on_pressed: @{
-        self.set_state(@{
-          self.used = (self.used + 0.2).min(1)
-        })
-      } }),
-    ], { spacing: 12, align_items: AlignItems.START }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          meter,
+          Button('Add Photos', {
+            on_pressed: @{
+              self.set_state(@{
+                self.used = (self.used + 0.2).min(1)
+              })
+            },
+          }),
+        ],
+        { spacing: 12, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Storage', Storage(), { size: Size(300, 130) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Storage', Storage(), { size: Size(300, 130) }),
+    ],
+  }),
+)
 ```
 
 The value can be a number, a `Color`, a `Point`, a `Size`, a `Rect`,

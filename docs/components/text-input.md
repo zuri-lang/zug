@@ -40,37 +40,47 @@ class SignInState < State {
   }
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Column([
-      TextField({
-        controller: self.name,
-        placeholder: 'Name',
-        autofocus: true,
-      }),
-      TextField({
-        controller: self.password,
-        placeholder: 'Password',
-        obscure: true,
-        on_submitted: @(text) {
-          self.sign_in()
-        },
-      }),
-      Row([
-        Text(self.message),
-        Spacer(),
-        Button('Sign In', {
-          role: ButtonRole.PRIMARY,
-          on_pressed: @{
-            self.sign_in()
-          },
-        }),
-      ]),
-    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          TextField({
+            controller: self.name,
+            placeholder: 'Name',
+            autofocus: true,
+          }),
+          TextField({
+            controller: self.password,
+            placeholder: 'Password',
+            obscure: true,
+            on_submitted: @(text) {
+              self.sign_in()
+            },
+          }),
+          Row([
+            Text(self.message),
+            Spacer(),
+            Button('Sign In', {
+              role: ButtonRole.PRIMARY,
+              on_pressed: @{
+                self.sign_in()
+              },
+            }),
+          ]),
+        ],
+        { spacing: 10, align_items: AlignItems.STRETCH },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Sign In', SignIn(), { size: Size(320, 150) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sign In', SignIn(), { size: Size(320, 150) }),
+    ],
+  }),
+)
 ```
 
 Make controllers in the `State`, as fields or in `init_state()`, so
@@ -114,13 +124,15 @@ var code = TextField({
   input_filter: @(text, previous) => text.match('/^[0-9]*$/') ? true : false,
 })
 
-run_app(App({
-  windows: [
-    Window('Verify', Padding(EdgeInsets.all(20), code), {
-      size: Size(240, 70),
-    }),
-  ],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Verify', Padding(EdgeInsets.all(20), code), {
+        size: Size(240, 70),
+      }),
+    ],
+  }),
+)
 ```
 
 A refused edit leaves the text as it was.
@@ -191,20 +203,32 @@ class NotesState < State {
       })
     })
 
-    return Padding(EdgeInsets.all(16), Column([
-      Expanded(TextArea({
-        controller: self.notes,
-        style: TextStyle({ size: 14 }),
-        autofocus: true,
-      })),
-      counter,
-    ], { spacing: 8, align_items: AlignItems.END }))
+    return Padding(
+      EdgeInsets.all(16),
+      Column(
+        [
+          Expanded(
+            TextArea({
+              controller: self.notes,
+              style: TextStyle({ size: 14 }),
+              autofocus: true,
+            }),
+          ),
+          counter,
+        ],
+        { spacing: 8, align_items: AlignItems.END },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Notes', Notes(), { size: Size(400, 300) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Notes', Notes(), { size: Size(400, 300) }),
+    ],
+  }),
+)
 ```
 
 A controller is an `Observable`, so an [`Observer`](builders.md#observer)
@@ -242,24 +266,34 @@ class FinderState < State {
     var needle = self.query.lower()
     var found = fruit.filter(@(name) => name.lower().contains(needle))
 
-    return Padding(EdgeInsets.all(16), Column([
-      SearchField({
-        text: self.query,
-        placeholder: 'Search fruit',
-        on_changed: @(text) {
-          self.set_state(@{
-            self.query = text
-          })
-        },
-      }),
-      Expanded(ListView(found.map(@(name) => Text(name)), { spacing: 4 })),
-    ], { spacing: 10, align_items: AlignItems.STRETCH }))
+    return Padding(
+      EdgeInsets.all(16),
+      Column(
+        [
+          SearchField({
+            text: self.query,
+            placeholder: 'Search fruit',
+            on_changed: @(text) {
+              self.set_state(@{
+                self.query = text
+              })
+            },
+          }),
+          Expanded(ListView(found.map(@(name) => Text(name)), { spacing: 4 })),
+        ],
+        { spacing: 10, align_items: AlignItems.STRETCH },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Fruit', Finder(), { size: Size(260, 240) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Fruit', Finder(), { size: Size(260, 240) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -295,23 +329,30 @@ class CalculatorState < State {
   }
 
   build(context) {
-    return Padding(EdgeInsets.all(20), ComboBox(self.recent, {
-      controller: self.input,
-      placeholder: 'Expression',
-      completes: true,
-      on_submitted: @(text) {
-        self.set_state(@{
-          self.recent = [text] + self.recent.filter(@(r) => r != text)
-        })
-        self.input.clear()
-      },
-    }))
+    return Padding(
+      EdgeInsets.all(20),
+      ComboBox(self.recent, {
+        controller: self.input,
+        placeholder: 'Expression',
+        completes: true,
+        on_submitted: @(text) {
+          self.set_state(@{
+            self.recent = [text] + self.recent.filter(@(r) => r != text)
+          })
+          self.input.clear()
+        },
+      }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Calculate', Calculator(), { size: Size(280, 70) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Calculate', Calculator(), { size: Size(280, 70) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |

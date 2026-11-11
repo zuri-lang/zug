@@ -72,11 +72,9 @@ class CounterState < State {
       EdgeInsets.all(20),
       Column(
         [
-          Text(
-            'Pressed ${self.count} times', {
-              style: Style.of(context).headline,
-            },
-          ),
+          Text('Pressed ${self.count} times', {
+            style: Style.of(context).headline,
+          }),
           Button('Press', {
             role: ButtonRole.PRIMARY,
             on_pressed: @{
@@ -86,10 +84,7 @@ class CounterState < State {
             },
           }),
         ],
-        {
-          spacing: 12,
-          align_items: AlignItems.START,
-        },
+        { spacing: 12, align_items: AlignItems.START },
       ),
     )
   }
@@ -98,9 +93,7 @@ class CounterState < State {
 run_app(
   App({
     title: 'Counter',
-    windows: [
-      Window('Counter', Counter()),
-    ],
+    windows: [Window('Counter', Counter())],
   }),
 )
 ```

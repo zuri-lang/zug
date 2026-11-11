@@ -30,27 +30,37 @@ class CounterState < State {
   var count = 0
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Column([
-      Text('Pressed ${self.count} times', {
-        style: Style.of(context).headline,
-      }),
-      Button('Press', {
-        role: ButtonRole.PRIMARY,
-        on_pressed: @{
-          self.set_state(@{
-            self.count++
-          })
-        },
-      }),
-    ], { spacing: 12, align_items: AlignItems.START }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Text('Pressed ${self.count} times', {
+            style: Style.of(context).headline,
+          }),
+          Button('Press', {
+            role: ButtonRole.PRIMARY,
+            on_pressed: @{
+              self.set_state(@{
+                self.count++
+              })
+            },
+          }),
+        ],
+        { spacing: 12, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
 def main() {
-  run_app(App({
-    title: 'Counter',
-    windows: [Window('Counter', Counter(), { size: Size(320, 160) })],
-  }))
+  run_app(
+    App({
+      title: 'Counter',
+      windows: [
+        Window('Counter', Counter(), { size: Size(320, 160) }),
+      ],
+    }),
+  )
 }
 ```
 

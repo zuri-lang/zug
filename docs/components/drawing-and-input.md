@@ -28,13 +28,15 @@ var chart = Canvas(@(painter, size) {
   painter.text('Sales by month', Point(0, 0), TextStyle({ size: 11 }))
 }, { repaint: sales, height: 160 })
 
-run_app(App({
-  windows: [
-    Window('Sales', Padding(EdgeInsets.all(16), chart), {
-      size: Size(360, 200),
-    }),
-  ],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sales', Padding(EdgeInsets.all(16), chart), {
+        size: Size(360, 200),
+      }),
+    ],
+  }),
+)
 ```
 
 Coordinates start at the canvas's top left, and y grows downwards. A
@@ -99,9 +101,13 @@ class SketchState < State {
   }
 }
 
-run_app(App({
-  windows: [Window('Sketch', Sketch(), { size: Size(400, 300) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sketch', Sketch(), { size: Size(400, 300) }),
+    ],
+  }),
+)
 ```
 
 Drag to draw, and double click to start again.
@@ -148,25 +154,38 @@ the menu bar uses.
 ```zuri
 import zug { * }
 
-var file = ContextMenu(Row([
-  Icon('doc.richtext'),
-  Text('Quarterly report.pdf'),
-], { spacing: 6, shrink_wrap: true }), [
-  MenuItem('Open', { on_selected: @{
-    echo 'open'
-  } }),
-  MenuItem('Rename…', { on_selected: @{
-    echo 'rename'
-  } }),
-  MenuItem.separator(),
-  MenuItem('Move to Trash', { on_selected: @{
-    echo 'trash'
-  } }),
-])
+var file = ContextMenu(
+  Row(
+    [Icon('doc.richtext'), Text('Quarterly report.pdf')],
+    { spacing: 6, shrink_wrap: true },
+  ),
+  [
+    MenuItem('Open', {
+      on_selected: @{
+        echo 'open'
+      },
+    }),
+    MenuItem('Rename…', {
+      on_selected: @{
+        echo 'rename'
+      },
+    }),
+    MenuItem.separator(),
+    MenuItem('Move to Trash', {
+      on_selected: @{
+        echo 'trash'
+      },
+    }),
+  ],
+)
 
-run_app(App({
-  windows: [Window('Files', Center(file), { size: Size(300, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Files', Center(file), { size: Size(300, 120) }),
+    ],
+  }),
+)
 ```
 
 A `PointerArea` that already handles the mouse can take the same list
@@ -212,9 +231,13 @@ class ViewerState < State {
   }
 }
 
-run_app(App({
-  windows: [Window('Reader', Viewer(), { size: Size(320, 140) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Reader', Viewer(), { size: Size(320, 140) }),
+    ],
+  }),
+)
 ```
 
 A binding is a key with any modifiers before it, joined with `+`, such
@@ -277,9 +300,13 @@ class KeypadState < State {
   }
 }
 
-run_app(App({
-  windows: [Window('Keypad', Keypad(), { size: Size(260, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Keypad', Keypad(), { size: Size(260, 120) }),
+    ],
+  }),
+)
 ```
 
 | `KeyEvent` field | Holds |

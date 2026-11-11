@@ -21,32 +21,47 @@ class VolumeState < State {
   var saved = 0.6
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Column([
-      Row([
-        Icon('speaker.fill'),
-        Expanded(Slider(self.level, {
-          accessibility_label: 'Volume',
-          on_changed: @(value) {
-            self.set_state(@{
-              self.level = value
-            })
-          },
-          on_change_end: @(value) {
-            self.set_state(@{
-              self.saved = value
-            })
-          },
-        })),
-        Icon('speaker.wave.3.fill'),
-      ], { spacing: 8 }),
-      Text('Saved at ${(self.saved * 100).round()}%'),
-    ], { spacing: 12 }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Row(
+            [
+              Icon('speaker.fill'),
+              Expanded(
+                Slider(self.level, {
+                  accessibility_label: 'Volume',
+                  on_changed: @(value) {
+                    self.set_state(@{
+                      self.level = value
+                    })
+                  },
+                  on_change_end: @(value) {
+                    self.set_state(@{
+                      self.saved = value
+                    })
+                  },
+                }),
+              ),
+              Icon('speaker.wave.3.fill'),
+            ],
+            { spacing: 8 },
+          ),
+          Text('Saved at ${(self.saved * 100).round()}%'),
+        ],
+        { spacing: 12 },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Sound', Volume(), { size: Size(320, 110) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sound', Volume(), { size: Size(320, 110) }),
+    ],
+  }),
+)
 ```
 
 `on_changed` is called again and again while the user drags, so keep it
@@ -88,28 +103,37 @@ class CopiesState < State {
   var copies = 1
 
   build(context) {
-    return Center(Row([
-      Text('Copies:'),
-      Text('${self.copies}', {
-        style: TextStyle({ monospaced_digits: true }),
-      }),
-      Stepper(self.copies, {
-        min: 1,
-        max: 99,
-        accessibility_label: 'Copies',
-        on_changed: @(value) {
-          self.set_state(@{
-            self.copies = value
-          })
-        },
-      }),
-    ], { spacing: 6, shrink_wrap: true }))
+    return Center(
+      Row(
+        [
+          Text('Copies:'),
+          Text('${self.copies}', {
+            style: TextStyle({ monospaced_digits: true }),
+          }),
+          Stepper(self.copies, {
+            min: 1,
+            max: 99,
+            accessibility_label: 'Copies',
+            on_changed: @(value) {
+              self.set_state(@{
+                self.copies = value
+              })
+            },
+          }),
+        ],
+        { spacing: 6, shrink_wrap: true },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Print', Copies(), { size: Size(220, 80) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Print', Copies(), { size: Size(220, 80) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -143,27 +167,40 @@ class BookingState < State {
   build(context) {
     var today = date(2026, 11, 11)
 
-    return Padding(EdgeInsets.all(20), Column([
-      Row([
-        Text('Arriving'),
-        DatePicker(self.arrival, {
-          min: today,
-          max: today.add_days(365),
-          on_changed: @(day) {
-            self.set_state(@{
-              self.arrival = day
-            })
-          },
-        }),
-      ], { spacing: 8 }),
-      Text(self.arrival.format('l, j F Y')),
-    ], { spacing: 12, align_items: AlignItems.START }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Row(
+            [
+              Text('Arriving'),
+              DatePicker(self.arrival, {
+                min: today,
+                max: today.add_days(365),
+                on_changed: @(day) {
+                  self.set_state(@{
+                    self.arrival = day
+                  })
+                },
+              }),
+            ],
+            { spacing: 8 },
+          ),
+          Text(self.arrival.format('l, j F Y')),
+        ],
+        { spacing: 12, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Booking', Booking(), { size: Size(300, 110) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Booking', Booking(), { size: Size(300, 110) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -194,30 +231,40 @@ class HighlighterState < State {
   var color = Color.hex('#ffd60a')
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Row([
-      Text('Highlight colour'),
-      ColorWell(self.color, {
-        on_changed: @(color) {
-          self.set_state(@{
-            self.color = color
-          })
-        },
-      }),
-      Box({
-        padding: EdgeInsets.symmetric({ horizontal: 6, vertical: 2 }),
-        color: self.color,
-        radius: 4,
-        child: Text('Sample', {
-          style: TextStyle({ color: Color.BLACK }),
-        }),
-      }),
-    ], { spacing: 10 }))
+    return Padding(
+      EdgeInsets.all(20),
+      Row(
+        [
+          Text('Highlight colour'),
+          ColorWell(self.color, {
+            on_changed: @(color) {
+              self.set_state(@{
+                self.color = color
+              })
+            },
+          }),
+          Box({
+            padding: EdgeInsets.symmetric({ horizontal: 6, vertical: 2 }),
+            color: self.color,
+            radius: 4,
+            child: Text('Sample', {
+              style: TextStyle({ color: Color.BLACK }),
+            }),
+          }),
+        ],
+        { spacing: 10 },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Colours', Highlighter(), { size: Size(320, 80) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Colours', Highlighter(), { size: Size(320, 80) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |

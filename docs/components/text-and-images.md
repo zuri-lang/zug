@@ -14,22 +14,32 @@ class ReleaseNotes < StatelessWidget {
   build(context) {
     var style = Style.of(context)
 
-    return Padding(EdgeInsets.all(20), Column([
-      Text('What’s new in 2.4', { style: style.headline }),
-      Text('Released on 11 November', {
-        style: TextStyle({ color: Color.system('secondary_label') }),
-      }),
-      Text(
-        'Large files open twice as fast, and printing on A5 paper is fixed.',
-        { max_lines: 2, overflow: TextOverflow.ELLIPSIS, selectable: true },
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Text('What’s new in 2.4', { style: style.headline }),
+          Text('Released on 11 November', {
+            style: TextStyle({ color: Color.system('secondary_label') }),
+          }),
+          Text(
+            'Large files open twice as fast, and printing on A5 paper is fixed.',
+            { max_lines: 2, overflow: TextOverflow.ELLIPSIS, selectable: true },
+          ),
+        ],
+        { spacing: 6, align_items: AlignItems.START },
       ),
-    ], { spacing: 6, align_items: AlignItems.START }))
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Release notes', ReleaseNotes(), { size: Size(360, 150) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Release notes', ReleaseNotes(), { size: Size(360, 150) }),
+    ],
+  }),
+)
 ```
 
 Text wraps at the width it's given, so in a window or a column it
@@ -89,34 +99,47 @@ class ViewerState < State {
       flip_horizontal: self.mirrored,
     })
 
-    var tools = Row([
-      Button('Turn Left', { on_pressed: @{
-        self.set_state(@{
-          self.rotation = (self.rotation + 270) % 360
-        })
-      } }),
-      Button('Turn Right', { on_pressed: @{
-        self.set_state(@{
-          self.rotation = (self.rotation + 90) % 360
-        })
-      } }),
-      Button('Mirror', { on_pressed: @{
-        self.set_state(@{
-          self.mirrored = !self.mirrored
-        })
-      } }),
-    ], { spacing: 8 })
+    var tools = Row(
+      [
+        Button('Turn Left', {
+          on_pressed: @{
+            self.set_state(@{
+              self.rotation = (self.rotation + 270) % 360
+            })
+          },
+        }),
+        Button('Turn Right', {
+          on_pressed: @{
+            self.set_state(@{
+              self.rotation = (self.rotation + 90) % 360
+            })
+          },
+        }),
+        Button('Mirror', {
+          on_pressed: @{
+            self.set_state(@{
+              self.mirrored = !self.mirrored
+            })
+          },
+        }),
+      ],
+      { spacing: 8 },
+    )
 
-    return Padding(EdgeInsets.all(16), Column([
-      Expanded(photo),
-      tools,
-    ], { spacing: 12 }))
+    return Padding(
+      EdgeInsets.all(16),
+      Column([Expanded(photo), tools], { spacing: 12 }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Photo', Viewer(), { size: Size(480, 400) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Photo', Viewer(), { size: Size(480, 400) }),
+    ],
+  }),
+)
 ```
 
 Without `width` or `height`, an image is the size of the picture
@@ -149,28 +172,42 @@ lists.
 ```zuri
 import zug { * }
 
-var folders = Column([
-  Row([
-    Icon('folder.fill', { color: Color.system('blue') }),
-    Text('Projects'),
-  ], { spacing: 6 }),
-  Row([
-    Icon('star.fill', { color: Color.system('yellow') }),
-    Text('Favourites'),
-  ], { spacing: 6 }),
-  Row([
-    Icon('trash', { color: Color.system('secondary_label') }),
-    Text('Trash'),
-  ], { spacing: 6 }),
-], { spacing: 8, align_items: AlignItems.START })
-
-run_app(App({
-  windows: [
-    Window('Places', Padding(EdgeInsets.all(16), folders), {
-      size: Size(220, 120),
-    }),
+var folders = Column(
+  [
+    Row(
+      [
+        Icon('folder.fill', { color: Color.system('blue') }),
+        Text('Projects'),
+      ],
+      { spacing: 6 },
+    ),
+    Row(
+      [
+        Icon('star.fill', { color: Color.system('yellow') }),
+        Text('Favourites'),
+      ],
+      { spacing: 6 },
+    ),
+    Row(
+      [
+        Icon('trash', { color: Color.system('secondary_label') }),
+        Text('Trash'),
+      ],
+      { spacing: 6 },
+    ),
   ],
-}))
+  { spacing: 8, align_items: AlignItems.START },
+)
+
+run_app(
+  App({
+    windows: [
+      Window('Places', Padding(EdgeInsets.all(16), folders), {
+        size: Size(220, 120),
+      }),
+    ],
+  }),
+)
 ```
 
 On macOS the names are SF Symbol names. Apple's SF Symbols app lists

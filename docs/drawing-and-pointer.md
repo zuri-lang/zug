@@ -37,24 +37,26 @@ var chart = Canvas(@(painter, size) {
     painter.fill_oval(Rect(x - 3, y - 3, 6, 6), Color.system('accent'))
   }
 
-  painter.stroke_path(path, Paint({
-    color: Color.system('accent'),
-    width: 2,
-    join: LineJoin.ROUND,
-  }))
-  painter.text('Sales', Point(12, 8), TextStyle({
-    size: 12,
-    weight: FontWeight.SEMIBOLD,
-  }))
+  painter.stroke_path(
+    path,
+    Paint({ color: Color.system('accent'), width: 2, join: LineJoin.ROUND }),
+  )
+  painter.text(
+    'Sales',
+    Point(12, 8),
+    TextStyle({ size: 12, weight: FontWeight.SEMIBOLD }),
+  )
 }, { repaint: values, height: 160 })
 
-run_app(App({
-  windows: [
-    Window('Sales', Padding(EdgeInsets.all(16), chart), {
-      size: Size(360, 200),
-    }),
-  ],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sales', Padding(EdgeInsets.all(16), chart), {
+        size: Size(360, 200),
+      }),
+    ],
+  }),
+)
 ```
 
 Coordinates start at the canvas's top left, and y grows downwards.
@@ -165,25 +167,29 @@ class SwatchesState < State {
     var selected = self.widget.selected
     var hovered = self.hovered
 
-    var canvas = Canvas(@(painter, size) {
-      iter var i = 0; i < COLORS.length(); i++ {
-        var spot = Rect(i * (SIZE + GAP), 0, SIZE, SIZE)
-        painter.fill_oval(spot, Color.hex(COLORS[i]))
+    var canvas = Canvas(
+      @(painter, size) {
+        iter var i = 0; i < COLORS.length(); i++ {
+          var spot = Rect(i * (SIZE + GAP), 0, SIZE, SIZE)
+          painter.fill_oval(spot, Color.hex(COLORS[i]))
 
-        if i == selected or i == hovered {
-          painter.stroke_oval(
-            Rect(spot.x - 3, spot.y - 3, SIZE + 6, SIZE + 6), Paint({
-              color: Color.system(i == selected ? 'label' : 'tertiary_label'),
-              width: 2,
-            }),
-          )
+          if i == selected or i == hovered {
+            painter.stroke_oval(
+              Rect(spot.x - 3, spot.y - 3, SIZE + 6, SIZE + 6),
+              Paint({
+                color: Color.system(i == selected ? 'label' : 'tertiary_label'),
+                width: 2,
+              }),
+            )
+          }
         }
-      }
-    }, {
-      repaint: [selected, hovered],
-      width: COLORS.length() * (SIZE + GAP),
-      height: SIZE,
-    })
+      },
+      {
+        repaint: [selected, hovered],
+        width: COLORS.length() * (SIZE + GAP),
+        height: SIZE,
+      },
+    )
 
     return PointerArea(canvas, {
       cursor: Cursor.POINTING_HAND,
@@ -218,17 +224,23 @@ class PickerState < State {
   var color = 4
 
   build(context) {
-    return Center(Swatches(self.color, @(index) {
-      self.set_state(@{
-        self.color = index
-      })
-    }))
+    return Center(
+      Swatches(self.color, @(index) {
+        self.set_state(@{
+          self.color = index
+        })
+      }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Label colour', Picker(), { size: Size(300, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Label colour', Picker(), { size: Size(300, 100) }),
+    ],
+  }),
+)
 ```
 
 A few things make it behave like a real control:

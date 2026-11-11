@@ -11,12 +11,14 @@ Every option of `App`, `Window` and `MenuItem` is listed in
 ```zuri
 import zug { * }
 
-run_app(App({
-  title: 'Notes',
-  windows: [
-    Window('Notes', Center(Text('No notes yet')), { size: Size(640, 420) }),
-  ],
-}))
+run_app(
+  App({
+    title: 'Notes',
+    windows: [
+      Window('Notes', Center(Text('No notes yet')), { size: Size(640, 420) }),
+    ],
+  }),
+)
 ```
 
 `run_app(app)` starts the application and returns when it quits.
@@ -52,22 +54,30 @@ class StudioState < State {
   }
 
   build(context) {
-    var main = Center(Button('Toggle the Inspector', { on_pressed: @{
-      self.toggle()
-    } }))
+    var main = Center(
+      Button('Toggle the Inspector', {
+        on_pressed: @{
+          self.toggle()
+        },
+      }),
+    )
 
-    var windows = [Window('Studio', main, { size: Size(480, 300) })]
+    var windows = [
+      Window('Studio', main, { size: Size(480, 300) }),
+    ]
 
     if self.inspector {
-      windows.append(Window('Inspector', Center(Text('Properties')), {
-        size: Size(220, 300),
-        floating: true,
-        on_closed: @{
-          self.set_state(@{
-            self.inspector = false
-          })
-        },
-      }))
+      windows.append(
+        Window('Inspector', Center(Text('Properties')), {
+          size: Size(220, 300),
+          floating: true,
+          on_closed: @{
+            self.set_state(@{
+              self.inspector = false
+            })
+          },
+        }),
+      )
     }
 
     return App({ title: 'Studio', windows })
@@ -109,34 +119,41 @@ your own:
 ```zuri
 import zug { * }
 
-var menus = MenuBar([
-  Menu('File', [
-    MenuItem('New', { shortcut: 'cmd+n', on_selected: @{} }),
-    MenuItem('Open…', { shortcut: 'cmd+o', on_selected: @{} }),
-    MenuItem.separator(),
-    MenuItem('Export', { items: [
-      MenuItem('PDF', { on_selected: @{} }),
-      MenuItem('Markdown', { on_selected: @{} }),
-    ] }),
-  ]),
-  Menu('View', [
-    MenuItem('Show Sidebar', {
-      shortcut: 'cmd+alt+s',
-      checked: true,
-      on_selected: @{},
-    }),
-  ]),
-], {
-  app_items: [
-    MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+var menus = MenuBar(
+  [
+    Menu('File', [
+      MenuItem('New', { shortcut: 'cmd+n', on_selected: @{} }),
+      MenuItem('Open…', { shortcut: 'cmd+o', on_selected: @{} }),
+      MenuItem.separator(),
+      MenuItem('Export', {
+        items: [
+          MenuItem('PDF', { on_selected: @{} }),
+          MenuItem('Markdown', { on_selected: @{} }),
+        ],
+      }),
+    ]),
+    Menu('View', [
+      MenuItem('Show Sidebar', {
+        shortcut: 'cmd+alt+s',
+        checked: true,
+        on_selected: @{},
+      }),
+    ]),
   ],
-})
+  {
+    app_items: [
+      MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+    ],
+  },
+)
 
-run_app(App({
-  title: 'Notes',
-  menu_bar: menus,
-  windows: [Window('Notes', Center(Text('Hello')))],
-}))
+run_app(
+  App({
+    title: 'Notes',
+    menu_bar: menus,
+    windows: [Window('Notes', Center(Text('Hello')))],
+  }),
+)
 ```
 
 Menus are rebuilt with the `App`, so an item's `checked` and `enabled`
@@ -191,30 +208,37 @@ one passes Escape on as usual.
 ```zuri
 import zug { * }
 
-var keypad = Shortcuts({
-  'escape': @{
-    echo 'clear'
+var keypad = Shortcuts(
+  {
+    'escape': @{
+      echo 'clear'
+    },
+    'cmd+backspace': @{
+      echo 'clear everything'
+    },
+    '+': @{
+      echo 'plus'
+    },
   },
-  'cmd+backspace': @{
-    echo 'clear everything'
-  },
-  '+': @{
-    echo 'plus'
-  },
-}, KeyListener(Center(Text('Type a digit')), {
-  on_key: @(event) {
-    if event.characters.is_number() {
-      echo 'digit ${event.characters}'
-      return true
-    }
+  KeyListener(Center(Text('Type a digit')), {
+    on_key: @(event) {
+      if event.characters.is_number() {
+        echo 'digit ${event.characters}'
+        return true
+      }
 
-    return false
-  },
-}))
+      return false
+    },
+  }),
+)
 
-run_app(App({
-  windows: [Window('Keypad', keypad, { size: Size(240, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Keypad', keypad, { size: Size(240, 120) }),
+    ],
+  }),
+)
 ```
 
 Keys typed into a text field never reach shortcuts. When you want a

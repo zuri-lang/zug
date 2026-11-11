@@ -46,49 +46,70 @@ import zug { * }
 
 var muted = TextStyle({ size: 11, color: Color.system('secondary_label') })
 
-var toolbar = Padding(EdgeInsets.all(8), Row([
-  Button('New Message', { on_pressed: @{} }),
-  Button('Reply', { on_pressed: @{} }),
-  Spacer(),
-  Box({ width: 180, child: SearchField({ placeholder: 'Search' }) }),
-], { spacing: 8 }))
+var toolbar = Padding(
+  EdgeInsets.all(8),
+  Row(
+    [
+      Button('New Message', { on_pressed: @{} }),
+      Button('Reply', { on_pressed: @{} }),
+      Spacer(),
+      Box({
+        width: 180,
+        child: SearchField({ placeholder: 'Search' }),
+      }),
+    ],
+    { spacing: 8 },
+  ),
+)
 
 var sidebar = Box({
   width: 160,
   color: Color.system('control_background'),
   padding: EdgeInsets.all(10),
-  child: Column([
-    Text('Inbox'),
-    Text('Drafts'),
-    Text('Sent'),
-  ], { spacing: 6, align_items: AlignItems.START }),
+  child: Column(
+    [Text('Inbox'), Text('Drafts'), Text('Sent')],
+    { spacing: 6, align_items: AlignItems.START },
+  ),
 })
 
-var messages = ListView.builder(50, @(context, index) => Padding(
-  EdgeInsets.symmetric({ horizontal: 10 }),
-  Row([
-    Text('Message ${index + 1}'), Spacer(), Text('09:41', { style: muted }),
-  ]),
-), { item_extent: 26 })
+var messages = ListView.builder(
+  50,
+  @(context, index) => Padding(
+    EdgeInsets.symmetric({ horizontal: 10 }),
+    Row([
+      Text('Message ${index + 1}'),
+      Spacer(),
+      Text('09:41', { style: muted }),
+    ]),
+  ),
+  { item_extent: 26 },
+)
 
 var status = Padding(
   EdgeInsets.symmetric({ horizontal: 10, vertical: 4 }),
   Text('50 messages', { style: muted }),
 )
 
-var window = Column([
-  toolbar,
-  Separator(),
-  Expanded(Row([sidebar, Expanded(messages)], {
-    align_items: AlignItems.STRETCH,
-  })),
-  Separator(),
-  status,
-], { align_items: AlignItems.STRETCH })
+var window = Column(
+  [
+    toolbar,
+    Separator(),
+    Expanded(
+      Row([sidebar, Expanded(messages)], { align_items: AlignItems.STRETCH }),
+    ),
+    Separator(),
+    status,
+  ],
+  { align_items: AlignItems.STRETCH },
+)
 
-run_app(App({
-  windows: [Window('Mail', window, { size: Size(640, 400) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Mail', window, { size: Size(640, 400) }),
+    ],
+  }),
+)
 ```
 
 Reading it from the outside in:

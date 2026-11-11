@@ -26,19 +26,23 @@ class NotesState < State {
   var dark = false
 
   build(context) {
-    var content = Center(Checkbox(self.dark, {
-      label: 'Dark appearance',
-      on_changed: @(on) {
-        self.set_state(@{
-          self.dark = on
-        })
-      },
-    }))
+    var content = Center(
+      Checkbox(self.dark, {
+        label: 'Dark appearance',
+        on_changed: @(on) {
+          self.set_state(@{
+            self.dark = on
+          })
+        },
+      }),
+    )
 
     return App({
       title: 'Notes',
       appearance: self.dark ? Appearance.DARK : Appearance.SYSTEM,
-      windows: [Window('Notes', content, { size: Size(360, 200) })],
+      windows: [
+        Window('Notes', content, { size: Size(360, 200) }),
+      ],
     })
   }
 }
@@ -82,29 +86,36 @@ class StudioState < State {
   var inspector = false
 
   build(context) {
-    var main = Center(Button('Show Inspector', { on_pressed: @{
-      self.set_state(@{
-        self.inspector = true
-      })
-    } }))
+    var main = Center(
+      Button('Show Inspector', {
+        on_pressed: @{
+          self.set_state(@{
+            self.inspector = true
+          })
+        },
+      }),
+    )
 
     var windows = [
-      Window(
-        'Studio', main, { size: Size(480, 300), min_size: Size(320, 200) },
-      ),
+      Window('Studio', main, {
+        size: Size(480, 300),
+        min_size: Size(320, 200),
+      }),
     ]
 
     if self.inspector {
-      windows.append(Window('Inspector', Center(Text('No selection')), {
-        size: Size(220, 300),
-        floating: true,
-        minimizable: false,
-        on_closed: @{
-          self.set_state(@{
-            self.inspector = false
-          })
-        },
-      }))
+      windows.append(
+        Window('Inspector', Center(Text('No selection')), {
+          size: Size(220, 300),
+          floating: true,
+          minimizable: false,
+          on_closed: @{
+            self.set_state(@{
+              self.inspector = false
+            })
+          },
+        }),
+      )
     }
 
     return App({ title: 'Studio', windows })
@@ -164,36 +175,44 @@ class EditorState < State {
   var saved = 0
 
   build(context) {
-    var menus = MenuBar([
-      Menu('File', [
-        MenuItem('New', { shortcut: 'cmd+n', on_selected: @{} }),
-        MenuItem('Save', { shortcut: 'cmd+s', on_selected: @{
-          self.set_state(@{
-            self.saved++
-          })
-        } }),
-        MenuItem.separator(),
-        MenuItem('Export', { items: [
-          MenuItem('PDF…', { on_selected: @{} }),
-          MenuItem('Markdown…', { on_selected: @{} }),
-        ] }),
-      ]),
-      Menu('View', [
-        MenuItem('Show Sidebar', {
-          shortcut: 'cmd+alt+s',
-          checked: self.sidebar,
-          on_selected: @{
-            self.set_state(@{
-              self.sidebar = !self.sidebar
-            })
-          },
-        }),
-      ]),
-    ], {
-      app_items: [
-        MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+    var menus = MenuBar(
+      [
+        Menu('File', [
+          MenuItem('New', { shortcut: 'cmd+n', on_selected: @{} }),
+          MenuItem('Save', {
+            shortcut: 'cmd+s',
+            on_selected: @{
+              self.set_state(@{
+                self.saved++
+              })
+            },
+          }),
+          MenuItem.separator(),
+          MenuItem('Export', {
+            items: [
+              MenuItem('PDF…', { on_selected: @{} }),
+              MenuItem('Markdown…', { on_selected: @{} }),
+            ],
+          }),
+        ]),
+        Menu('View', [
+          MenuItem('Show Sidebar', {
+            shortcut: 'cmd+alt+s',
+            checked: self.sidebar,
+            on_selected: @{
+              self.set_state(@{
+                self.sidebar = !self.sidebar
+              })
+            },
+          }),
+        ]),
       ],
-    })
+      {
+        app_items: [
+          MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+        ],
+      },
+    )
 
     var content = Center(Text('Saved ${self.saved} times'))
 

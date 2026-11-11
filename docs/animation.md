@@ -43,23 +43,32 @@ class StatusState < State {
       color: Color.system(self.online ? 'green' : 'gray'),
     })
 
-    return Center(Row([
-      light,
-      Switch(self.online, {
-        accessibility_label: 'Online',
-        on_changed: @(on) {
-          self.set_state(@{
-            self.online = on
-          })
-        },
-      }),
-    ], { spacing: 10, shrink_wrap: true }))
+    return Center(
+      Row(
+        [
+          light,
+          Switch(self.online, {
+            accessibility_label: 'Online',
+            on_changed: @(on) {
+              self.set_state(@{
+                self.online = on
+              })
+            },
+          }),
+        ],
+        { spacing: 10, shrink_wrap: true },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Status', Status(), { size: Size(200, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Status', Status(), { size: Size(200, 100) }),
+    ],
+  }),
+)
 ```
 
 A change that arrives in the middle of a move starts a new move from
@@ -96,17 +105,24 @@ class PulseState < State {
   }
 
   build(context) {
-    return Observer(self.beat, @(context) => Box({
-      width: 16,
-      height: 16,
-      radius: 8,
-      color: Color.system('green'),
-      opacity: self.glow.at(self.beat.value()),
-    }))
+    return Observer(
+      self.beat,
+      @(context) => Box({
+        width: 16,
+        height: 16,
+        radius: 8,
+        color: Color.system('green'),
+        opacity: self.glow.at(self.beat.value()),
+      }),
+    )
   }
 }
 
-run_app(App({ windows: [Window('Pulse', Center(Pulse()))] }))
+run_app(
+  App({
+    windows: [Window('Pulse', Center(Pulse()))],
+  }),
+)
 ```
 
 | Method | What it does |

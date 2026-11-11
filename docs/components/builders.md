@@ -20,13 +20,22 @@ var sheet = StyleSheet({
   headline: TextStyle({ size: 22, weight: FontWeight.BOLD }),
 })
 
-var page = Style(sheet, Center(Builder(@(context) => Text('Welcome back', {
-  style: Style.of(context).headline,
-}))))
+var page = Style(
+  sheet,
+  Center(
+    Builder(
+      @(context) => Text('Welcome back', { style: Style.of(context).headline }),
+    ),
+  ),
+)
 
-run_app(App({
-  windows: [Window('Welcome', page, { size: Size(300, 120) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Welcome', page, { size: Size(300, 120) }),
+    ],
+  }),
+)
 ```
 
 Called with the outer context, `Style.of()` would find the sheet above
@@ -44,19 +53,25 @@ import zug { * }
 
 var liked = false
 
-var heart = Center(StatefulBuilder(
-  @(context, set_state) => Button(liked ? '♥ Liked' : '♡ Like', {
-    on_pressed: @{
-      set_state(@{
-        liked = !liked
-      })
-    },
-  }),
-))
+var heart = Center(
+  StatefulBuilder(
+    @(context, set_state) => Button(liked ? '♥ Liked' : '♡ Like', {
+      on_pressed: @{
+        set_state(@{
+          liked = !liked
+        })
+      },
+    }),
+  ),
+)
 
-run_app(App({
-  windows: [Window('Post', heart, { size: Size(200, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Post', heart, { size: Size(200, 100) }),
+    ],
+  }),
+)
 ```
 
 Only the builder's own widgets rebuild. Once the state grows past a
@@ -77,20 +92,34 @@ import zug { * }
 
 var unread = ObservableValue(3)
 
-var toolbar = Padding(EdgeInsets.all(16), Row([
-  Observer(unread, @(context) => Text('${unread.value()} unread')),
-  Spacer(),
-  Button('Read One', { on_pressed: @{
-    unread.update(@(count) => (count - 1).max(0))
-  } }),
-  Button('New Mail', { on_pressed: @{
-    unread.update(@(count) => count + 1)
-  } }),
-], { spacing: 8 }))
+var toolbar = Padding(
+  EdgeInsets.all(16),
+  Row(
+    [
+      Observer(unread, @(context) => Text('${unread.value()} unread')),
+      Spacer(),
+      Button('Read One', {
+        on_pressed: @{
+          unread.update(@(count) => (count - 1).max(0))
+        },
+      }),
+      Button('New Mail', {
+        on_pressed: @{
+          unread.update(@(count) => count + 1)
+        },
+      }),
+    ],
+    { spacing: 8 },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Mail', toolbar, { size: Size(360, 70) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Mail', toolbar, { size: Size(360, 70) }),
+    ],
+  }),
+)
 ```
 
 `TextController`, `ScrollController` and `Animation` are observables
@@ -134,28 +163,35 @@ class WordCountState < State {
 
   init_state() {
     self.counting = run_in_background(
-      count_words, 'the quick brown fox ' * 5000,
+      count_words,
+      'the quick brown fox ' * 5000,
     )
   }
 
   build(context) {
-    return Center(PromiseBuilder(self.counting, @(context, snapshot) {
-      if snapshot.is_pending() {
-        return Spinner()
-      }
+    return Center(
+      PromiseBuilder(self.counting, @(context, snapshot) {
+        if snapshot.is_pending() {
+          return Spinner()
+        }
 
-      if snapshot.is_rejected() {
-        return Text('Could not count: ${snapshot.error.message}')
-      }
+        if snapshot.is_rejected() {
+          return Text('Could not count: ${snapshot.error.message}')
+        }
 
-      return Text('${snapshot.value} words')
-    }))
+        return Text('${snapshot.value} words')
+      }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Words', WordCount(), { size: Size(240, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Words', WordCount(), { size: Size(240, 100) }),
+    ],
+  }),
+)
 ```
 
 Start the work once, in `init_state()` or in an event handler, and keep
@@ -179,27 +215,34 @@ such as an inspector with smaller text:
 ```zuri
 import zug { * }
 
-var compact = StyleSheet({ text: TextStyle({ size: 11 }), spacing: 4 })
+var compact = StyleSheet({
+  text: TextStyle({ size: 11 }),
+  spacing: 4,
+})
 
 class Inspector < StatelessWidget {
   build(context) {
     var style = Style.of(context)
 
-    return Column([
-      Text('Width: 640'),
-      Text('Height: 480'),
-    ], { spacing: style.spacing, align_items: AlignItems.START })
+    return Column(
+      [Text('Width: 640'), Text('Height: 480')],
+      { spacing: style.spacing, align_items: AlignItems.START },
+    )
   }
 }
 
-var layout = Padding(EdgeInsets.all(16), Row([
-  Expanded(Center(Text('Canvas'))),
-  Style(compact, Inspector()),
-]))
+var layout = Padding(
+  EdgeInsets.all(16),
+  Row([Expanded(Center(Text('Canvas'))), Style(compact, Inspector())]),
+)
 
-run_app(App({
-  windows: [Window('Layout', layout, { size: Size(400, 160) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Layout', layout, { size: Size(400, 160) }),
+    ],
+  }),
+)
 ```
 
 `Style.of(context)` returns the nearest sheet above `context`, or the

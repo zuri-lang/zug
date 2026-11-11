@@ -29,35 +29,53 @@ class Message < StatelessWidget {
   build(context) {
     var muted = TextStyle({ color: Color.system('secondary_label') })
 
-    return Row([
-      Icon('person.crop.circle.fill', {
-        size: 28,
-        color: Color.system('gray'),
-      }),
-      Expanded(Column([
-        Text(self.sender, {
-          style: TextStyle({ weight: FontWeight.SEMIBOLD }),
+    return Row(
+      [
+        Icon('person.crop.circle.fill', {
+          size: 28,
+          color: Color.system('gray'),
         }),
-        Text(self.preview, {
-          style: muted,
-          max_lines: 1,
-          overflow: TextOverflow.ELLIPSIS,
-        }),
-      ], { spacing: 2, align_items: AlignItems.START })),
-      Text(self.time, { style: muted }),
-    ], { spacing: 10, align_items: AlignItems.START })
+        Expanded(
+          Column(
+            [
+              Text(self.sender, {
+                style: TextStyle({ weight: FontWeight.SEMIBOLD }),
+              }),
+              Text(self.preview, {
+                style: muted,
+                max_lines: 1,
+                overflow: TextOverflow.ELLIPSIS,
+              }),
+            ],
+            { spacing: 2, align_items: AlignItems.START },
+          ),
+        ),
+        Text(self.time, { style: muted }),
+      ],
+      { spacing: 10, align_items: AlignItems.START },
+    )
   }
 }
 
-var inbox = Padding(EdgeInsets.all(16), Column([
-  Message('Ada', 'The figures for the third quarter are in.', '09:41'),
-  Message('Charles', 'Can we move Thursday’s review to Friday?', '08:15'),
-  Message('Grace', 'Shipped. Thanks, everyone!', 'Yesterday'),
-], { spacing: 14, align_items: AlignItems.STRETCH }))
+var inbox = Padding(
+  EdgeInsets.all(16),
+  Column(
+    [
+      Message('Ada', 'The figures for the third quarter are in.', '09:41'),
+      Message('Charles', 'Can we move Thursday’s review to Friday?', '08:15'),
+      Message('Grace', 'Shipped. Thanks, everyone!', 'Yesterday'),
+    ],
+    { spacing: 14, align_items: AlignItems.STRETCH },
+  ),
+)
 
-run_app(App({
-  windows: [Window('Inbox', inbox, { size: Size(380, 200) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Inbox', inbox, { size: Size(380, 200) }),
+    ],
+  }),
+)
 ```
 
 The direction a row or column lays children out in is its main axis,
@@ -139,9 +157,13 @@ var editor = Row([
   Expanded(Center(Text('Document')), { flex: 3 }),
 ])
 
-run_app(App({
-  windows: [Window('Editor', editor, { size: Size(480, 240) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Editor', editor, { size: Size(480, 240) }),
+    ],
+  }),
+)
 ```
 
 The sidebar gets a quarter of the width and the document the other
@@ -152,11 +174,16 @@ but not stretch when there's plenty, such as a file name in a status
 bar:
 
 ```zuri,ignore
-Row([
-  Icon('doc'),
-  Flexible(Text(self.path, { max_lines: 1, overflow: TextOverflow.ELLIPSIS })),
-  Text('Saved'),
-], { spacing: 6 })
+Row(
+  [
+    Icon('doc'),
+    Flexible(
+      Text(self.path, { max_lines: 1, overflow: TextOverflow.ELLIPSIS }),
+    ),
+    Text('Saved'),
+  ],
+  { spacing: 6 },
+)
 ```
 
 An `Expanded` or `Flexible` must be a direct child of a `Row`, `Column`
@@ -175,17 +202,24 @@ it where one gap should differ from the row's `spacing`.
 ```zuri
 import zug { * }
 
-var footer = Padding(EdgeInsets.all(16), Row([
-  Button('Reset', { on_pressed: @{} }),
-  Spacer(),
-  Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{} }),
-  Gap(4),
-  Button('Apply', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
-]))
+var footer = Padding(
+  EdgeInsets.all(16),
+  Row([
+    Button('Reset', { on_pressed: @{} }),
+    Spacer(),
+    Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{} }),
+    Gap(4),
+    Button('Apply', { role: ButtonRole.PRIMARY, on_pressed: @{} }),
+  ]),
+)
 
-run_app(App({
-  windows: [Window('Settings', footer, { size: Size(400, 70) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Settings', footer, { size: Size(400, 70) }),
+    ],
+  }),
+)
 ```
 
 | Widget | Options |

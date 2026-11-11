@@ -24,27 +24,32 @@ class Badge < StatelessWidget {
   }
 
   build(context) {
-    return Row([
-      Text(self.label),
-      Box({
-        padding: EdgeInsets.symmetric({ horizontal: 6, vertical: 1 }),
-        color: Color.system('red'),
-        radius: 8,
-        child: Text('${self.count}', {
-          style: TextStyle({
-            size: 11,
-            weight: FontWeight.BOLD,
-            color: Color.WHITE,
+    return Row(
+      [
+        Text(self.label),
+        Box({
+          padding: EdgeInsets.symmetric({ horizontal: 6, vertical: 1 }),
+          color: Color.system('red'),
+          radius: 8,
+          child: Text('${self.count}', {
+            style: TextStyle({
+              size: 11,
+              weight: FontWeight.BOLD,
+              color: Color.WHITE,
+            }),
           }),
         }),
-      }),
-    ], { spacing: 6, shrink_wrap: true })
+      ],
+      { spacing: 6, shrink_wrap: true },
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Inbox', Center(Badge('Inbox', 3)))],
-}))
+run_app(
+  App({
+    windows: [Window('Inbox', Center(Badge('Inbox', 3)))],
+  }),
+)
 ```
 
 Widgets are cheap. Making a new `Badge` on every build is normal, and
@@ -88,9 +93,13 @@ class StopwatchState < State {
   }
 }
 
-run_app(App({
-  windows: [Window('Stopwatch', Stopwatch(), { size: Size(200, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Stopwatch', Stopwatch(), { size: Size(200, 100) }),
+    ],
+  }),
+)
 ```
 
 Change fields inside `set_state()`. zug then builds this widget again
@@ -188,14 +197,16 @@ class Distance < StatelessWidget {
 
   build(context) {
     return Units.of(context).metric
-      ? Text('${self.meters} m')
-      : Text('${(self.meters * 3.281).round()} ft')
+        ? Text('${self.meters} m')
+        : Text('${(self.meters * 3.281).round()} ft')
   }
 }
 
-run_app(App({
-  windows: [Window('Trail', Units(false, Center(Distance(1200))))],
-}))
+run_app(
+  App({
+    windows: [Window('Trail', Units(false, Center(Distance(1200))))],
+  }),
+)
 ```
 
 `Style` and `Appearance` are built this way, which is why
@@ -212,14 +223,26 @@ import zug { * }
 
 var theme = ObservableValue('Light')
 
-var content = Padding(EdgeInsets.all(16), Column([
-  Observer(theme, @(context) => Text('Theme: ${theme.value()}')),
-  Button('Switch', { on_pressed: @{
-    theme.update(@(name) => name == 'Light' ? 'Dark' : 'Light')
-  } }),
-], { spacing: 8 }))
+var content = Padding(
+  EdgeInsets.all(16),
+  Column(
+    [
+      Observer(theme, @(context) => Text('Theme: ${theme.value()}')),
+      Button('Switch', {
+        on_pressed: @{
+          theme.update(@(name) => name == 'Light' ? 'Dark' : 'Light')
+        },
+      }),
+    ],
+    { spacing: 8 },
+  ),
+)
 
-run_app(App({ windows: [Window('Theme', content)] }))
+run_app(
+  App({
+    windows: [Window('Theme', content)],
+  }),
+)
 ```
 
 `value()` reads it, `set(value)` replaces it, and `update(fn)` replaces

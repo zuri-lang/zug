@@ -42,19 +42,29 @@ class UploadState < State {
   build(context) {
     var done = self.sent >= 1
 
-    return Padding(EdgeInsets.all(20), Column([
-      Text(done ? 'Uploaded.' : 'Uploading photos…'),
-      ProgressBar({ value: self.sent }),
-      Text('${(self.sent * 100).round()}% sent', {
-        style: TextStyle({ color: Color.system('secondary_label') }),
-      }),
-    ], { spacing: 8, align_items: AlignItems.STRETCH }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Text(done ? 'Uploaded.' : 'Uploading photos…'),
+          ProgressBar({ value: self.sent }),
+          Text('${(self.sent * 100).round()}% sent', {
+            style: TextStyle({ color: Color.system('secondary_label') }),
+          }),
+        ],
+        { spacing: 8, align_items: AlignItems.STRETCH },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Upload', Upload(), { size: Size(320, 110) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Upload', Upload(), { size: Size(320, 110) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -76,14 +86,21 @@ such as loading a page of results.
 ```zuri
 import zug { * }
 
-var loading = Row([
-  Spinner({ size: ControlSize.SMALL }),
-  Text('Checking for updates…'),
-], { spacing: 8, shrink_wrap: true })
+var loading = Row(
+  [
+    Spinner({ size: ControlSize.SMALL }),
+    Text('Checking for updates…'),
+  ],
+  { spacing: 8, shrink_wrap: true },
+)
 
-run_app(App({
-  windows: [Window('Updates', Center(loading), { size: Size(260, 80) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Updates', Center(loading), { size: Size(260, 80) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -114,40 +131,50 @@ class AlbumState < State {
   var stars = 3
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Table([
-      [
-        Text('Storage'),
-        LevelIndicator(412, {
-          max: 512,
-          warning: 400,
-          critical: 480,
-          style: LevelStyle.CONTINUOUS,
-        }),
-      ],
-      [
-        Text('Rating'),
-        LevelIndicator(self.stars, {
-          style: LevelStyle.RATING,
-          accessibility_label: 'Rating',
-          on_changed: @(value) {
-            self.set_state(@{
-              self.stars = value
-            })
-          },
-        }),
-      ],
-    ], {
-      columns: [ColumnWidth.fit(), ColumnWidth.flex()],
-      column_spacing: 12,
-      row_spacing: 10,
-      align_items: AlignItems.CENTER,
-    }))
+    return Padding(
+      EdgeInsets.all(20),
+      Table(
+        [
+          [
+            Text('Storage'),
+            LevelIndicator(412, {
+              max: 512,
+              warning: 400,
+              critical: 480,
+              style: LevelStyle.CONTINUOUS,
+            }),
+          ],
+          [
+            Text('Rating'),
+            LevelIndicator(self.stars, {
+              style: LevelStyle.RATING,
+              accessibility_label: 'Rating',
+              on_changed: @(value) {
+                self.set_state(@{
+                  self.stars = value
+                })
+              },
+            }),
+          ],
+        ],
+        {
+          columns: [ColumnWidth.fit(), ColumnWidth.flex()],
+          column_spacing: 12,
+          row_spacing: 10,
+          align_items: AlignItems.CENTER,
+        },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Album', Album(), { size: Size(320, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Album', Album(), { size: Size(320, 100) }),
+    ],
+  }),
+)
 ```
 
 | Style | Draws |

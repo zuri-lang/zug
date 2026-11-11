@@ -21,40 +21,50 @@ class ExportState < State {
   var status = 'Ready to export.'
 
   build(context) {
-    var actions = Row([
-      Button('', {
-        variant: ButtonVariant.HELP,
-        accessibility_label: 'Help with exporting',
-        on_pressed: @{
-          open_url('https://example.com/help/export')
-        },
-      }),
-      Spacer(),
-      Button('Cancel', { role: ButtonRole.CANCEL, on_pressed: @{
-        self.set_state(@{
-          self.status = 'Cancelled.'
-        })
-      } }),
-      Button('Export', {
-        role: ButtonRole.PRIMARY,
-        on_pressed: @{
-          self.set_state(@{
-            self.status = 'Exported.'
-          })
-        },
-      }),
-    ], { spacing: 8 })
+    var actions = Row(
+      [
+        Button('', {
+          variant: ButtonVariant.HELP,
+          accessibility_label: 'Help with exporting',
+          on_pressed: @{
+            open_url('https://example.com/help/export')
+          },
+        }),
+        Spacer(),
+        Button('Cancel', {
+          role: ButtonRole.CANCEL,
+          on_pressed: @{
+            self.set_state(@{
+              self.status = 'Cancelled.'
+            })
+          },
+        }),
+        Button('Export', {
+          role: ButtonRole.PRIMARY,
+          on_pressed: @{
+            self.set_state(@{
+              self.status = 'Exported.'
+            })
+          },
+        }),
+      ],
+      { spacing: 8 },
+    )
 
-    return Padding(EdgeInsets.all(20), Column([
-      Expanded(Center(Text(self.status))),
-      actions,
-    ]))
+    return Padding(
+      EdgeInsets.all(20),
+      Column([Expanded(Center(Text(self.status))), actions]),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Export', Export(), { size: Size(380, 140) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Export', Export(), { size: Size(380, 140) }),
+    ],
+  }),
+)
 ```
 
 A button without `on_pressed` can't do anything, so it's shown disabled.
@@ -112,32 +122,41 @@ class FormattingState < State {
   var italic = false
 
   build(context) {
-    return Center(Row([
-      Button('Bold', {
-        variant: ButtonVariant.TOOLBAR,
-        selected: self.bold,
-        on_selected_changed: @(on) {
-          self.set_state(@{
-            self.bold = on
-          })
-        },
-      }),
-      Button('Italic', {
-        variant: ButtonVariant.TOOLBAR,
-        selected: self.italic,
-        on_selected_changed: @(on) {
-          self.set_state(@{
-            self.italic = on
-          })
-        },
-      }),
-    ], { spacing: 4, shrink_wrap: true }))
+    return Center(
+      Row(
+        [
+          Button('Bold', {
+            variant: ButtonVariant.TOOLBAR,
+            selected: self.bold,
+            on_selected_changed: @(on) {
+              self.set_state(@{
+                self.bold = on
+              })
+            },
+          }),
+          Button('Italic', {
+            variant: ButtonVariant.TOOLBAR,
+            selected: self.italic,
+            on_selected_changed: @(on) {
+              self.set_state(@{
+                self.italic = on
+              })
+            },
+          }),
+        ],
+        { spacing: 4, shrink_wrap: true },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Format', Formatting(), { size: Size(240, 100) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Format', Formatting(), { size: Size(240, 100) }),
+    ],
+  }),
+)
 ```
 
 For a group where only one can be chosen, such as text alignment, a

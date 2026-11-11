@@ -51,29 +51,35 @@ class DownloadsState < State {
 
     iter var i = 0; i < self.names.length(); i++ {
       var index = i
-      boxes.append(Padding(
-        EdgeInsets.only({ left: 20 }),
-        Checkbox(self.chosen[index], {
-          label: self.names[index],
-          on_changed: @(value) {
-            self.set_state(@{
-              self.chosen[index] = value
-            })
-          },
-        }),
-      ))
+      boxes.append(
+        Padding(
+          EdgeInsets.only({ left: 20 }),
+          Checkbox(self.chosen[index], {
+            label: self.names[index],
+            on_changed: @(value) {
+              self.set_state(@{
+                self.chosen[index] = value
+              })
+            },
+          }),
+        ),
+      )
     }
 
-    return Padding(EdgeInsets.all(16), Column(boxes, {
-      spacing: 6,
-      align_items: AlignItems.START,
-    }))
+    return Padding(
+      EdgeInsets.all(16),
+      Column(boxes, { spacing: 6, align_items: AlignItems.START }),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Sync', Downloads(), { size: Size(240, 140) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sync', Downloads(), { size: Size(240, 140) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -106,28 +112,40 @@ class SharingState < State {
   var sharing = false
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Row([
-      Expanded(Column([
-        Text('Screen Sharing'),
-        Text(self.sharing ? 'On' : 'Off', {
-          style: TextStyle({ color: Color.system('secondary_label') }),
+    return Padding(
+      EdgeInsets.all(20),
+      Row([
+        Expanded(
+          Column(
+            [
+              Text('Screen Sharing'),
+              Text(self.sharing ? 'On' : 'Off', {
+                style: TextStyle({ color: Color.system('secondary_label') }),
+              }),
+            ],
+            { spacing: 2, align_items: AlignItems.START },
+          ),
+        ),
+        Switch(self.sharing, {
+          accessibility_label: 'Screen Sharing',
+          on_changed: @(on) {
+            self.set_state(@{
+              self.sharing = on
+            })
+          },
         }),
-      ], { spacing: 2, align_items: AlignItems.START })),
-      Switch(self.sharing, {
-        accessibility_label: 'Screen Sharing',
-        on_changed: @(on) {
-          self.set_state(@{
-            self.sharing = on
-          })
-        },
-      }),
-    ]))
+      ]),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Sharing', Sharing(), { size: Size(320, 90) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Sharing', Sharing(), { size: Size(320, 90) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -159,24 +177,36 @@ class UnitsState < State {
   var unit = 'cm'
 
   build(context) {
-    return Padding(EdgeInsets.all(20), Column([
-      Text('Show measurements in'),
-      RadioGroup(
-        { mm: 'Millimetres', cm: 'Centimetres', pt: 'Points' }, self.unit, {
-          on_changed: @(unit) {
-            self.set_state(@{
-              self.unit = unit
-            })
-          },
-        },
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Text('Show measurements in'),
+          RadioGroup(
+            { mm: 'Millimetres', cm: 'Centimetres', pt: 'Points' },
+            self.unit,
+            {
+              on_changed: @(unit) {
+                self.set_state(@{
+                  self.unit = unit
+                })
+              },
+            },
+          ),
+        ],
+        { spacing: 8, align_items: AlignItems.START },
       ),
-    ], { spacing: 8, align_items: AlignItems.START }))
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Units', Units(), { size: Size(260, 140) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Units', Units(), { size: Size(260, 140) }),
+    ],
+  }),
+)
 ```
 
 | Option | Type | Default | Description |
@@ -222,25 +252,41 @@ class PagesState < State {
       })
     }
 
-    return Padding(EdgeInsets.all(20), Column([
-      Radio('all', self.which, { label: 'All pages', on_changed: choose }),
-      Row([
-        Radio('range', self.which, { label: 'Pages:', on_changed: choose }),
-        Box({
-          width: 80,
-          child: TextField({
-            controller: self.range,
-            enabled: self.which == 'range',
-          }),
-        }),
-      ], { spacing: 8 }),
-    ], { spacing: 8, align_items: AlignItems.START }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          Radio('all', self.which, { label: 'All pages', on_changed: choose }),
+          Row(
+            [
+              Radio('range', self.which, {
+                label: 'Pages:',
+                on_changed: choose,
+              }),
+              Box({
+                width: 80,
+                child: TextField({
+                  controller: self.range,
+                  enabled: self.which == 'range',
+                }),
+              }),
+            ],
+            { spacing: 8 },
+          ),
+        ],
+        { spacing: 8, align_items: AlignItems.START },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Print', Pages(), { size: Size(260, 110) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Print', Pages(), { size: Size(260, 110) }),
+    ],
+  }),
+)
 ```
 
 `Radio` takes `label`, `on_changed`, `enabled` and `size`, which work
@@ -270,22 +316,32 @@ class CalendarState < State {
   build(context) {
     var names = ['Day', 'Week', 'Month', 'Year']
 
-    return Padding(EdgeInsets.all(20), Column([
-      SegmentedControl(names, self.view, {
-        on_changed: @(index) {
-          self.set_state(@{
-            self.view = index
-          })
-        },
-      }),
-      Expanded(Center(Text('Showing a ${names[self.view].lower()}'))),
-    ], { spacing: 12 }))
+    return Padding(
+      EdgeInsets.all(20),
+      Column(
+        [
+          SegmentedControl(names, self.view, {
+            on_changed: @(index) {
+              self.set_state(@{
+                self.view = index
+              })
+            },
+          }),
+          Expanded(Center(Text('Showing a ${names[self.view].lower()}'))),
+        ],
+        { spacing: 12 },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Calendar', Calendar(), { size: Size(360, 160) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Calendar', Calendar(), { size: Size(360, 160) }),
+    ],
+  }),
+)
 ```
 
 `mode` decides what `selected` means:
@@ -300,16 +356,20 @@ A momentary control works like a row of buttons, such as the Back and
 Forward pair in a browser:
 
 ```zuri,ignore
-SegmentedControl(['‹', '›'], nil, {
-  mode: SegmentMode.MOMENTARY,
-  on_pressed: @(index) {
-    if index == 0 {
-      self.go_back()
-    } else {
-      self.go_forward()
-    }
+SegmentedControl(
+  ['‹', '›'],
+  nil,
+  {
+    mode: SegmentMode.MOMENTARY,
+    on_pressed: @(index) {
+      if index == 0 {
+        self.go_back()
+      } else {
+        self.go_forward()
+      }
+    },
   },
-})
+)
 ```
 
 | Option | Type | Default | Description |
@@ -351,22 +411,32 @@ class SortingState < State {
       DropdownItem('tags', 'Tags', { enabled: false }),
     ]
 
-    return Padding(EdgeInsets.all(20), Row([
-      Text('Sort by'),
-      Dropdown(orders, self.order, {
-        on_changed: @(order) {
-          self.set_state(@{
-            self.order = order
-          })
-        },
-      }),
-    ], { spacing: 8 }))
+    return Padding(
+      EdgeInsets.all(20),
+      Row(
+        [
+          Text('Sort by'),
+          Dropdown(orders, self.order, {
+            on_changed: @(order) {
+              self.set_state(@{
+                self.order = order
+              })
+            },
+          }),
+        ],
+        { spacing: 8 },
+      ),
+    )
   }
 }
 
-run_app(App({
-  windows: [Window('Files', Sorting(), { size: Size(280, 80) })],
-}))
+run_app(
+  App({
+    windows: [
+      Window('Files', Sorting(), { size: Size(280, 80) }),
+    ],
+  }),
+)
 ```
 
 `on_changed` gets the item's value, not its label or its position, so
