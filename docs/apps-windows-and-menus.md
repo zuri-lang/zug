@@ -2,7 +2,9 @@
 
 An application is a widget too. `App` holds its windows and its menu
 bar, and you change either by building it differently, the same way you
-change anything else.
+change anything else. This page explains how that works in practice.
+Every option of `App`, `Window` and `MenuItem` is listed in
+[The application](components/app-and-windows.md).
 
 ## The application
 
@@ -11,31 +13,25 @@ import zug { * }
 
 run_app(App({
   title: 'Notes',
-  windows: [Window('Notes', Center(Text('No notes yet')), { size: Size(640, 420) })],
+  windows: [
+    Window('Notes', Center(Text('No notes yet')), { size: Size(640, 420) }),
+  ],
 }))
 ```
 
-`run_app(app)` starts the application and returns when it quits. The
-`App` takes:
+`run_app(app)` starts the application and returns when it quits.
+`quit_app()` quits from code, asking the `App`'s `on_quit_request`
+first, and `current_runtime()` returns the running application's
+runtime, or `nil` when none is running.
 
-| Option | What it does |
-| --- | --- |
-| `windows` | The windows that are open (required). |
-| `title` | The application's name, shown in its menu. |
-| `menu_bar` | Its menus; see below. |
-| `style` | A `StyleSheet` for everything in it; see [Styling](styling.md). |
-| `appearance` | `Appearance.LIGHT` or `DARK` to show the application that way whatever the system does, or `SYSTEM` (the default) to follow it; see [Styling](styling.md#light-and-dark). |
-| `quit_on_last_window_closed` | Whether closing the last window quits (true). |
-| `on_quit_request` | Asked before quitting; return `false` to keep running, say to ask about unsaved changes first. |
-| `on_reopen` | Called when the dock icon is clicked with no windows open. |
+When the `App` is built by a `StatefulWidget`, every option of it can
+come from state: which windows are open, what the menus say, and
+whether it shows itself light or dark.
 
-`quit_app()` quits from code, asking `on_quit_request` first, and
-`current_runtime()` returns the running application's runtime, or `nil`.
-
-## Windows
+## Opening and closing windows
 
 The windows listed in the `App` are the windows that are open. To open
-one, add it to the list and rebuild; to close one, take it out:
+one, add it to the list and rebuild. To close one, take it out:
 
 ```zuri
 import zug { * }
@@ -49,12 +45,18 @@ class Studio < StatefulWidget {
 class StudioState < State {
   var inspector = false
 
+  toggle() {
+    self.set_state(@{
+      self.inspector = !self.inspector
+    })
+  }
+
   build(context) {
-    var windows = [Window('Studio', Center(Button('Toggle the inspector', { on_pressed: @{
-      self.set_state(@{
-        self.inspector = !self.inspector
-      })
-    } })), { size: Size(480, 300) })]
+    var main = Center(Button('Toggle the Inspector', { on_pressed: @{
+      self.toggle()
+    } }))
+
+    var windows = [Window('Studio', main, { size: Size(480, 300) })]
 
     if self.inspector {
       windows.append(Window('Inspector', Center(Text('Properties')), {
@@ -75,41 +77,34 @@ class StudioState < State {
 run_app(Studio())
 ```
 
-When the user closes a window, `on_close_request` is asked first (return
-`false` to keep it open), then `on_closed` is called. Take the window out
-of your list there. A closed window left in the list stays closed, but
-its widgets and their state stay alive for nothing.
+When the user closes a window, its `on_close_request` is asked first,
+and returning `false` keeps it open. That's the place to ask about
+unsaved changes. Then `on_closed` is called, and you should take the
+window out of your list there. A closed window left in the list stays
+closed, but its widgets and their state stay alive for nothing.
 
-`Window(title, content, options)` takes:
+Closing the last window quits the application, unless the `App` has
+`quit_on_last_window_closed: false`.
 
-| Option | What it does |
-| --- | --- |
-| `size` | The content area's size, 480 by 320 when left out. |
-| `min_size`, `max_size` | Limits for resizing. |
-| `size_to_content` | Size the window to its content instead. |
-| `resizable`, `closable`, `minimizable` | Each true when left out. |
-| `title_bar` | `TitleBar.NORMAL`, `TRANSPARENT` with content reaching under it, or `HIDDEN`. |
-| `background` | A `Color` for the window behind its content. |
-| `position` | Where its top left goes on the screen; centred when left out. |
-| `floating` | Keep it above the application's other windows. |
-| `visible` | Set false to keep the window and its state but hide it. |
-| `on_resize` | Called with the new content `Size`. |
-| `on_focus_changed` | Called with whether it became the key window. |
+## A window or a dialog
 
 A second window suits anything the user keeps open beside their work,
-such as an inspector, a settings window or a find panel. It doesn't
-suit a question that needs an answer before they carry on: a window
-doesn't stop the user going back to the main one, and it can't hand you
-an answer. For that, use `show_dialog()`, which shows your widgets as a
-sheet on the window and gives you a promise of the result. See
-[dialogs](services.md#dialogs).
+such as an inspector, a settings window or a find panel.
+
+It doesn't suit a question that needs an answer before the user carries
+on. A window doesn't stop them going back to the main one, and it can't
+hand you an answer. For that, use
+[`show_dialog()`](services.md#dialogs-of-your-own), which shows your
+widgets as a sheet on the window and gives you a promise of the result.
+For a simple question with a few buttons,
+[`show_alert()`](services.md#dialogs) is quicker still.
 
 ## Menus
 
 On macOS the menu bar belongs to the application. Give the `App` a
-`MenuBar`, and zug adds the standard application menu (About, Hide,
-Quit and the rest), and Edit and Window menus if you don't make your
-own:
+`MenuBar`, and zug adds the standard application menu, with About,
+Hide, Quit and the rest, and Edit and Window menus if you don't make
+your own:
 
 ```zuri
 import zug { * }
@@ -125,55 +120,71 @@ var menus = MenuBar([
     ] }),
   ]),
   Menu('View', [
-    MenuItem('Show Sidebar', { shortcut: 'cmd+shift+s', checked: true, on_selected: @{} }),
+    MenuItem('Show Sidebar', {
+      shortcut: 'cmd+alt+s',
+      checked: true,
+      on_selected: @{},
+    }),
   ]),
 ], {
-  app_items: [MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} })],
+  app_items: [
+    MenuItem('Settings…', { shortcut: 'cmd+,', on_selected: @{} }),
+  ],
 })
 
-run_app(App({ title: 'Notes', menu_bar: menus, windows: [Window('Notes', Text('Hello'))] }))
+run_app(App({
+  title: 'Notes',
+  menu_bar: menus,
+  windows: [Window('Notes', Center(Text('Hello')))],
+}))
 ```
 
-A `MenuItem(label, options)` takes `on_selected`, a `shortcut`,
-`enabled`, `checked` for a tick mark, `items` for a submenu, or a `role`.
-`app_items` go into the application menu, where Settings belongs.
+Menus are rebuilt with the `App`, so an item's `checked` and `enabled`
+can come straight from your state. `app_items` go in the application
+menu, which is where Settings belongs on a Mac.
 
-A `role` makes an item do one of the system's standard actions, the way
-it would in any Mac application: `about`, `hide`, `hide_others`,
-`show_all`, `quit`, `undo`, `redo`, `cut`, `copy`, `paste`, `delete`,
-`select_all`, `minimize`, `zoom`, `close`, `fullscreen` and
-`bring_all_to_front`. Copy then copies from whatever text field has
-focus, with no code of yours.
+An item with a `role` does one of the system's standard actions, the
+way it would in any Mac application. A Copy item with `role: 'copy'`
+copies from whatever text field has focus, with no code of yours. The
+[component reference](components/app-and-windows.md#standard-roles)
+lists the roles.
 
-Menus are rebuilt with the `App`, so an item's `checked` or `enabled`
-can come straight from your state.
-
-When you want an item to use the standard action if there is one, and do
+When you want an item to do the standard action if there is one, and
 something of your own otherwise, call `perform_role()`. It returns
 whether anything carried the action out:
 
 ```zuri,ignore
-MenuItem('Copy', { shortcut: 'cmd+c', on_selected: @{
-  if !perform_role('copy') {
-    Clipboard.write_text(self.result)
-  }
-} })
+MenuItem('Copy', {
+  shortcut: 'cmd+c',
+  on_selected: @{
+    if !perform_role('copy') {
+      Clipboard.write_text(self.result)
+    }
+  },
+})
 ```
+
+A calculator does this: Copy copies the selected text when a field has
+some, and the result on the display when nothing does.
 
 ## The keyboard
 
-The focused control gets keys first: a text field takes what's typed
-into it, a button takes Space. Keys it doesn't use go to the
-`Shortcuts` and `KeyListener` widgets in the window, the deepest first,
-until one handles the key. Text the user can select but not edit, such
-as a `Text` with `selectable: true`, keeps only the keys that move its
-selection or the focus: the arrows, `home`, `end`, `page_up`,
-`page_down`, `tab`, and anything with `cmd` or `ctrl`. A digit or Return
-typed while it's selected still reaches your shortcuts.
+Keys go to the focused control first. A text field takes what's typed
+into it, and a button takes Space. Keys the control doesn't use go to
+the [`Shortcuts`](components/drawing-and-input.md#shortcuts) and
+[`KeyListener`](components/drawing-and-input.md#keylistener) widgets
+around it in the window, the nearest first, until one of them handles
+the key.
+
+Text the user can select but not edit, such as a `Text` with
+`selectable: true`, keeps only the keys that move its selection or the
+focus: the arrows, `home`, `end`, `page_up`, `page_down`, `tab`, and
+anything with `cmd` or `ctrl`. A digit or Return typed while it's
+selected still reaches your shortcuts.
 
 Escape goes to the focused widget first. Every widget that can take
 keyboard focus takes `on_escape`, from buttons and checkboxes to tables
-and text fields, and while one has focus its `on_escape` gets Escape
+and text fields, and while one has focus, its `on_escape` gets Escape
 before your shortcuts or a Cancel button do. A focused widget without
 one passes Escape on as usual.
 
@@ -181,10 +192,16 @@ one passes Escape on as usual.
 import zug { * }
 
 var keypad = Shortcuts({
-  'escape': @{ echo 'clear' },
-  'cmd+backspace': @{ echo 'clear everything' },
-  '+': @{ echo 'plus' },
-}, KeyListener(Text('Type a digit'), {
+  'escape': @{
+    echo 'clear'
+  },
+  'cmd+backspace': @{
+    echo 'clear everything'
+  },
+  '+': @{
+    echo 'plus'
+  },
+}, KeyListener(Center(Text('Type a digit')), {
   on_key: @(event) {
     if event.characters.is_number() {
       echo 'digit ${event.characters}'
@@ -194,26 +211,18 @@ var keypad = Shortcuts({
     return false
   },
 }))
+
+run_app(App({
+  windows: [Window('Keypad', keypad, { size: Size(240, 120) })],
+}))
 ```
 
-`Shortcuts(bindings, child)` maps bindings to functions. A binding is a
-key with any modifiers, such as `cmd+shift+k`, `alt+left` or `f5`. A
-single character with no modifiers, such as `+`, matches however the
-keyboard types it, so you don't have to know that plus is shift and
-equals on one layout and something else on another. The named keys are
-`enter`, `escape`, `backspace`, `delete`, `tab`, `space`, the arrows
-`left`, `right`, `up` and `down`, `home`, `end`, `page_up`, `page_down`,
-and `f1` to `f12`, and the modifiers are `cmd`, `shift`, `alt` and
-`ctrl`.
-
-`KeyListener(child, { on_key })` sees every key that reaches it. Its
-function gets a `KeyEvent` with `key` (a named key, or the character
-without modifiers), `characters` (what the key typed), `modifiers`,
-`repeat` and `matches(binding)`, and returns `true` for a key it used.
-
 Keys typed into a text field never reach shortcuts. When you want a
-window's keys to go to its shortcuts, such as after the user presses
-Return in a field, call `clear_focus(context)` with the context of a
-widget inside that window. The context of a widget above the windows,
-such as the one that builds your `App`, has no window, so it raises a
-`ValueError`.
+window's keys to go to its shortcuts again, such as after the user
+presses Return in a field, call `clear_focus(context)` with the context
+of a widget inside that window. The context of a widget above the
+windows, such as the one that builds your `App`, belongs to no window,
+so passing it raises a `ValueError`.
+
+[Shortcuts](components/drawing-and-input.md#shortcuts) explains how to
+write a key binding, such as `cmd+shift+k`, and which keys have names.

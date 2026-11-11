@@ -13,7 +13,10 @@ print_pages(context, {
   title: 'Invoice 1024',
   pages: 1,
   paint: @(painter, page) {
-    painter.text('Invoice 1024', Point(0, 0), TextStyle({ size: 24, weight: FontWeight.BOLD }))
+    painter.text(
+      'Invoice 1024', Point(0, 0),
+      TextStyle({ size: 24, weight: FontWeight.BOLD }),
+    )
     painter.text('Due by 30 November.', Point(0, 40), TextStyle({ size: 12 }))
   },
 }).then(@(printed) {

@@ -23,7 +23,7 @@ methods, accessibility, dark mode and behaviour that come with them.
     <td width="50%" align="center">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/images/controls-light.png">
-        <img alt="Checkboxes, radio buttons, a segmented control, a slider, a stepper, a pop-up menu, text fields, a date picker and a progress bar" src="docs/images/controls-dark.png">
+        <img alt="Checkboxes, radio buttons, a segmented control, a slider, a stepper, a dropdown, text fields, a date picker and a progress bar" src="docs/images/controls-dark.png">
       </picture>
       <br><sub>Controls, from <a href="examples/controls.zu">examples/controls.zu</a></sub>
     </td>
@@ -123,9 +123,9 @@ $ zuri install --git https://github.com/zuri-lang/zug.git
 
 The [documentation](docs/index.md) covers every part of zug an
 application uses. [Getting started](docs/getting-started.md) is the
-place to begin; after that, the pages most people reach for are
-[Layout](docs/layout.md), [Controls](docs/controls.md),
-[Widgets and state](docs/widgets-and-state.md) and
+place to begin. After that, most people reach for
+[Layout](docs/layout.md), [Widgets and state](docs/widgets-and-state.md),
+the [component reference](docs/components/index.md) and
 [Testing](docs/testing.md).
 
 ## Examples
@@ -167,7 +167,7 @@ application's tests should also use `zug.testing` the same way. See
 
 ## Other platforms
 
-Everything platform-specific is a backend, so bringing zug to Linux,
+Everything that depends on the platform lives in a backend, so bringing zug to Linux,
 Windows or anywhere else means writing a backend and nothing more.
 [Writing a backend](docs/backends.md) describes the contract, and
 `tools/check_backend.zu` checks a new backend against it.

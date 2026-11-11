@@ -93,12 +93,15 @@ The common events are:
 
 | View | Event and payload |
 | --- | --- |
-| Checkbox, switch, slider, stepper, date picker, colour well, level | `changed` with `{ value }` |
+| Checkbox, switch, slider, stepper, colour well, level indicator | `changed` with `{ value }` |
+| Date picker | `changed` with `{ value }`, in seconds since 1970 |
 | Radio | `changed` with `{ selected: true }` |
-| Dropdown, segmented control, tabs | `changed` with `{ selected }`, an index |
-| Text field, text area, search field, combo box | `changed` with `{ text }`; `submitted` |
+| Dropdown, tabs | `changed` with `{ selected }`, an index |
+| Segmented control | `changed` with `{ selected }`, a list of indices, and `pressed` with `{ index }` when it's momentary |
+| Text field, text area, search field | `changed` with `{ text }`, and `submitted` |
+| Combo box | the same, and `selected` with `{ index, text }` when a suggestion is picked |
 | Anything that takes focus | `escape` |
-| Data table | `changed` with `{ selected }`, a list of rows; `activated` with `{ row }`; `sorted` with `{ column, ascending }` |
+| Data table | `changed` with `{ selected }`, a list of rows, `activated` with `{ row }`, and `sorted` with `{ column, ascending }` |
 | Scroll view | `scrolled` with `{ x, y }` |
 | Pointer area | `tap`, `drag` and the rest, with `{ x, y }`, and `dx`, `dy`, `clicks` and `modifiers` where they matter |
 
@@ -111,7 +114,7 @@ Windows and the system can be acted on too:
 - `window().press_key('cmd+k')` presses a key in the first window, and
   `press_key('shift+8', '*')` gives the characters it types. It returns
   whether anything handled the key. Escape goes first to the focused
-  view's `on_escape`, as on a real display; `view.focus()` focuses a view.
+  view's `on_escape`, as on a real display. `view.focus()` focuses a view.
 - `window().resize(Size(400, 300))` resizes it, and `click_close()`
   clicks its close button.
 - `choose_menu('File', 'New')` chooses a menu item.
@@ -135,7 +138,7 @@ expect(t.find_text('Saved')).to_be_empty()
 
 ## Dialogs and the clipboard
 
-Dialogs don't open headless; they wait in `backend.dialogs` for the test
+Dialogs don't open headless. They wait in `backend.dialogs` for the test
 to answer them. `backend.answer_dialog(answer)` answers the oldest, with
 what the real dialog would give: `{ button: 1, suppressed: false }` for
 an alert, a list of paths or `nil` for an open panel, a path or `nil`

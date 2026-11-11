@@ -2,7 +2,13 @@
 
 zug lays your widgets out itself, the same way on every platform, and
 then puts each native view exactly where it decided. This page explains
-the one rule behind it and then goes through the layout widgets.
+the one rule behind it, walks through building a typical window, and
+covers what to do when a layout doesn't come out the way you expected.
+
+The widgets themselves are described in the component reference, under
+[Rows and columns](components/rows-and-columns.md),
+[Boxes, spacing and sizing](components/boxes.md) and
+[Stacks, grids and tables](components/stacks-grids-and-tables.md).
 
 ## The rule
 
@@ -10,217 +16,144 @@ the one rule behind it and then goes through the layout widgets.
 child goes.**
 
 A parent tells each child how small and how large it may be: a minimum
-and maximum width and height. The child picks a size within those
+and a maximum width and height. The child picks a size within those
 limits, and the parent then positions it. That's the whole system, and
 nearly every layout puzzle is answered by asking what a widget was
 allowed to be.
 
-A few consequences are worth knowing up front:
+A few things follow from it:
 
 - A window gives its content exactly the window's size. That's why a
-  `Column` placed directly in a window fills it.
+  `Column` placed straight in a window fills it.
 - A widget can't be bigger than its parent allows. A `Box` with
-  `width: 400` inside a 300-point window is 300 points wide.
+  `width: 400` inside a window 300 points wide is 300 points wide.
 - A scroll view lets its content be as long as it likes, so content
-  inside one that wants to "fill the space" has nothing to fill. That's
+  inside one that wants to fill the space has nothing to fill. That's
   the cause of the most common layout error, covered below.
+- `Center` and `Align` let their child be any size up to their own,
+  while `Expanded` and `AlignItems.STRETCH` make a child a particular
+  size. When a widget won't grow or shrink, one of these is usually
+  the reason.
 
-## Rows and columns
+## Building a window
 
-`Row` lays children out left to right, `Column` top to bottom. Both take
-the same options:
+Most windows are a column of rows. Here's a mail client's main window,
+with a toolbar at the top, a sidebar and a message list in the middle,
+and a status line at the bottom:
 
 ```zuri
 import zug { * }
 
-var toolbar = Row([
-  Button('Back', { on_pressed: @{} }),
-  Button('Forward', { on_pressed: @{} }),
+var muted = TextStyle({ size: 11, color: Color.system('secondary_label') })
+
+var toolbar = Padding(EdgeInsets.all(8), Row([
+  Button('New Message', { on_pressed: @{} }),
+  Button('Reply', { on_pressed: @{} }),
   Spacer(),
-  SearchField({ placeholder: 'Search' }),
-], { spacing: 8 })
-```
+  Box({ width: 180, child: SearchField({ placeholder: 'Search' }) }),
+], { spacing: 8 }))
 
-| Option | What it does |
-| --- | --- |
-| `spacing` | Points between neighbouring children. |
-| `justify` | How children spread along the axis when there's room left over: `Justify.START` (the default), `END`, `CENTER`, `SPACE_BETWEEN`, `SPACE_AROUND` or `SPACE_EVENLY`. |
-| `align_items` | Where children sit across the axis: `AlignItems.CENTER` (the default), `START`, `END`, `STRETCH` to make them all as tall as the row (or as wide as the column), or `BASELINE` to line up the first line of text in a row. |
-| `shrink_wrap` | Take only the space the children need along the axis, rather than all of it. |
-
-`Flex(children, { axis: Axis.VERTICAL })` is the same widget with the
-direction as an option, for when it's chosen at run time.
-
-### Sharing the spare space
-
-Children of a row or column are their natural size unless you say
-otherwise. To make one take the space left over, wrap it:
-
-- `Expanded(child)` takes a share of the spare space and fills it.
-  `Expanded(child, { flex: 2 })` takes twice the share of a plain one.
-- `Flexible(child)` may take its share, but can stay smaller if it
-  doesn't need it.
-- `Spacer()` is empty space that takes a share, which is how you push
-  things to opposite ends.
-- `Gap(12)` is a fixed amount of empty space.
-
-```zuri
-import zug { * }
-
-var form_row = Row([
-  Text('Name'),
-  Expanded(TextField({ placeholder: 'Ada Lovelace' })),
-], { spacing: 8, align_items: AlignItems.BASELINE })
-```
-
-## Spacing, alignment and boxes
-
-- `Padding(EdgeInsets.all(16), child)` puts space around a child.
-  `EdgeInsets.symmetric({ horizontal: 12, vertical: 4 })` and
-  `EdgeInsets.only({ top: 8 })` give different sides different insets.
-- `Align(child, { alignment: Alignment.BOTTOM_RIGHT })` places a smaller
-  child within the space it's given. `Center(child)` is the common case.
-  There are nine named alignments, from `TOP_LEFT` to `BOTTOM_RIGHT`, and
-  `Alignment(x, y)` takes any point from -1 to 1 on each axis.
-- `Box` does sizes and decoration in one widget:
-
-```zuri
-import zug { * }
-
-var card = Box({
-  width: 240,
-  padding: EdgeInsets.all(12),
-  margin: EdgeInsets.symmetric({ vertical: 6 }),
+var sidebar = Box({
+  width: 160,
   color: Color.system('control_background'),
-  border: Border.all(1, Color.system('separator')),
-  radius: 8,
-  shadow: Shadow({ blur: 6, y: 2 }),
-  child: Text('A card'),
+  padding: EdgeInsets.all(10),
+  child: Column([
+    Text('Inbox'),
+    Text('Drafts'),
+    Text('Sent'),
+  ], { spacing: 6, align_items: AlignItems.START }),
 })
+
+var messages = ListView.builder(50, @(context, index) => Padding(
+  EdgeInsets.symmetric({ horizontal: 10 }),
+  Row([
+    Text('Message ${index + 1}'), Spacer(), Text('09:41', { style: muted }),
+  ]),
+), { item_extent: 26 })
+
+var status = Padding(
+  EdgeInsets.symmetric({ horizontal: 10, vertical: 4 }),
+  Text('50 messages', { style: muted }),
+)
+
+var window = Column([
+  toolbar,
+  Separator(),
+  Expanded(Row([sidebar, Expanded(messages)], {
+    align_items: AlignItems.STRETCH,
+  })),
+  Separator(),
+  status,
+], { align_items: AlignItems.STRETCH })
+
+run_app(App({
+  windows: [Window('Mail', window, { size: Size(640, 400) })],
+}))
 ```
 
-`Box` takes `width` and `height`, `min_width`, `max_width`, `min_height`
-and `max_height`, `width_factor` and `height_factor` (a fraction of the
-space it's given), `padding`, `margin`, `alignment` for its child, and
-the decoration options `color`, `border`, `radius`, `shadow`, `clip` and
-`opacity`. A box with no decoration is pure layout and has no native
-view at all.
+Reading it from the outside in:
 
-## Layers
+- The window's `Column` is as big as the window. `AlignItems.STRETCH`
+  makes every row in it as wide as the window too.
+- The toolbar, the separators and the status line are their natural
+  height. The middle row is in an `Expanded`, so it takes all the
+  height that's left, and grows and shrinks with the window.
+- In the toolbar, `Spacer` takes the spare width, which pushes the
+  search field to the right. A search field is 160 points wide on its
+  own, and the `Box` makes it 180.
+- In the middle row, the sidebar is a fixed 160 points wide, and the
+  message list is in an `Expanded`, so it takes the rest.
+  `AlignItems.STRETCH` makes both as tall as the row.
+- The message list is a `ListView.builder`, which builds only the rows
+  in view. A plain `Column` of messages would build all of them.
 
-`Stack` puts its children on top of each other, the first at the
-bottom. Children that aren't positioned are placed by `alignment`;
-`Positioned` pins a child to the stack's edges:
+When you build a window of your own, start the same way: decide which
+parts are a fixed size, which parts are their natural size, and which
+parts take what's left. The fixed parts get a `Box`, and the parts that
+take what's left get an `Expanded`.
 
-```zuri
-import zug { * }
+## Choosing a widget
 
-var thumbnail = Stack([
-  Image(ImageSource.symbol('photo', { size: 48 }), { width: 120, height: 90 }),
-  Positioned(
-    Box({ padding: EdgeInsets.all(4), color: Color.BLACK.with_alpha(0.6), child: Text('4:12') }),
-    { right: 4, bottom: 4 },
-  ),
-])
-```
-
-`Positioned` takes any of `left`, `top`, `right`, `bottom`, `width` and
-`height`, and `Positioned.fill(child)` covers the whole stack. The
-stack's `fit` decides how big unpositioned children may be:
-`StackFit.LOOSE` (the default) lets them be their natural size,
-`EXPAND` makes them fill it.
-
-## Flowing, grids and tables
-
-`Wrap` lays children along a line and starts a new line when it runs out
-of room, like words in a paragraph. It's the right thing for tags,
-chips and toolbars that have to fit narrow windows. It takes `axis`,
-`spacing` between children, `run_spacing` between lines, and `justify`,
-`run_justify` and `align_items`.
-
-`Grid` puts children in equal columns, row by row:
-
-```zuri
-import zug { * }
-
-var keypad = Grid([
-  Button('7', { on_pressed: @{} }), Button('8', { on_pressed: @{} }), Button('9', { on_pressed: @{} }),
-  GridCell(Button('0', { on_pressed: @{} }), { column_span: 2 }), Button('.', { on_pressed: @{} }),
-], { columns: 3, spacing: 6, row_height: 36 })
-```
-
-Rows are as tall as their tallest child unless you fix them with
-`row_height`, or with `aspect_ratio` (cell width over height).
-`GridCell` makes a child span several columns or rows.
-
-`Table` lines rows of cells up in columns, and sizes each column by its
-own rule. It's the widget for forms:
-
-```zuri
-import zug { * }
-
-var form = Table([
-  [Text('Name'), TextField({ placeholder: 'Ada Lovelace' })],
-  [Text('Email'), TextField({ placeholder: 'ada@example.com' })],
-  [Text('Role'), Dropdown(['Analyst', 'Engineer'], 'Analyst', { on_changed: @(role) {} })],
-], {
-  columns: [ColumnWidth.fit(), ColumnWidth.flex()],
-  align_items: AlignItems.BASELINE,
-  column_spacing: 8,
-  row_spacing: 6,
-})
-```
-
-Each row is a plain list of widgets, and a row that's shorter than the
-others leaves its last cells empty. The column rules are:
-
-| Rule | Width |
+| To | Use |
 | --- | --- |
-| `ColumnWidth.fixed(120)` | exactly that many points |
-| `ColumnWidth.flex()` | a share of what's left, `flex(2)` twice the share |
-| `ColumnWidth.fit()` | as wide as its widest cell |
-| `ColumnWidth.fraction(0.3)` | that fraction of the table's width |
-
-Columns past the end of `columns` are `flex()`. When a table is too
-narrow for its columns, the `fit()` columns give up width first.
-
-## Sizes from shapes and content
-
-- `AspectRatio(16 / 9, child)` keeps a width-to-height ratio.
-- `FitContent(child)` makes a child exactly as wide as its content wants
-  to be, which helps when a parent would otherwise stretch it. Pass
-  `{ axis: Axis.VERTICAL }` for height.
-- `Visibility(child, { visible: false })` takes a child off screen. With
-  `keep_state: true` it keeps the child's state and native views while
-  hidden, so showing it again is instant.
-- `Responsive(@(context, constraints) => ...)` builds from the space it's
-  given, for interfaces that change shape with the window:
-
-```zuri
-import zug { * }
-
-var adaptive = Responsive(@(context, constraints) {
-  if constraints.max_width > 600 {
-    return Row([Text('Sidebar'), Expanded(Text('Content'))])
-  }
-
-  return Column([Text('Content')])
-})
-```
+| Put things side by side, or one above another | [`Row` and `Column`](components/rows-and-columns.md#row-and-column) |
+| Let one child take the space that's left | [`Expanded`](components/rows-and-columns.md#expanded-and-flexible) |
+| Push children to opposite ends | [`Spacer`](components/rows-and-columns.md#spacer-and-gap) |
+| Fix a size, or add a background, border or corners | [`Box`](components/boxes.md#box) |
+| Keep content off the edges | [`Padding`](components/boxes.md#padding) |
+| Centre something, or put it in a corner | [`Center` and `Align`](components/boxes.md#align-and-center) |
+| Lay something over something else | [`Stack` and `Positioned`](components/stacks-grids-and-tables.md#stack-and-positioned) |
+| Flow children onto new lines as the window narrows | [`Wrap`](components/stacks-grids-and-tables.md#wrap) |
+| Make a keypad or a grid of equal cells | [`Grid`](components/stacks-grids-and-tables.md#grid-and-gridcell) |
+| Line up labels and fields in a form | [`Table`](components/stacks-grids-and-tables.md#table) |
+| Keep a shape, such as 16 by 9 | [`AspectRatio`](components/boxes.md#aspectratio) |
+| Give a column of buttons the width of the widest | [`FitContent`](components/boxes.md#fitcontent) |
+| Change the layout when the window is narrow | [`Responsive`](components/boxes.md#responsive) |
+| Scroll content that doesn't fit | [`ScrollView`](components/scrolling-and-lists.md#scrollview) |
 
 ## When layout goes wrong
 
 **"a Column with Expanded or Flexible children was given an unbounded
-height"** means a `Column` inside a `ScrollView` (or anything else that
-allows unlimited height) has an `Expanded` child. In a scroll view there
-is no spare space to share. Give the column's content natural sizes, or
-put the `Expanded` part outside the scroll view.
+height".** A `Column` inside a `ScrollView`, or anything else that
+allows unlimited height, has an `Expanded` child. In a scroll view
+there's no spare space to share. Give the column's children their
+natural sizes, or move the `Expanded` part outside the scroll view.
 
-**"a Row overflowed by 40 points"**, printed once, means the children
-need more room than the row has. Wrap the one that can shrink in
-`Expanded` or `Flexible`, switch to a `Wrap`, or put the row in a
-horizontal `ScrollView`.
+**"a Row overflowed by 40 points".** The children need more room than
+the row has. zug prints this once, rather than at every frame. Wrap the
+child that can shrink, usually some text, in `Expanded` or `Flexible`,
+switch to a `Wrap`, or put the row in a horizontal `ScrollView`.
+
+**Text runs off the edge instead of wrapping.** A `Row` lets each child
+be as wide as it likes, so a long `Text` in a row never needs to wrap.
+Wrap the text in `Expanded`, and it takes the width that's left and
+wraps within it.
+
+**A field, slider or progress bar is the wrong width.** These are 160
+points wide unless something sizes them. In a column with
+`AlignItems.STRETCH` they're as wide as the column. In a row, give them
+an `Expanded` to take the width that's left, or a `Box` with a width.
 
 **A widget won't get smaller or bigger.** Look at what its parent
-allowed. A `Center` or `Align` loosens constraints so the child can be
-smaller; `Expanded` and `align_items: AlignItems.STRETCH` force a size.
+allowed. A `Center` or `Align` loosens the limits so the child can be
+smaller, and `Expanded` or `AlignItems.STRETCH` force a size.

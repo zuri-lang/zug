@@ -71,8 +71,8 @@ All of them are `ZugError`s, so one `catch` can take any of them:
 
 | Error | Means |
 | --- | --- |
-| `OptionError` | an option that doesn't exist or has the wrong type; `owner` and `option` say which |
-| `LayoutError` | a layout that can't be satisfied |
-| `LifecycleError` | something used at the wrong time, such as a timer with no application running, or `set_state()` after `dispose()` |
-| `BackendError` | the platform failed to do something |
-| `UnsupportedError` | the running backend has no support for something, such as a view kind |
+| `OptionError` | An option that doesn't exist, or has the wrong type. Its `owner` and `option` say which. |
+| `LayoutError` | A layout that can't be satisfied. |
+| `LifecycleError` | Something used at the wrong time, such as a timer with no application running, or `set_state()` after `dispose()`. |
+| `BackendError` | The platform failed to do something. |
+| `UnsupportedError` | The running backend can't do something, such as show a kind of view it has no support for. |

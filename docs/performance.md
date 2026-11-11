@@ -3,8 +3,8 @@
 This page is about where the time goes in a zug application, measured
 rather than guessed, and what to do about the parts that are slow.
 
-The short version: zug's own work is rarely the problem. A rebuild of a
-thousand-row screen takes under 10 ms, and an animation frame a fraction
+The short version: zug's own work is rarely the problem. Rebuilding a
+screen of a thousand rows takes under 10 ms, and an animation frame a fraction
 of a millisecond. What costs real time is AppKit making and drawing
 native views, so the advice comes down to not asking it to make and
 draw views nobody can see.
@@ -19,7 +19,7 @@ $ zuri run tools/bench.zu
 $ zuri run tools/bench.zu --rounds 15 --json tmp/bench.json
 ```
 
-It waits until the machine is quiet (a one-minute load average under 1.5
+It waits until the machine is quiet (a load average over one minute below 1.5,
 by default), runs each measurement once to warm up and then nine times,
 and reports the median and the fastest run. On macOS it opens a window
 while the AppKit measurements run, which takes keyboard focus for a
@@ -42,7 +42,7 @@ own schedule, and the measurements that include drawing say so.
 
 The first frame is a window with a heading, a text field and a button,
 counted from the moment the `zuri run` process is started. Importing zug
-is about a fifth of it; the rest is starting AppKit, making the window
+is about a fifth of it, and the rest is starting AppKit, making the window
 and its views, and drawing the first frame.
 
 ## Crossing into AppKit

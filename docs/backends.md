@@ -34,7 +34,7 @@ each area for children is (`slot_size()`), takes the frame zug gives it,
 and holds child views in slots.
 
 **`WindowHost`** is a window: a `ViewHost` whose content area holds the
-top-level views, with its own size, `show()`, `close()` and
+views at the top of the tree, with its own size, `show()`, `close()` and
 `clear_focus()`.
 
 **`BackendDelegate`** is what the backend calls on zug: `on_frame()` to
@@ -63,7 +63,7 @@ for every event, its name and the prop it changes, if any.
   such as a checkbox's `changed` changing `value`, the view reports the
   new value in the payload and keeps showing it. zug then sends the
   declared value back unless the application accepted the change. Never
-  send a value back to a control that already shows it; for text it
+  send a value back to a control that already shows it. For text it
   would move the cursor.
 - **One thread.** zug calls a backend only from the thread its `run()`
   was called on, and the backend calls `dispatch` and the delegate only
@@ -92,13 +92,14 @@ for every event, its name and the prop it changes, if any.
 
    ```zuri,ignore
    register_backend('gtk', @{
-     return zuri.import_file(os.join_paths(os.dir_name(__file__), 'gtk', 'index.zu')).create()
+     var path = os.join_paths(os.dir_name(__file__), 'gtk', 'index.zu')
+     return zuri.import_file(path).create()
    }, @() => os.platform == 'linux')
    ```
 
    The loader runs only when the backend is chosen, so nothing of one
    platform is ever loaded on another. A backend inside zug registers in
-   `app/backends/index.zu`; one in its own package registers when it's
+   `app/backends/index.zu`, and one in its own package registers when it's
    imported.
 5. Check it against the contract:
 
