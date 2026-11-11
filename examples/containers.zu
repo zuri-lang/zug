@@ -146,7 +146,9 @@ class DemoState < State {
           ),
         ),
       ],
-      { initial: [180] },
+      {
+        initial: [180],
+      },
     )
   }
 }
@@ -155,7 +157,9 @@ if __root__ == __file__ {
   run_app(
     App({
       title: 'Containers',
-      windows: [Window('Containers', Demo(), { size: Size(720, 420) })],
+      windows: [
+        Window('Containers', Demo(), { size: Size(720, 420) }),
+      ],
     }),
   )
 }
