@@ -1,0 +1,22 @@
+# An API reference, generated from the doc blocks in the project by
+# `zuri doc generate`. `zuri doc build` and `zuri doc serve` generate
+# the pages again first, so the doc blocks are what to edit.
+
+[documentation]
+title = "zug API Reference"
+source = "src"
+output = "site"
+
+[reference]
+# Patterns for files to leave out, relative to the project.
+# exclude = ["internal/**"]
+
+# Groups of modules, each a part of the contents. Without them
+# every module is listed in one list.
+# [[reference.groups]]
+# title = "Storage"
+# description = "Where tasks are kept."
+# modules = ["tasks.storage"]
+
+[site]
+# url = "https://example.com/docs/reference/"

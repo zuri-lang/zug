@@ -4,7 +4,16 @@ zug is a toolkit for desktop applications in Zuri. You describe your
 interface as widgets built from your application's state, and zug keeps
 the platform's own controls in step with it.
 
-The guides explain how zug works, roughly in the order you'll need it.
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="images/calculator-light.png">
+    <img alt="The calculator example: a scientific keypad, a display and a tape of past calculations, all native macOS controls" src="images/calculator-dark.png" width="760">
+  </picture>
+  <br>
+  <sub>The <a href="examples/calculator">calculator</a> example. Every key, field and table in it is an AppKit control.</sub>
+</p>
+
+This guides explain how zug works, roughly in the order you'll need it.
 The [component reference](components/index.md) describes every widget,
 with an example you can run and a table of its options.
 

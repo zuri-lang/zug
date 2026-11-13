@@ -1,0 +1,14 @@
+[documentation]
+title = "zug"
+description = ""
+authors = []
+language = "en"
+source = "src"
+output = "site"
+
+[site]
+# The address the site is published at, for links search engines
+# and the page for a missing address use.
+# url = "https://example.com/docs/"
+# repository = "https://github.com/you/project"
+# edit = "https://github.com/you/project/edit/main/docs/src/{path}"

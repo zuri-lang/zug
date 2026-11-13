@@ -4,8 +4,8 @@ Zug is a toolkit for desktop applications in Zuri.
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/calculator-light.png">
-    <img alt="The calculator example: a scientific keypad, a display and a tape of past calculations, all native macOS controls" src="docs/images/calculator-dark.png" width="760">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/src/images/calculator-light.png">
+    <img alt="The calculator example: a scientific keypad, a display and a tape of past calculations, all native macOS controls" src="docs/src/images/calculator-dark.png" width="760">
   </picture>
   <br>
   <sub>The <a href="examples/calculator">calculator</a> example. Every key, field and table in it is an AppKit control.</sub>
@@ -22,15 +22,15 @@ methods, accessibility, dark mode and behaviour that come with them.
   <tr>
     <td width="50%" align="center">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/controls-light.png">
-        <img alt="Checkboxes, radio buttons, a segmented control, a slider, a stepper, a dropdown, text fields, a date picker and a progress bar" src="docs/images/controls-dark.png">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/src/images/controls-light.png">
+        <img alt="Checkboxes, radio buttons, a segmented control, a slider, a stepper, a dropdown, text fields, a date picker and a progress bar" src="docs/src/images/controls-dark.png">
       </picture>
       <br><sub>Controls, from <a href="examples/controls.zu">examples/controls.zu</a></sub>
     </td>
     <td width="50%" align="center">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/containers-light.png">
-        <img alt="A split view with a long list in the sidebar, and tabs holding a sortable data table" src="docs/images/containers-dark.png">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/src/images/containers-light.png">
+        <img alt="A split view with a long list in the sidebar, and tabs holding a sortable data table" src="docs/src/images/containers-dark.png">
       </picture>
       <br><sub>Lists, tabs and tables, from <a href="examples/containers.zu">examples/containers.zu</a></sub>
     </td>
@@ -38,15 +38,15 @@ methods, accessibility, dark mode and behaviour that come with them.
   <tr>
     <td width="50%" align="center">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/notes-light.png">
-        <img alt="A notes editor with buttons for opening, saving, fonts, colours, renaming, page setup and printing" src="docs/images/notes-dark.png">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/src/images/notes-light.png">
+        <img alt="A notes editor with buttons for opening, saving, fonts, colours, renaming, page setup and printing" src="docs/src/images/notes-dark.png">
       </picture>
       <br><sub>Every dialog, from <a href="examples/dialogs.zu">examples/dialogs.zu</a></sub>
     </td>
     <td width="50%" align="center">
       <picture>
-        <source media="(prefers-color-scheme: dark)" srcset="docs/images/report-light.png">
-        <img alt="A sales report previewed page by page, with Page Setup, Print and Export PDF buttons" src="docs/images/report-dark.png">
+        <source media="(prefers-color-scheme: dark)" srcset="docs/src/images/report-light.png">
+        <img alt="A sales report previewed page by page, with Page Setup, Print and Export PDF buttons" src="docs/src/images/report-dark.png">
       </picture>
       <br><sub>Printing, from <a href="examples/printing.zu">examples/printing.zu</a></sub>
     </td>
