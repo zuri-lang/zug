@@ -40,6 +40,7 @@
 # Testing and performance
 
 - [Testing](testing.md)
+- [Performance](performance.md)
 
 # Other platforms
 
